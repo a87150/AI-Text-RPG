@@ -4,7 +4,9 @@ import { state } from './state.js';
 import {
   $, toast, renderMessages, syncAll, focusComposer, renderCharacterEditor,
 } from './ui.js';
-import { loadSessions, newRun, refreshCurrentSession, loadStories } from './sessions.js';
+import {
+  loadSessions, newRun, refreshCurrentSession, loadStories, switchSideView,
+} from './sessions.js';
 
 /* 单项重生成：记下改之前的取值，「撤销」就还原它 */
 const fieldUndo = new Map();
@@ -621,10 +623,12 @@ export async function newRunFromSettings() {
     const created = await newRun(storyId, draftMode);
     state.session = created;
     $('#settings-modal').classList.add('hidden');
+    // 从故事视图点开新局：得真的跳到这一局，不能还停在故事设定面板上
+    switchSideView('sessions');
     renderMessages();
     syncAll();
     await loadSessions();
-    toast('已用同一份设定开了新局', 'ok');
+    toast('已用这份设定开了新局', 'ok');
     setTimeout(() => focusComposer({ force: true }), 0);
   } catch (e) {
     toast('开新局失败：' + e.message, 'error');

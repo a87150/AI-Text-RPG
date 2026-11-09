@@ -1,6 +1,9 @@
 # 会话数据与本地密钥（含 API Key），不入库
 data/
 
+# 备份包是 data/ 的副本，不入库
+backups/
+
 __pycache__/
 *.py[cod]
 .venv/

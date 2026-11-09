@@ -289,8 +289,34 @@ export function renderStoryList() {
   }
 }
 
+const VIEW_KEY = 'lt.view';
+const STORY_KEY = 'lt.story';
+const SESSION_KEY = 'lt.session';
+
+function remember(key, value) {
+  try { localStorage.setItem(key, value || ''); } catch (e) { /* 隐私模式下忽略 */ }
+}
+
+function recall(key) {
+  try { return localStorage.getItem(key) || ''; } catch (e) { return ''; }
+}
+
+/** 刷新后要回到原来那一页：视图、选中的故事、打开的对话都记着。 */
+export function savedView() {
+  return recall(VIEW_KEY) === 'sessions' ? 'sessions' : 'stories';
+}
+
+export function savedStory() {
+  return recall(STORY_KEY);
+}
+
+export function savedSession() {
+  return recall(SESSION_KEY);
+}
+
 export function switchSideView(view) {
   state.sideView = view === 'stories' ? 'stories' : 'sessions';
+  remember(VIEW_KEY, state.sideView);
   const storyView = state.sideView === 'stories';
   const storyBlock = $('#story-block');
   const sessionBlock = $('#session-block');
@@ -316,6 +342,7 @@ export function switchSideView(view) {
 /** 点故事 = 在右侧打开它的设定。 */
 export async function selectStory(storyId) {
   state.selectedStory = storyId;
+  remember(STORY_KEY, storyId);
   renderStoryList();
   switchSideView('stories');
   closeNav();
@@ -330,6 +357,7 @@ export async function openSession(id) {
   try {
     state.session = await api('/api/sessions/' + id);
     state.aiStatus = { text: '', kind: '' };
+    remember(SESSION_KEY, state.session.id);
     $('#settings-modal').classList.add('hidden');
     closeNav();
     renderSessionList();
@@ -350,7 +378,9 @@ export async function createSession() {
 export async function newRun(storyId, mode) {
   const body = { story_id: storyId };
   if (mode) body.mode = mode;
-  return api('/api/sessions', { method: 'POST', body });
+  const created = await api('/api/sessions', { method: 'POST', body });
+  remember(SESSION_KEY, created.id);   // 刷新后要回到这一局
+  return created;
 }
 
 async function removeSession(s) {
@@ -360,6 +390,7 @@ async function removeSession(s) {
     await api('/api/sessions/' + s.id, { method: 'DELETE' });
     if (state.session && state.session.id === s.id) {
       state.session = null;
+      remember(SESSION_KEY, '');
       renderMessages();
     }
     syncAll();

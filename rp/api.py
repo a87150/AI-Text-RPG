@@ -7,19 +7,20 @@ import time
 import uuid
 
 import requests
-from flask import Response, jsonify, render_template, request
+from flask import Response, jsonify, render_template, request, send_file
 
 from .characters import (
     MAX_CHARACTERS, advance_turn, apply_change, ensure_characters,
     merge_facts, next_speaker, parse_turn, role_labels, upsert_character,
 )
+from . import backup
 from .config import (
     DEFAULT_MODEL, DEFAULT_PROVIDER, MAX_CHAT_ATTEMPTS, MAX_ENHANCE_ATTEMPTS,
     MAX_OPENING_ATTEMPTS, MIN_CHAT_CHARS, MODES, PROVIDERS,
-    REASONING_LEVELS, app, current_target, list_local_models, load_settings,
-    mode_for, mode_of, provider_public, provider_usable, reasoning_effort,
-    save_mode, save_provider, save_reasoning, save_writing, set_current_model,
-    writing,
+    REASONING_LEVELS, app, backup_conf, current_target, list_local_models,
+    load_settings, mode_for, mode_of, provider_public, provider_usable,
+    reasoning_effort, save_backup_conf, save_mode, save_provider,
+    save_reasoning, save_writing, set_current_model, writing,
 )
 from .context import (
     background_compress, build_summary_prompt, compress_session, context_chars,
@@ -248,6 +249,43 @@ def api_update_story(story_sid):
 @app.delete("/api/stories/<story_sid>")
 def api_delete_story(story_sid):
     return jsonify({"ok": delete_story(story_sid)})
+
+
+# ============================== 备份 ==============================
+@app.get("/api/backups")
+def api_backups():
+    return jsonify({"items": backup.listing(), "conf": backup_conf(),
+                    "dir": backup.BACKUP_DIR})
+
+
+@app.post("/api/backups")
+def api_backup_create():
+    try:
+        result = backup.create("manual")
+    except OSError as exc:
+        return jsonify({"error": "备份失败：%s" % exc}), 500
+    return jsonify({"item": result, "items": backup.listing()})
+
+
+@app.get("/api/backups/<name>")
+def api_backup_download(name):
+    full = backup.path_of(name)
+    if not full:
+        return jsonify({"error": "备份不存在"}), 404
+    return send_file(full, as_attachment=True, download_name=name)
+
+
+@app.delete("/api/backups/<name>")
+def api_backup_delete(name):
+    if not backup.delete(name):
+        return jsonify({"error": "备份不存在"}), 404
+    return jsonify({"items": backup.listing()})
+
+
+@app.put("/api/backup-config")
+def api_backup_config():
+    data = request.get_json(silent=True) or {}
+    return jsonify(save_backup_conf(data))
 
 
 @app.get("/api/sessions/<sid>/snapshots")

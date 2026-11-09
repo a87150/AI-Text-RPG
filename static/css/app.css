@@ -147,7 +147,6 @@ button:disabled { cursor: not-allowed; }
   color: var(--text-dim);
   font-size: calc(var(--msg-fs) - 1px);
   line-height: 1.8;
-  font-style: italic;
 }
 .narrator p:last-child { margin-bottom: 0; }
 .narrator .narr-tag {
@@ -438,9 +437,7 @@ body.story-view .composer { display: none !important; }
   background: hsl(var(--char-hue, 265) 70% 55% / .14);
   color: hsl(var(--char-hue, 265) 55% 38%);
 }
-.bubble.typing::after {
-  content: "▍"; color: var(--accent-2); animation: blink 1s steps(2) infinite;
-}
+
 .bubble .pending { color: var(--text-mute); font-size: .8125rem; }
 /* 生成中：省略号 + 秒数，都不带角色名 */
 .bubble .tick {
@@ -448,7 +445,6 @@ body.story-view .composer { display: none !important; }
   font-variant-numeric: tabular-nums; white-space: nowrap;
 }
 .bubble .dots { color: var(--text-mute); letter-spacing: .2em; }
-@keyframes blink { 50% { opacity: 0; } }
 .err { color: var(--danger); font-size: .8125rem; }
 
 /* 统一设置窗：分区 + 二选一的按钮组 */
@@ -550,6 +546,46 @@ body.story-view .composer { display: none !important; }
 }
 .pick-item span { font-size: .6875rem; color: var(--text-mute); }
 .pick-item .pi-go { flex: none; color: var(--text-mute); font-size: .75rem; }
+.backup-actions { display: flex; align-items: center; gap: 10px; margin: 14px 0 10px; }
+.backup-msg { font-size: .75rem; color: var(--text-mute); }
+.backup-msg.ok { color: var(--ok); }
+.backup-msg.error { color: var(--danger); }
+.backup-conf {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  padding: 10px 12px; margin-bottom: 12px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--bg-input);
+  font-size: .7813rem; color: var(--text-dim);
+}
+.backup-toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+#backup-hours {
+  width: 64px; padding: 4px 6px; border-radius: 7px; font-family: inherit;
+  border: 1px solid var(--border-strong); background: var(--bg-elev); color: var(--text);
+}
+.backup-conf button {
+  margin-left: auto; padding: 4px 12px; border-radius: 7px; cursor: pointer;
+  border: 1px solid var(--border-strong); background: transparent;
+  color: var(--text-dim); font-size: .75rem;
+}
+.backup-conf button:hover { border-color: var(--accent); color: var(--text); }
+.backup-list {
+  max-height: 44vh; overflow-y: auto; display: flex; flex-direction: column; gap: 5px;
+  font-size: .75rem; color: var(--text-dim);
+}
+.backup-hint { color: var(--text-mute); font-size: .7188rem; margin-bottom: 4px; }
+.backup-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--bg-elev);
+}
+.backup-item .bi-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.backup-item b { flex: none; color: var(--text-mute); font-weight: 500; }
+.bi-btn {
+  flex: none; padding: 2px 9px; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--border-strong); background: transparent;
+  color: var(--text-dim); font-size: .7188rem; text-decoration: none;
+}
+.bi-btn:hover { border-color: var(--accent); color: var(--text); }
+.bi-del:hover { border-color: var(--danger); color: var(--danger); }
 .pick-pager { margin: 2px 0 12px; }
 .pick-empty { grid-column: 1 / -1; padding: 18px 0; text-align: center; color: var(--text-mute); font-size: .8125rem; }
 .ctx-head {

@@ -8,9 +8,11 @@ import {
 import {
   loadSessions, createSession, clearSession, compressSession, switchSideView,
   createStory, loadStories, openPickStory, closePickStory, selectStory,
-  renderSessionList, renderStoryList,
+  renderSessionList, renderStoryList, savedView, savedStory, savedSession,
+  openSession,
 } from './sessions.js';
 import { closeNav } from './ui.js';
+import { openBackup, closeBackup, runBackup, saveBackupConf } from './backup.js';
 import { sendFromInput, bindRetryEvents } from './chat.js';
 import { bindMessageActions } from './msgops.js';
 import {
@@ -387,6 +389,13 @@ function bindUI() {
   });
   $('#btn-nav').onclick = () => document.body.classList.toggle('nav-open');
   $('#nav-mask').onclick = closeNav;
+  $('#btn-backup').onclick = openBackup;
+  $('#btn-backup-now').onclick = runBackup;
+  $('#btn-backup-save').onclick = saveBackupConf;
+  $('#btn-backup-close').onclick = closeBackup;
+  $('#backup-modal').addEventListener('click', (e) => {
+    if (e.target.id === 'backup-modal') closeBackup();
+  });
   $('#pick-cancel').onclick = closePickStory;
   $('#pick-story-modal').addEventListener('click', (e) => {
     if (e.target.id === 'pick-story-modal') closePickStory();   // 点背景也能退
@@ -459,10 +468,6 @@ function bindUI() {
     const btn = e.target.closest('button[data-view]');
     if (btn) switchSideView(btn.dataset.view);
   };
-  $('#side-seg').onclick = (e) => {
-    const btn = e.target.closest('button[data-view]');
-    if (btn) switchSideView(btn.dataset.view);
-  };
   $('#btn-add-lore').onclick = addLoreEntry;
   $('#f-mode').onclick = (e) => {
     const btn = e.target.closest('button[data-mode-value]');
@@ -522,9 +527,22 @@ async function boot() {
   await refreshBackendStatus();
   await loadSessions();
   await loadStories();
+  // 上次停在故事页就回故事页，连选中的那份一起还原
+  const view = savedView();
+  if (view === 'stories') {
+    const storyId = savedStory();
+    if (storyId && (state.stories || []).some((s) => s.id === storyId)) {
+      await selectStory(storyId);
+    } else {
+      switchSideView('stories');
+    }
+  } else {
+    switchSideView('sessions');
+    const sid = savedSession();
+    if (sid && (state.sessions || []).some((s) => s.id === sid)) await openSession(sid);
+  }
   renderMessages();
   syncAll();
-  switchSideView(state.sideView);
   focusComposer({ force: true });
 }
 

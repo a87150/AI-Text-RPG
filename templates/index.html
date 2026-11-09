@@ -31,10 +31,36 @@
         <label for="model-select">模型</label>
         <select id="model-select" title="切换模型"></select>
         <button class="icon-btn" id="btn-refresh-models" type="button" title="刷新模型列表">⟳</button>
+        <button class="icon-btn" id="btn-backup" type="button" title="备份：把数据打包下载">⛁</button>
         <button class="icon-btn" id="btn-prefs" type="button" title="设置：外观、模型、云端、写作">⚙</button>
       </div>
     </div>
   </aside>
+
+  <div class="modal hidden" id="backup-modal">
+    <div class="modal-box narrow">
+      <h2>备份</h2>
+      <div class="hint">把 data/ 整个打包成 zip 存到 backups/。包里的 API Key 会被抹掉，所以可以放心挪走。</div>
+      <div class="backup-actions">
+        <button type="button" id="btn-backup-now">立即备份</button>
+        <span class="backup-msg" id="backup-msg"></span>
+      </div>
+      <div class="backup-conf">
+        <label class="backup-toggle">
+          <input type="checkbox" id="backup-enabled"> 定时自动备份
+        </label>
+        <span>每隔</span>
+        <input type="number" id="backup-hours" min="1" max="720" value="24">
+        <span>小时</span>
+        <button type="button" class="ghost" id="btn-backup-save">保存</button>
+      </div>
+      <div class="backup-list" id="backup-list"></div>
+      <div class="modal-actions">
+        <div class="spacer"></div>
+        <button type="button" id="btn-backup-close">关闭</button>
+      </div>
+    </div>
+  </div>
 
   <main class="main">
     <header class="topbar">

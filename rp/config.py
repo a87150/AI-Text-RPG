@@ -84,6 +84,11 @@ WRITING_BOUNDS = {
 }
 _writing = dict(WRITING_DEFAULTS)
 
+# 自动备份：默认关，开了以后每隔 every_hours 小时打一个包
+BACKUP_DEFAULTS = {"enabled": False, "every_hours": 24}
+BACKUP_BOUNDS = {"every_hours": (1, 720)}
+_backup = dict(BACKUP_DEFAULTS)
+
 # 思考强度：本地支持思考的模型默认会想很久，显式给一档
 REASONING_LEVELS = ("none", "low", "medium", "high")
 REASONING_DEFAULT = "medium"
@@ -93,6 +98,29 @@ _reasoning = REASONING_DEFAULT
 def reasoning_effort():
     with _model_lock:
         return _reasoning
+
+
+def backup_conf():
+    with _model_lock:
+        return dict(_backup)
+
+
+def save_backup_conf(data):
+    global _backup
+    if not isinstance(data, dict):
+        return backup_conf()
+    with _model_lock:
+        if "enabled" in data:
+            _backup["enabled"] = bool(data["enabled"])
+        if "every_hours" in data:
+            try:
+                hours = int(data["every_hours"])
+            except (TypeError, ValueError):
+                hours = _backup["every_hours"]
+            lo, hi = BACKUP_BOUNDS["every_hours"]
+            _backup["every_hours"] = max(lo, min(hi, hours))
+    persist_settings()
+    return backup_conf()
 
 
 def save_reasoning(value, persist=True):
@@ -231,6 +259,7 @@ def persist_settings():
         "writing_version": 1,
         "mode": _mode,
         "reasoning": _reasoning,
+        "backup": _backup,
     }
     tmp = "%s.%s.tmp" % (SETTINGS_PATH, uuid.uuid4().hex[:8])
     try:
@@ -287,6 +316,17 @@ def load_settings():
         save_writing(write_conf, persist=False)
     if data.get("mode") in MODES:
         save_mode(data["mode"], persist=False)
+    backup_saved = data.get("backup")
+    if isinstance(backup_saved, dict):
+        if "enabled" in backup_saved:
+            _backup["enabled"] = bool(backup_saved["enabled"])
+        if "every_hours" in backup_saved:
+            try:
+                hours = int(backup_saved["every_hours"])
+            except (TypeError, ValueError):
+                hours = _backup["every_hours"]
+            lo, hi = BACKUP_BOUNDS["every_hours"]
+            _backup["every_hours"] = max(lo, min(hi, hours))
 
     # 云端 Key 被清掉后，不能把当前模型留在一个已不可用的提供方上
     if not provider_usable(_model_state["provider"]):

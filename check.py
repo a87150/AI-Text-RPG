@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import tempfile
+import zipfile
 
 TMP_DIR = tempfile.mkdtemp(prefix="lt-check-")
 os.environ["LT_DATA_DIR"] = TMP_DIR
@@ -548,6 +549,39 @@ def main():
     rp_characters.advance_turn(tick)
     check("轮次从 0 开始累加", tick["turn"] == 1, str(tick["turn"]))
     check("第一轮不触发每 15 轮存档", tick["turn"] % 15 != 0)
+
+    # 24. 备份：能打包、抹掉密钥、只认自己的文件名
+    import rp.backup as rp_backup
+    made = rp_backup.create("manual")
+    check("备份能生成", bool(made.get("name")) and made.get("files", 0) > 0, str(made)[:80])
+    zpath = rp_backup.path_of(made["name"])
+    check("备份文件存在", bool(zpath))
+    with zipfile.ZipFile(zpath) as zf:
+        names = zf.namelist()
+        check("包里有 settings.json", "data/settings.json" in names)
+        packed = json.loads(zf.read("data/settings.json").decode("utf-8"))
+        keys = [(v or {}).get("api_key") for v in (packed.get("providers") or {}).values()]
+        check("包里的 API Key 被抹掉", all(not k for k in keys), str(keys)[:60])
+        check("其他设置还在包里", "writing" in packed)
+    check("路径穿越读不到东西", rp_backup.path_of("../settings.json") is None)
+    check("备份列表含刚才那份",
+          any(x["name"] == made["name"] for x in rp_backup.listing()))
+    rp_backup.delete(made["name"])
+    check("删除后再查就没了",
+          not any(x["name"] == made["name"] for x in rp_backup.listing()))
+
+    # 25. 定时备份配置：开了能存，越界值夹回范围
+    saved = rp_config.save_backup_conf({"enabled": True, "every_hours": 6})
+    check("定时备份能开启", saved["enabled"] is True and saved["every_hours"] == 6, str(saved))
+    check("间隔超出范围会被夹住",
+          rp_config.save_backup_conf({"every_hours": 99999})["every_hours"] <= 720)
+    rp_config.save_backup_conf({"enabled": False, "every_hours": 24})
+    now = 1_700_000_000
+    check("关着就不该跑", rp_backup.due({"enabled": False, "every_hours": 1}, 0, now) is False)
+    check("开着且到期才跑",
+          rp_backup.due({"enabled": True, "every_hours": 2}, now - 3 * 3600, now) is True)
+    check("没到期不重复跑",
+          rp_backup.due({"enabled": True, "every_hours": 2}, now - 3600, now) is False)
 
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
