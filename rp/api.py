@@ -443,6 +443,21 @@ def api_branch(sid):
     cloned["id"] = uuid.uuid4().hex[:12]
     cloned["title"] = ((src.get("title") or DEFAULT_TITLE) + "（分支）")[:40]
     cloned["messages"] = msgs[:index + 1]
+
+    # 深拷贝会把"此刻"的状态和账本一起带过去，分叉点之前没发生过的事就成了剧透。
+    # 轮次退回到分叉点，账本按轮次过滤；老数据没有 turn 字段就保持原样。
+    mark = None
+    for m in reversed(cloned["messages"]):
+        if isinstance(m.get("turn"), int):
+            mark = m["turn"]
+            break
+    if mark is not None:
+        cloned["turn"] = mark
+        # facts 的 turn 记在本轮开始前，比消息的 turn 小 1，所以用严格小于
+        cloned["facts"] = [
+            f for f in (src.get("facts") or [])
+            if isinstance(f, dict) and int(f.get("turn") or 0) < mark
+        ]
     cloned["created_at"] = now
     cloned["updated_at"] = now
     save_session(cloned)
@@ -748,6 +763,7 @@ def _commit_turn(s2, turn, use_rp):
         apply_change(s2, upd)
     advance_turn(s2)                  # 一般模式也要数轮次，锚定和存档都靠它
     turn_no = int(s2.get("turn") or 0)
+    msg["turn"] = turn_no             # 分叉要靠它把账本和轮次退回去
     if turn_no > 0 and turn_no % 15 == 0:
         snapshot(s2, "turn")
     save_session(s2)

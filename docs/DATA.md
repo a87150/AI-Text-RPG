@@ -47,6 +47,19 @@ character 的 state 和 history 由模型每轮的「【变化】」维护；第
 
 一般模式下 assistant 消息只有 narrator，content 为空；角色扮演模式两者都有。
 
+## 分叉
+
+POST /api/sessions/<sid>/branch {"index": n}
+
+深拷贝原会话，换新 id，标题加「（分支）」，messages 只留 [:n+1]，原会话不动。含 n 那一这条，所以两种落点都对：在你的话上分叉，新会话等一条回复；在 AI 的话上分叉，接着往下写。
+
+分叉点之后的东西不能带过去，否则新对话会"剧透"：
+
+- turn 退回到分叉那条消息记录的轮次（每条 assistant 消息带 turn 字段）
+- facts 只留 turn 小于该轮次的（facts 的 turn 记在本轮开始前，比消息的 turn 小 1）
+- summary 保留，因为压缩掉的都是分叉点之前的内容
+- status 与 characters[].state/history 不回滚。要精确回滚得给每条消息存完整快照，代价是整个会话文件翻几倍；而地点、在场这些会随剧情自然纠正，账本才是真正会造成矛盾的东西
+
 ## 故事 JSON
 
 结构和会话基本一致，只是没有 messages、status、facts、summary。它在「开新局」时被复制成新会话的初始设定。

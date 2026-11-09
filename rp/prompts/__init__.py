@@ -54,6 +54,14 @@ def active_facts(sess, limit=None):
     return book[-cap:] if cap else book
 
 
+# 规则也按档位分：小模型能可靠执行的硬约束就五条左右，多了互相打架，
+# 而"文风跟着场景能量走"这类元指令 9B 执行不了，占着位置反而挤掉更要紧的。
+RULES_FILE = {
+    "basic": "rules_basic.md",
+    "standard": "rules_standard.md",
+    "advanced": "rules_advanced.md",
+}
+
 STATUS_FILE = {
     "basic": "status.md",          # 单行标记 + 两条示例
     "standard": "status_standard.md",
@@ -79,7 +87,7 @@ def build_rules(user_name, mode=None, names=""):
             status_block=status_block,
         )
     return render(
-        "rules.md",
+        RULES_FILE.get(tier(), "rules_standard.md"),
         user_name=user_name or "用户角色",
         narrator_min=w["narrator_min"],
         narrator_max=w["narrator_max"],

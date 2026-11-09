@@ -743,6 +743,52 @@ def main():
     check("折叠状态存 localStorage", "lt.prefs" in _main and "PREFS_KEY" in _main)
     check("展开备份节会去取列表", "refreshBackups" in _main)
 
+    # 34. 规则文案也按档位分：初级短且硬，高级才谈写法
+    def _rule_body(level):
+        rp_config.save_tier(level, persist=False)
+        return rp_prompts.build_rules("林晚", "rp", "沈砚")
+
+    body_basic = _rule_body("basic").replace(rp_prompts.status_prompt(), "")
+    body_std = _rule_body("standard").replace(rp_prompts.status_prompt(), "")
+    body_adv = _rule_body("advanced").replace(rp_prompts.status_prompt(), "")
+    check("规则正文随档位变长", len(body_basic) < len(body_std) < len(body_adv),
+          "%d < %d < %d" % (len(body_basic), len(body_std), len(body_adv)))
+    check("初级不谈文风", "文风" not in body_basic and "文风" in body_std and "节奏" in body_adv)
+    check("高级才讲留白与感官", "留白" in body_adv and "留白" not in body_basic)
+    check("三档都保留不能替用户说话",
+          all("不要代替" in b or "绝不代替" in b for b in (body_basic, body_std, body_adv)))
+    for _lv in ("basic", "standard", "advanced"):
+        rp_config.save_tier(_lv, persist=False)
+        _full = rp_prompts.build_rules("林晚", "rp", "沈砚")
+        check("第 %s 档带状态说明" % _lv, rp_prompts.status_prompt()[:20] in _full)
+    rp_config.save_tier("basic", persist=False)
+
+    # 35. 分叉要把轮次和账本退回分叉点，别把没发生的事带过去
+    br = client.post("/api/sessions", json={}).get_json()
+    br_sess = rp_storage.load_session(br["id"])
+    br_sess["turn"] = 9
+    br_sess["status"] = {"location": "后巷"}
+    br_sess["facts"] = [
+        {"fact": "第三轮的旧事", "state": "active", "turn": 2},
+        {"fact": "第九轮的新事", "state": "active", "turn": 8},
+    ]
+    br_sess["messages"] = [
+        {"role": "user", "content": "第一句"},
+        {"role": "assistant", "content": "回应", "speaker": "沈砚", "turn": 3},
+        {"role": "user", "content": "第二句"},
+        {"role": "assistant", "content": "后来的回应", "speaker": "沈砚", "turn": 9},
+    ]
+    rp_storage.save_session(br_sess)
+    cut = client.post("/api/sessions/%s/branch" % br["id"], json={"index": 1}).get_json()
+    check("分叉只保留到那一条", len(cut["messages"]) == 2, str(len(cut["messages"])))
+    check("轮次退回分叉点", cut["turn"] == 3, str(cut["turn"]))
+    check("账本只留分叉之前的事实",
+          [f["fact"] for f in cut["facts"]] == ["第三轮的旧事"],
+          str(cut["facts"]))
+    check("原会话不受影响", len(rp_storage.load_session(br["id"])["messages"]) == 4)
+    check("分叉标题带标记", cut["title"].endswith("（分支）"), cut["title"])
+    check("分叉换新 id", cut["id"] != br["id"])
+
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")

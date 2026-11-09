@@ -1,0 +1,21 @@
+feat(branch,prompt): roll branch state back to the cut, split rules by tier
+
+分叉的两个真问题（都是深拷贝造成的）：
+- 深拷贝把"此刻"的 facts 和 turn 一起带过去，分叉到早期消息时新对话会带着
+  还没发生的事，模型提前知道后果或者跟新选择打架
+- turn 不退回去，人设锚定按 turn % anchor_every 算会错位
+
+修法（不做完整快照，代价太大）：每条 assistant 消息记下自己属于第几轮，分叉时
+按这个轮次把 turn 退回去、facts 按轮次过滤。facts 的 turn 记在本轮开始前，比消息
+的 turn 小 1，所以过滤用严格小于。status 和 characters 不回滚——地点、在场会随
+剧情自然纠正，账本才是真正会造成矛盾的东西；这条局限写进 docs/DATA.md。
+
+规则文案按档位分三份：
+- rules_basic.md（311 字）只留能验证的硬约束
+- rules_standard.md（589 字）即原来的 rules.md
+- rules_advanced.md（885 字）再加动作代替形容词、节奏留断口、对白像人话、留白、
+  感官有选择
+
+初级删掉的第 7 条是「文风跟着场景的能量走」，要求先判断场景能量再选写法，
+9B 做不到，理解成"写点短句"，却占着九条里的位置挤掉更要紧的约束。
+初级规则正文更短但状态说明更长（两条完整示例），这个交换是故意的。
