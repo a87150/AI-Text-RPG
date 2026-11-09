@@ -85,8 +85,18 @@ WRITING_BOUNDS = {
 _writing = dict(WRITING_DEFAULTS)
 
 # 自动备份：默认关，开了以后每隔 every_hours 小时打一个包
-# 档位对应的上下文预算：小模型塞太多反而更容易跑题
-TIER_CONTEXT = {"basic": 8000, "standard": 16000, "advanced": 32000}
+# 档位对应的注入策略。小模型的真实限制不只是窗口小，还有注意力散：
+# 长历史会稀释近因，设定给多了会串味，账本读多了会开始抄。
+# 0 表示不限（history_msgs）或不截断（role_chars）。
+TIER_LIMITS = {
+    "basic": {"context": 8000, "history_msgs": 16, "role_chars": 200,
+              "facts": 6, "anchor_every": 8, "attempts": 3},
+    "standard": {"context": 16000, "history_msgs": 40, "role_chars": 400,
+                 "facts": 12, "anchor_every": 15, "attempts": 3},
+    "advanced": {"context": 32000, "history_msgs": 0, "role_chars": 0,
+                 "facts": 24, "anchor_every": 24, "attempts": 2},
+}
+TIER_CONTEXT = {k: v["context"] for k, v in TIER_LIMITS.items()}
 
 BACKUP_DEFAULTS = {"enabled": False, "every_hours": 24}
 BACKUP_BOUNDS = {"every_hours": (1, 720)}
@@ -120,14 +130,18 @@ def save_tier(value, persist=True):
     with _model_lock:
         _tier = value
     # 换档位就换上下文预算；用户之后仍可在写作参数里手动改
-    save_writing({"context_limit": TIER_CONTEXT[value]}, persist=False)
+    save_writing({"context_limit": TIER_LIMITS[value]["context"]}, persist=False)
     if persist:
         persist_settings()
     return tier()
 
 
+def tier_limits(level=None):
+    return TIER_LIMITS.get(level or tier(), TIER_LIMITS["basic"])
+
+
 def tier_context(level=None):
-    return TIER_CONTEXT.get(level or tier(), TIER_CONTEXT["basic"])
+    return tier_limits(level)["context"]
 
 
 def reasoning_effort():

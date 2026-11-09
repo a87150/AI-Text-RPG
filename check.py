@@ -490,14 +490,16 @@ def main():
     anchor_sess = rp_storage.new_session("锚定测试")
     anchor_sess["characters"] = [{"name": "沈砚", "role": "守灯人，话少，不主动开口",
                                   "state": "", "history": []}]
-    anchor_sess["turn"] = 15
+    # 间隔由档位决定，这里按当前档位的间隔来验
+    every = rp_config.tier_limits()["anchor_every"]
+    anchor_sess["turn"] = every
     msgs = rp_prompts.build_messages(anchor_sess)
-    check("第 15 轮会重插人设锚定",
+    check("到锚定间隔会重插人设锚定",
           any("人设锚定" in m["content"] for m in msgs), str(len(msgs)))
-    anchor_sess["turn"] = 14
-    check("非整数轮不插锚定",
+    anchor_sess["turn"] = every - 1
+    check("没到的轮次不插锚定",
           not any("人设锚定" in m["content"] for m in rp_prompts.build_messages(anchor_sess)))
-    anchored_msgs = rp_prompts.build_messages({**anchor_sess, "turn": 15})
+    anchored_msgs = rp_prompts.build_messages({**anchor_sess, "turn": every})
     check("锚定贴在最近几轮之前",
           [i for i, m in enumerate(anchored_msgs) if "人设锚定" in m["content"]][0] > 0)
 
@@ -690,6 +692,42 @@ def main():
     check("不能改 AI 的消息", bad.status_code == 400, str(bad.status_code))
     check("AI 的正文没被动过",
           (rp_storage.load_session(edit_sess2["id"])["messages"][1].get("speaker")) == "沈砚")
+
+    # 32. 档位决定注入策略：历史条数、人设长度、账本条数、锚定间隔
+    def _fat_sess():
+        return {"turn": 8, "mode": "rp", "user_name": "甲",
+                "characters": [{"name": "沈砚", "role": "守灯人，话少。" * 30}],
+                "facts": [{"fact": "事实%d" % i, "state": "active", "turn": i} for i in range(20)],
+                "messages": [{"role": "user", "content": "u%d" % i} if i % 2 == 0
+                             else {"role": "assistant", "content": "a%d" % i} for i in range(40)]}
+
+    rp_config.save_tier("basic", persist=False)
+    msgs = rp_prompts.build_messages(_fat_sess(), "沈砚")
+    hist = [m for m in msgs if m["role"] != "system"]
+    check("初级只带最近 16 条历史", len(hist) == 16, str(len(hist)))
+    check("历史不从 assistant 开头", msgs[-16]["role"] == "user", msgs[-16]["role"])
+    check("初级每条人设截到 200 字",
+          rp_prompts.clip("守灯人，话少。" * 30, 200).__len__() <= 201)
+    check("截断断在句号上", rp_prompts.clip("守灯人，话少。" * 30, 200).endswith("。"))
+    body = rp_prompts.build_system_prompt(_fat_sess(), "沈砚")
+    check("初级只注入 6 条账本", body.count("· 第") == 6, str(body.count("· 第")))
+    check("初级第 8 轮就重插人设",
+          any("人设锚定" in m["content"] for m in msgs))
+
+    rp_config.save_tier("advanced", persist=False)
+    msgs2 = rp_prompts.build_messages(_fat_sess(), "沈砚")
+    hist2 = [m for m in msgs2 if m["role"] != "system"]
+    check("高级不砍历史", len(hist2) == 40, str(len(hist2)))
+    body2 = rp_prompts.build_system_prompt(_fat_sess(), "沈砚")
+    check("高级注入 20 条账本", body2.count("· 第") == 20, str(body2.count("· 第")))
+    check("高级不截人设",
+          rp_prompts.clip("守灯人，话少。" * 30, rp_config.tier_limits()["role_chars"]).__len__() > 150)
+    check("高级第 8 轮不重插",
+          not any("人设锚定" in m["content"] for m in msgs2))
+    check("重试次数随档位", rp_config.tier_limits()["attempts"] == 2)
+    rp_config.save_tier("basic", persist=False)
+    check("配置接口带出完整策略",
+          client.get("/api/config").get_json()["tier_limits"]["history_msgs"] == 16)
 
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:

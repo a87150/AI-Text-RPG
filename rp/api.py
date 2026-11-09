@@ -22,7 +22,7 @@ from .config import (
     list_local_models, load_settings, mode_for, mode_of, provider_public,
     provider_usable, reasoning_effort, save_backup_conf, save_mode,
     save_provider, save_reasoning, save_tier, save_writing, set_current_model,
-    tier, tier_context, writing,
+    tier, tier_context, tier_limits, writing,
 )
 from .context import (
     background_compress, build_summary_prompt, compress_session, context_chars,
@@ -71,6 +71,7 @@ def api_config():
         "tiers": TIERS,
         "tier_labels": TIER_LABELS,
         "tier_context": tier_context(),
+        "tier_limits": tier_limits(),
     })
 
 
@@ -812,7 +813,7 @@ def api_chat():
             # 先告诉前端这轮由谁发言，流式渲染才能丢掉别人抢话的段落
             yield sse({"type": "speaker", "name": speaker})
             answer, attempts_used = yield from _stream_model(
-                messages, speaker, temperature, MAX_CHAT_ATTEMPTS, use_rp)
+                messages, speaker, temperature, tier_limits()["attempts"], use_rp)
             if answer is None:
                 return
 

@@ -260,7 +260,14 @@ function syncTierSeg() {
     const labels = (state.conf && state.conf.tier_labels) || {};
     const budget = (state.conf && state.conf.tier_context) || 0;
     const base = labels[currentTier()] || '初级给单行标记加两条示例，高级直接要结构化 JSON。';
-    hint.textContent = budget ? base + '（上下文预算 ' + budget + ' 字）' : base;
+    const lim = (state.conf && state.conf.tier_limits) || {};
+    const bits = [];
+    if (budget) bits.push('上下文 ' + budget + ' 字');
+    if (lim.history_msgs) bits.push('历史 ' + lim.history_msgs + ' 条');
+    if (lim.role_chars) bits.push('人设每条 ' + lim.role_chars + ' 字');
+    if (lim.facts) bits.push('账本 ' + lim.facts + ' 条');
+    if (lim.anchor_every) bits.push('每 ' + lim.anchor_every + ' 轮重插人设');
+    hint.textContent = base + (bits.length ? '（' + bits.join(' · ') + '）' : '');
   }
 }
 

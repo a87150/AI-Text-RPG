@@ -10,7 +10,7 @@ from difflib import SequenceMatcher
 from string import Template
 
 from ..characters import ensure_characters, guess_name, role_labels, scene_split
-from ..config import mode_for, tier, writing
+from ..config import mode_for, tier, tier_limits, writing
 from ..llm import strip_status_leaks, strip_thinking
 
 _DIR = os.path.dirname(os.path.abspath(__file__))
@@ -32,6 +32,27 @@ TAIL_HINT = {
     "standard": "（正文后另起一行写 [[地点：…|时间：…|关系：…|目标：…]]，没有的字段就不写）",
     "advanced": "",
 }
+
+def clip(text, limit):
+    """按字数截断，尽量断在句号上，别把人设砍成半句话。"""
+    text = (text or "").strip()
+    if not limit or len(text) <= limit:
+        return text
+    head = text[:limit]
+    for sep in ("。", "！", "？", "；", "\n"):
+        pos = head.rfind(sep)
+        if pos >= limit * 0.6:
+            return head[:pos + 1]
+    return head.rstrip("，、, ") + "…"
+
+
+def active_facts(sess, limit=None):
+    """已确立且没被推翻的事实，按档位取最近若干条。"""
+    cap = limit if limit is not None else tier_limits()["facts"]
+    book = [f for f in (sess.get("facts") or [])
+            if isinstance(f, dict) and f.get("state") == "active"]
+    return book[-cap:] if cap else book
+
 
 STATUS_FILE = {
     "basic": "status.md",          # 单行标记 + 两条示例
@@ -77,9 +98,10 @@ def build_character_block(chars, speaker=None, status=None):
     on, off = scene_split(chars, status)
     if not on:                        # 状态写坏了也不能一个人都没有
         on, off = list(chars), []
+    role_cap = tier_limits()["role_chars"]     # 小模型吃长设定会串味
     lines = []
     for c in sorted(on, key=lambda c: 0 if c["name"] == speaker else 1):
-        role = (c.get("role") or "").strip() or "（未设定，按名字与场景合理发挥）"
+        role = clip(c.get("role"), role_cap) or "（未设定，按名字与场景合理发挥）"
         # 用 ◆ 而不是【】：方括号留给格式标记，别让模型把角色卡当成输出格式
         if c["name"] == speaker and speaker:
             lines.append("◆ 你这一轮演的就是：%s\n%s" % (c["name"], role))
@@ -152,8 +174,7 @@ def build_system_prompt(sess, speaker=None):
     scene = build_status_scene(sess)
     if scene:
         parts.append("【此刻的处境】\n" + scene)
-    book = [f for f in (sess.get("facts") or [])
-            if isinstance(f, dict) and f.get("state") == "active"][-12:]
+    book = active_facts(sess)
     if book:
         lines = ["【这些已经发生，不能当成没发生、也不能反悔】"]
         for f in book:
@@ -201,7 +222,6 @@ def build_lore_block(sess, recent_text=""):
     return "【世界书（本轮相关设定）】\n" + "\n".join("· " + h["content"] for h in hits)
 
 
-ANCHOR_EVERY = 15
 
 
 def build_anchor_block(sess):
@@ -228,9 +248,9 @@ def build_context_debug(sess, speaker=None):
     hits = lore_hits(sess, recent)
     lore_len = sum(len(h["content"]) for h in hits)
     turn = int(sess.get("turn") or 0)
-    anchored = bool(turn and turn % ANCHOR_EVERY == 0 and build_anchor_block(sess))
-    facts = [f for f in (sess.get("facts") or [])
-             if isinstance(f, dict) and f.get("state") == "active"][-12:]
+    every = tier_limits()["anchor_every"]
+    anchored = bool(turn and turn % every == 0 and build_anchor_block(sess))
+    facts = active_facts(sess)
     facts_len = sum(len(str(f.get("fact") or "")) for f in facts)
     summary_len = len(sess.get("summary") or "")
     total = len(system) + lore_len + summary_len + facts_len
@@ -243,7 +263,7 @@ def build_context_debug(sess, speaker=None):
         "facts": facts,
         "facts_chars": facts_len,
         "anchored": anchored,
-        "anchor_every": ANCHOR_EVERY,
+        "anchor_every": every,
         "chars": {"total": total, "system": len(system)},
         "tokens": int(total * 0.7),   # 中文粗估，够用来判断"还塞不塞得下"
     }
@@ -260,13 +280,19 @@ def build_messages(sess, speaker=None):
     if lore:
         messages.insert(0, {"role": "system", "content": lore})
     turn = int(sess.get("turn") or 0)
-    if turn and turn % ANCHOR_EVERY == 0:
+    if turn and turn % tier_limits()["anchor_every"] == 0:
         anchor = build_anchor_block(sess)
         if anchor:
             # 贴在最近几轮之前，而不是只留在最顶上被稀释
             messages.insert(max(1, len(messages) - 3), {"role": "system", "content": anchor})
-    fallback = role_labels(sess)[1]
-    for m in sess.get("messages") or []:
+    history = sess.get("messages") or []
+    cap = tier_limits()["history_msgs"]
+    if cap and len(history) > cap:
+        history = history[-cap:]
+        # 开头是 assistant 会读成「它自己接自己」，往前让出一条
+        while history and history[0].get("role") != "user":
+            history = history[1:]
+    for m in history:
         content = m.get("content") or ""
         if not content:
             continue
