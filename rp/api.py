@@ -22,7 +22,7 @@ from .config import (
     list_local_models, load_settings, mode_for, mode_of, provider_public,
     provider_usable, reasoning_effort, save_backup_conf, save_mode,
     save_provider, save_reasoning, save_tier, save_writing, set_current_model,
-    tier, writing,
+    tier, tier_context, writing,
 )
 from .context import (
     background_compress, build_summary_prompt, compress_session, context_chars,
@@ -70,6 +70,7 @@ def api_config():
         "tier": tier(),
         "tiers": TIERS,
         "tier_labels": TIER_LABELS,
+        "tier_context": tier_context(),
     })
 
 

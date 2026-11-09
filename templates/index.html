@@ -27,13 +27,7 @@
       <div class="pager hidden" id="session-pager"></div>
     </div>
     <div class="side-foot">
-      <div class="model-row">
-        <label for="model-select">模型</label>
-        <select id="model-select" title="切换模型"></select>
-        <button class="icon-btn" id="btn-refresh-models" type="button" title="刷新模型列表">⟳</button>
-        <button class="icon-btn" id="btn-backup" type="button" title="备份：把数据打包下载">⛁</button>
-        <button class="icon-btn" id="btn-prefs" type="button" title="设置：外观、模型、云端、写作">⚙</button>
-      </div>
+      <button class="side-btn ghost" id="btn-prefs" type="button" title="设置：模型、外观、写作、备份">⚙ 设置</button>
     </div>
   </aside>
 
@@ -70,6 +64,10 @@
         <div class="sub" id="chat-sub"></div>
       </div>
       <div class="actions">
+        <div class="model-row top">
+          <select id="model-select" title="切换模型"></select>
+          <button class="icon-btn" id="btn-refresh-models" type="button" title="刷新模型列表">⟳</button>
+        </div>
         <button id="btn-context" type="button" disabled title="上下文用量、压缩情况与在场角色">📊</button>
         <button id="btn-settings" type="button" disabled>⚙ 设定</button>
         <button id="btn-compress" type="button" disabled>🗜 压缩</button>
@@ -332,6 +330,16 @@
         <div class="field"><label for="w-keep">压缩后保留最近消息数</label><input id="w-keep" type="number" min="4" max="60"></div>
       </div>
       <div class="field"><label for="w-chars">同时在场角色上限</label><input id="w-chars" type="number" min="1" max="8"></div>
+    </div>
+
+    <div class="prefs-sec">
+      <h3>备份</h3>
+      <div class="field">
+        <button class="ghost wide" id="btn-open-backup" type="button">打开备份面板</button>
+        <div class="hint">
+          把 data/ 整个打包成 zip 存到 backups/，包里的 API Key 会被抹掉。可以手动备份，也可以设定时自动备份。
+        </div>
+      </div>
     </div>
 
     <div class="modal-actions">

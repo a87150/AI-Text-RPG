@@ -85,6 +85,9 @@ WRITING_BOUNDS = {
 _writing = dict(WRITING_DEFAULTS)
 
 # 自动备份：默认关，开了以后每隔 every_hours 小时打一个包
+# 档位对应的上下文预算：小模型塞太多反而更容易跑题
+TIER_CONTEXT = {"basic": 8000, "standard": 16000, "advanced": 32000}
+
 BACKUP_DEFAULTS = {"enabled": False, "every_hours": 24}
 BACKUP_BOUNDS = {"every_hours": (1, 720)}
 _backup = dict(BACKUP_DEFAULTS)
@@ -116,9 +119,15 @@ def save_tier(value, persist=True):
         return tier()
     with _model_lock:
         _tier = value
+    # 换档位就换上下文预算；用户之后仍可在写作参数里手动改
+    save_writing({"context_limit": TIER_CONTEXT[value]}, persist=False)
     if persist:
         persist_settings()
     return tier()
+
+
+def tier_context(level=None):
+    return TIER_CONTEXT.get(level or tier(), TIER_CONTEXT["basic"])
 
 
 def reasoning_effort():

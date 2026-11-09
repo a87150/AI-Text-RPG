@@ -125,6 +125,18 @@ button:disabled { cursor: not-allowed; }
   border: 1px solid var(--border-strong); font-family: inherit;
 }
 .model-row select:disabled { opacity: .6; }
+/* 顶栏里的模型选择：宽度跟着名字走，别把按钮挤歪 */
+.model-row.top { margin-right: 4px; }
+.model-row.top select {
+  min-width: 96px; max-width: 190px; padding: 6px 8px;
+  font-size: .75rem; text-overflow: ellipsis;
+}
+.side-btn.ghost {
+  background: transparent; border: 1px solid var(--border-strong);
+  color: var(--text-dim); font-size: .7813rem;
+}
+.side-btn.ghost:hover { border-color: var(--accent); color: var(--text); }
+button.ghost.wide { width: 100%; }
 .icon-btn {
   border: 1px solid var(--border-strong); background: var(--bg-elev);
   color: var(--text-dim); border-radius: 8px; font-size: .75rem;
@@ -773,6 +785,9 @@ body.story-view .composer { display: none !important; }
   .topbar { padding: 10px 12px; gap: 6px; }
   .topbar .actions button { padding: 6px 9px; font-size: .75rem; }
   .topbar h1 { font-size: 1rem; }
+  /* 窄屏先砍模型名的宽度，别把按钮挤出屏幕 */
+  .topbar .model-row.top select { max-width: 96px; min-width: 72px; }
+  .topbar .actions { gap: 5px; }
   .modal-box { padding: 16px 14px; border-radius: 12px; width: 100%; }
   .story-pane { padding: 14px 14px 20px; }
   #story-pane #settings-form { max-width: none; }

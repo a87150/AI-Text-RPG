@@ -258,7 +258,9 @@ function syncTierSeg() {
   const hint = $('#tier-hint');
   if (hint) {
     const labels = (state.conf && state.conf.tier_labels) || {};
-    hint.textContent = labels[currentTier()] || '初级给单行标记加两条示例，高级直接要结构化 JSON。';
+    const budget = (state.conf && state.conf.tier_context) || 0;
+    const base = labels[currentTier()] || '初级给单行标记加两条示例，高级直接要结构化 JSON。';
+    hint.textContent = budget ? base + '（上下文预算 ' + budget + ' 字）' : base;
   }
 }
 
@@ -410,7 +412,7 @@ function bindUI() {
   });
   $('#btn-nav').onclick = () => document.body.classList.toggle('nav-open');
   $('#nav-mask').onclick = closeNav;
-  $('#btn-backup').onclick = openBackup;
+  $('#btn-open-backup').onclick = openBackup;
   $('#btn-backup-now').onclick = runBackup;
   $('#btn-backup-save').onclick = saveBackupConf;
   $('#btn-backup-close').onclick = closeBackup;
@@ -439,7 +441,12 @@ function bindUI() {
     if (!btn) return;
     state.conf = Object.assign({}, state.conf, { tier: btn.dataset.tier });
     syncTierSeg();
-    saveWriting();
+    // 后端会按档位重置上下文预算，存完把新预算填回表单
+    saveWriting().then(async () => {
+      state.conf = await api('/api/config');
+      fillWritingForm();
+      syncTierSeg();
+    });
   };
   $('#reasoning-seg').onclick = (e) => {
     const btn = e.target.closest('button[data-level]');
