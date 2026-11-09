@@ -159,6 +159,40 @@ def strip_thinking(text):
     return re.sub(r"^(?:[-*_]{3,}[ \t]*\n+)+", "", t).strip()
 
 
+# 模型常把状态写成裸 JSON 而不是带标签，或者标签只写了一半；这些都会漏进正文
+_LEAK_BLOCK = re.compile(r"<StatusBlock>.*?(?:</StatusBlock>|$)", re.S | re.I)
+_LEAK_TAG = re.compile(r"</?StatusBlock>", re.I)
+_LEAK_JSON = re.compile(
+    r'\{(?:[^{}]|\{[^{}]*\})*"(?:location|time|relations|items|goal|facts'
+    r'|地点|时间|关系|物品|目标|事实)"(?:[^{}]|\{[^{}]*\})*\}',
+    re.S | re.I,
+)
+# 状态块前后常带的分隔线与空字段名，本身没有意义
+_LEAK_LINE = re.compile(
+    r"^[ 	]*(?:-{2,}|={2,}|新事实[：:]?|事实[：:]?|状态[：:]?|当前状态[：:]?"
+    r"|旁白[：:]?|\[\[[^\]]*\]\])[ 	]*$",
+    re.M,
+)
+def loose_status_json(text):
+    """正文里没带标签的裸状态 JSON，能捞就捞一段出来。"""
+    match = _LEAK_JSON.search(text or "")
+    return match.group(0) if match else ""
+
+
+def strip_status_leaks(text):
+    """把漏进正文的状态残渣清掉：标签、裸 JSON、围栏、多余分隔行。"""
+    body = text or ""
+    if not body:
+        return ""
+    body = _LEAK_BLOCK.sub("", body)
+    body = _LEAK_TAG.sub("", body)
+    body = _LEAK_JSON.sub("", body)
+    body = body.replace("\x60\x60\x60json", "").replace("\x60\x60\x60", "")
+    body = _LEAK_LINE.sub("", body)
+    body = re.sub(r"\n{3,}", "\n\n", body)
+    return body.strip()
+
+
 def extract_json(text):
     if not text:
         return None

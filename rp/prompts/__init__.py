@@ -11,7 +11,7 @@ from string import Template
 
 from ..characters import ensure_characters, guess_name, role_labels
 from ..config import mode_for, writing
-from ..llm import strip_thinking
+from ..llm import strip_status_leaks, strip_thinking
 
 _DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -223,6 +223,14 @@ def build_messages(sess, speaker=None):
                 messages.append({"role": "assistant", "content": head + "【%s】%s" % (name, content)})
             else:
                 messages.append({"role": "assistant", "content": head + content})
+    # 格式要求写在 system 里离生成点太远，小模型容易忘；补在最后一条 user 尾巴上
+    for item in reversed(messages):
+        if item.get("role") == "user":
+            item["content"] = item["content"].rstrip() + (
+                "\n\n（正文写完后，另起一行写一行状态，形如："
+                "[[地点：银月酒馆|时间：深夜|关系：戒备|目标：等他开口|事实：钥匙到了沈砚手里]]）"
+            )
+            break
     return messages
 
 
@@ -357,6 +365,9 @@ _PREAMBLE = re.compile(
     r"^(好的|行|当然|以下是|下面是|这是|根据你|按照你|我来|让我|下面为你|为你|明白)",
 )
 _HEADING = re.compile(r"^[^\n。！？]{1,16}[:：]$")
+CJK_RE = re.compile(r"[\u4e00-\u9fff]")
+# 设定正文里出现整行英文，基本是模型在解释「Here is the setting:」之类
+ASCII_WORD_RE = re.compile(r"[A-Za-z]{3,}")
 
 
 def clean_generated(text):
@@ -364,7 +375,11 @@ def clean_generated(text):
     body = strip_thinking(text or "").strip()
     if not body:
         return ""
-    body = body.replace("**", "").replace("__", "")
+    body = strip_status_leaks(body).replace("**", "").replace("__", "")
+    body = "\n".join(
+        line for line in body.splitlines()
+        if not (line.strip() and not CJK_RE.search(line) and ASCII_WORD_RE.search(line))
+    )
     lines = []
     for raw in body.splitlines():
         line = raw.strip()

@@ -583,6 +583,50 @@ def main():
     check("没到期不重复跑",
           rp_backup.due({"enabled": True, "every_hours": 2}, now - 3600, now) is False)
 
+    # 26. 状态行三种写法都要接住，正文里不许留残渣
+    NL = chr(10)
+    body, status = rp_characters.extract_status(NL.join([
+        "他把门让开。",
+        "[[地点：门廊|时间：深夜|关系：试探|物品：湿伞|目标：等他开口|事实：钥匙易主]]",
+    ]))
+    check("单行状态行解析出全部字段",
+          status and status.get("location") == "门廊" and status.get("facts") == ["钥匙易主"],
+          str(status))
+    check("单行状态行不进正文", "|" not in body and "[[" not in body, repr(body))
+    body, status = rp_characters.extract_status(NL.join([
+        "他把你让进门里。",
+        "--",
+        chr(123) + chr(34) + "location" + chr(34) + ":" + chr(34) + "门廊" + chr(34)
+        + "," + chr(34) + "time" + chr(34) + ":" + chr(34) + "深夜" + chr(34) + chr(125),
+        "新事实：",
+    ]))
+    check("裸 JSON 也能捞出状态", status and status.get("location") == "门廊", str(status))
+    check("裸 JSON 不留在正文", "location" not in body and chr(123) not in body, repr(body))
+    check("分隔线与空字段名被清掉", "--" not in body and "新事实" not in body, repr(body))
+    body, status = rp_characters.extract_status(
+        "<StatusBlock>" + chr(123) + chr(34) + "location" + chr(34) + ":" + chr(34)
+        + "柜台" + chr(34) + chr(125) + "</StatusBlock>正文")
+    check("旧 XML 写法仍然认", status and status.get("location") == "柜台", str(status))
+    check("纯正文不受影响",
+          rp_characters.extract_status("就是一段普通正文。") == ("就是一段普通正文。", None))
+
+    # 27. 设定生成要去掉英文解释行
+    cleaned = rp_prompts.clean_generated(NL.join([
+        "Here is the setting:", "", "夜班护士林晚。", "She is calm.", "手上有疤。",
+    ]))
+    check("生成设定里没有英文行", "Here is" not in cleaned and "She is" not in cleaned, repr(cleaned))
+    check("中文正文保留下来", "夜班护士林晚" in cleaned and "手上有疤" in cleaned, repr(cleaned))
+
+    # 28. 状态格式提醒贴在最后一条 user 上，不能只在 system 里
+    tail_sess = rp_storage.new_session()
+    tail_sess["messages"] = [
+        {"role": "user", "content": "我推门进去。", "id": "t1"},
+        {"role": "assistant", "content": "他抬头。", "narrator": "", "id": "t2"},
+    ]
+    built = rp_prompts.build_messages(tail_sess)
+    last_user = [m for m in built if m["role"] == "user"][-1]["content"]
+    check("提醒写进了最后一条用户消息", "[[地点" in last_user, repr(last_user[-40:]))
+
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")

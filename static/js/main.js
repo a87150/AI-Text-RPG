@@ -486,7 +486,16 @@ function bindUI() {
     btn.addEventListener('mousedown', (e) => e.preventDefault());
   }
 
-  $('#input').addEventListener('input', syncComposer);
+  // 输入多了自己长高，长句不用挤在一条缝里看
+  $('#input').addEventListener('input', () => {
+    const el = $('#input');
+    const base = 132;              // 和 CSS 里的初始高度保持一致
+    const prev = el.style.height;
+    el.style.height = 'auto';
+    const want = Math.min(Math.max(base, el.scrollHeight + 2), window.innerHeight * 0.44);
+    el.style.height = want > base ? want + 'px' : prev || '';
+    syncComposer();
+  });
   $('#input').addEventListener('keydown', (e) => {
     if (e.key !== 'Enter' || e.shiftKey || e.isComposing) return;
     e.preventDefault();

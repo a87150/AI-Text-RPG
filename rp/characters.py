@@ -4,7 +4,7 @@ import re
 from difflib import SequenceMatcher
 
 from .config import mode_for, writing
-from .llm import extract_json, strip_thinking
+from .llm import extract_json, loose_status_json, strip_status_leaks, strip_thinking
 
 # ============================== 提示词构造 ==============================
 def guess_name(text):
@@ -117,6 +117,44 @@ def role_labels(sess):
     return user_name, ai_name
 SEG_RE = re.compile(r"【([^】]{1,24})】")
 STATUS_RE = re.compile(r"<StatusBlock>(.*?)</StatusBlock>", re.S | re.I)
+# 单行写法：[[地点：银月酒馆|时间：深夜|关系：戒备|物品：湿伞|目标：等对方开口|事实：甲；乙]]
+MARK_RE = re.compile(r"^[ \t]*\[\[([^\[\]]{2,400})\]\][ \t]*$", re.M)
+MARK_KEYS = {
+    "地点": "location", "位置": "location", "场景": "location",
+    "时间": "time",
+    "关系": "relations", "人物": "relations",
+    "物品": "items", "携带": "items",
+    "目标": "goal", "意图": "goal",
+    "事实": "facts",
+}
+
+
+def _take_mark_line(text):
+    """剥掉 [[…]] 状态行并解析成 status；格式不对就整行丢弃。"""
+    src = text or ""
+    match = MARK_RE.search(src)
+    if not match:
+        return src, {}
+    src = (src[:match.start()] + src[match.end():]).strip()
+    status = {}
+    for chunk in re.split(r"[|｜]", match.group(1)):
+        if "：" in chunk:
+            key, value = chunk.split("：", 1)
+        elif ":" in chunk:
+            key, value = chunk.split(":", 1)
+        else:
+            continue
+        key = MARK_KEYS.get(key.strip())
+        value = value.strip()
+        if not key or not value:
+            continue
+        if key == FACT_KEY:
+            got = split_facts(value)
+            if got:
+                status[FACT_KEY] = got
+        else:
+            status[key] = value
+    return src, status
 STATUS_FIELDS = ("location", "time", "relations", "items", "goal")
 # 状态块里额外允许一条事实账本：模型每轮声明"刚刚定下的事"
 FACT_KEY = "facts"
@@ -129,9 +167,17 @@ def extract_status(text):
     「【事实】甲；乙」。小模型维护 JSON 数组会犹豫，纯文本行反而稳定。
     """
     src = text or ""
+    # 先认新的单行写法：[[地点：X|时间：Y|…]]，小模型写这个比写 XML 稳
+    src, mark_status = _take_mark_line(src)
     match = STATUS_RE.search(src)
-    cleaned = STATUS_RE.sub("", src).strip() if match else src
-    obj = extract_json(match.group(1)) or {} if match else {}
+    if match:
+        cleaned = STATUS_RE.sub("", src).strip()
+        obj = extract_json(match.group(1)) or {}
+    else:
+        # 没写标签、直接把 JSON 甩在正文里的情况也要接住
+        cleaned = src
+        loose = loose_status_json(src)
+        obj = extract_json(loose) or {} if loose else {}
     facts = obj.get(FACT_KEY)
     if isinstance(facts, str):
         facts = [facts]
@@ -147,6 +193,12 @@ def extract_status(text):
             value = str(value).strip()
         if value:
             status[key] = value[:160]
+    for key, value in (mark_status or {}).items():
+        if key == FACT_KEY:
+            status[FACT_KEY] = (status.get(FACT_KEY) or []) + value
+            status[FACT_KEY] = status[FACT_KEY][:3]
+        elif key not in status:
+            status[key] = value[:160]
     line = FACT_LINE_RE.search(cleaned)
     if line:
         cleaned = (cleaned[:line.start()] + cleaned[line.end():]).strip()
@@ -154,6 +206,8 @@ def extract_status(text):
         if extra:
             status[FACT_KEY] = (status.get(FACT_KEY) or []) + extra
             status[FACT_KEY] = status[FACT_KEY][:3]
+    # 兜底：模型常把状态写成裸 JSON 或半截标签，别让它们留在正文里
+    cleaned = strip_status_leaks(cleaned)
     return cleaned, (status or None)
 
 
