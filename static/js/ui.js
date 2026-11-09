@@ -512,11 +512,114 @@ export function updateSub() {
   }
   const s = state.session;
   if (!s) { el.textContent = ''; return; }
-  const names = (s.characters || []).map((c) => c.name).filter(Boolean);
-  const parts = ['我 = ' + (s.user_name || '我')];
-  parts.push(names.length ? '在场 ' + names.join('、') : 'AI = ' + (s.ai_name || 'AI'));
-  parts.push(((s.context ? s.context.messages : (s.messages || []).length) || 0) + ' 条');
-  el.textContent = parts.join(' · ');
+  el.textContent = '';
+  const put = (text) => el.appendChild(document.createTextNode(text));
+  put('我 = ' + (s.user_name || '我') + ' · ');
+
+  const chars = s.characters || [];
+  const status = s.status || {};
+  const present = status.present || [];
+  const away = status.away || [];
+  if (!chars.length) {
+    put('AI = ' + (s.ai_name || 'AI'));
+  } else {
+    put('在场 ');
+    for (const c of chars) {
+      const left = away.includes(c.name)
+        || (present.length > 0 && !present.includes(c.name));
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'char-chip' + (left ? ' off' : '');
+      btn.dataset.name = c.name;
+      btn.title = '点开看这个角色的当前状态';
+      btn.textContent = c.name + (left ? '（离场）' : '');
+      el.appendChild(btn);
+      put(' ');
+    }
+  }
+  put('· ' + ((s.context ? s.context.messages : (s.messages || []).length) || 0) + ' 条');
+}
+
+/** 点顶栏的角色名，看这个角色此刻是什么状态。 */
+export function toggleCharPop(name, anchor) {
+  const pop = $('#char-pop');
+  const s = state.session;
+  if (!pop || !s) return;
+  if (!pop.classList.contains('hidden') && pop.dataset.for === name) {
+    pop.classList.add('hidden');
+    return;
+  }
+  const c = (s.characters || []).find((x) => x.name === name);
+  if (!c) return;
+
+  const status = s.status || {};
+  const rows = [];
+  if (c.role) rows.push(['设定', c.role]);
+  if (c.state) rows.push(['此刻', c.state]);
+  if (c.history && c.history.length) {
+    rows.push(['近况', c.history.slice(-3).join('；')]);
+  }
+  const scene = [status.time, status.location].filter(Boolean).join(' · ');
+  if (scene) rows.push(['场景', scene + '（全场共用）']);
+  if (!rows.length) rows.push(['状态', '还没有记录，聊几轮之后这里会有内容']);
+
+  pop.textContent = '';
+  pop.dataset.for = name;
+  const head = document.createElement('div');
+  head.className = 'cp-head';
+  head.textContent = c.name;
+  pop.appendChild(head);
+  for (const [label, value] of rows) {
+    const row = document.createElement('div');
+    row.className = 'cp-row';
+    const k = document.createElement('b');
+    k.textContent = label;
+    const v = document.createElement('span');
+    v.textContent = value;
+    row.append(k, v);
+    pop.appendChild(row);
+  }
+  const status2 = s.status || {};
+  const left = (status2.away || []).includes(name)
+    || ((status2.present || []).length > 0 && !(status2.present || []).includes(name));
+  const toggle = document.createElement('button');
+  toggle.type = 'button';
+  toggle.className = 'cp-act';
+  toggle.textContent = left ? '标回在场' : '标记离场';
+  toggle.onclick = () => setCharScene(name, left).catch((e) => {
+    toast('改不动：' + e.message, 'error');
+  });
+  pop.appendChild(toggle);
+  pop.classList.remove('hidden');
+
+  const box = anchor ? anchor.getBoundingClientRect() : null;
+  if (box) {
+    const left = Math.min(box.left, window.innerWidth - 320);
+    pop.style.left = Math.max(12, left) + 'px';
+    pop.style.top = (box.bottom + 8) + 'px';
+  }
+}
+
+/** 模型判错在场名单时，让用户自己改。 */
+export async function setCharScene(name, present) {
+  const s = state.session;
+  if (!s) return;
+  const st = s.status || {};
+  const on = new Set(st.present || []);
+  const off = new Set(st.away || []);
+  if (present) { on.add(name); off.delete(name); } else { off.add(name); on.delete(name); }
+  state.session = await api('/api/sessions/' + s.id, {
+    method: 'PUT',
+    body: { status: { present: [...on], away: [...off] } },
+  });
+  closeCharPop();
+  syncAll();
+  await loadSessions();
+}
+
+export function closeCharPop() {
+  const pop = $('#char-pop');
+  if (pop) pop.classList.add('hidden');
 }
 
 /** 窄屏抽屉：选中东西或点遮罩就收回。 */
@@ -680,11 +783,11 @@ export function buildMessage(role, content, name) {
   return { el, who, bubble };
 }
 
-/** 每条消息右下角的操作条：重写 / 分叉 / 编辑。 */
+/** 每条消息右下角的操作条。只给自己写的话提供编辑，改 AI 的话没有意义。 */
 function toolsNode(role) {
   const acts = role === 'user'
     ? [['edit', '✎', '编辑这句话'], ['rewrite', '↻', '重发这句'], ['branch', '⧉', '从这里分叉']]
-    : [['rewrite', '↻', '删掉这条及之后重新生成'], ['branch', '⧉', '从这里分叉'], ['edit', '✎', '编辑这条']];
+    : [['rewrite', '↻', '删掉这条及之后重新生成'], ['branch', '⧉', '从这里分叉']];
   const bar = document.createElement('div');
   bar.className = 'msg-tools';
   for (const [act, icon, title] of acts) {

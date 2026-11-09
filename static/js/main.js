@@ -4,6 +4,7 @@ import { state } from './state.js';
 import {
   $, toast, initTheme, toggleTheme, applyFont, initFont, renderMessages, syncAll,
   syncComposer, focusComposer, setConnectionBanner, modalOpen, renderContextDetail,
+  closeNav, toggleCharPop, closeCharPop,
 } from './ui.js';
 import {
   loadSessions, createSession, clearSession, compressSession, switchSideView,
@@ -11,7 +12,6 @@ import {
   renderSessionList, renderStoryList, savedView, savedStory, savedSession,
   openSession,
 } from './sessions.js';
-import { closeNav } from './ui.js';
 import { openBackup, closeBackup, runBackup, saveBackupConf } from './backup.js';
 import { sendFromInput, bindRetryEvents } from './chat.js';
 import { bindMessageActions } from './msgops.js';
@@ -230,6 +230,7 @@ function fillWritingForm() {
   const font = $('#prefs-font');
   if (font) font.value = localStorage.getItem(FONT_KEY) || 'md';
   syncReasoningSeg();
+  syncTierSeg();
 }
 
 function currentReasoning() {
@@ -241,6 +242,23 @@ function syncReasoningSeg() {
   if (!seg) return;
   for (const btn of seg.querySelectorAll('button')) {
     btn.classList.toggle('active', btn.dataset.level === currentReasoning());
+  }
+}
+
+function currentTier() {
+  return (state.conf && state.conf.tier) || 'basic';
+}
+
+function syncTierSeg() {
+  const seg = $('#tier-seg');
+  if (!seg) return;
+  for (const btn of seg.querySelectorAll('button')) {
+    btn.classList.toggle('active', btn.dataset.tier === currentTier());
+  }
+  const hint = $('#tier-hint');
+  if (hint) {
+    const labels = (state.conf && state.conf.tier_labels) || {};
+    hint.textContent = labels[currentTier()] || '初级给单行标记加两条示例，高级直接要结构化 JSON。';
   }
 }
 
@@ -260,15 +278,18 @@ async function saveWriting() {
   }
   body.mode = currentMode();
   body.reasoning_effort = currentReasoning();
+  body.tier = currentTier();
   try {
     const res = await api('/api/writing', { method: 'POST', body });
     state.conf = Object.assign({}, state.conf, {
       writing: res.writing || state.conf.writing,
       mode: res.mode || currentMode(),
       reasoning_effort: res.reasoning_effort || currentReasoning(),
+      tier: res.tier || currentTier(),
     });
     fillWritingForm();
     syncModeSeg();
+    syncTierSeg();
     toast('设置已保存', 'ok');
   } catch (e) {
     toast('保存失败：' + e.message, 'error');
@@ -413,6 +434,13 @@ function bindUI() {
   $('#btn-prefs').onclick = openPrefs;
   $('#prefs-close').onclick = closePrefs;
   $('#prefs-save').onclick = saveWriting;
+  $('#tier-seg').onclick = (e) => {
+    const btn = e.target.closest('button[data-tier]');
+    if (!btn) return;
+    state.conf = Object.assign({}, state.conf, { tier: btn.dataset.tier });
+    syncTierSeg();
+    saveWriting();
+  };
   $('#reasoning-seg').onclick = (e) => {
     const btn = e.target.closest('button[data-level]');
     if (!btn) return;
@@ -464,6 +492,13 @@ function bindUI() {
   });
   $('#btn-regen-opening').onclick = regenOpening;
   $('#btn-new-run').onclick = newRunFromSettings;
+  $('#chat-sub').onclick = (e) => {
+    const chip = e.target.closest('.char-chip');
+    if (chip) toggleCharPop(chip.dataset.name, chip);
+  };
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#char-pop') && !e.target.closest('.char-chip')) closeCharPop();
+  });
   $('#side-seg').onclick = (e) => {
     const btn = e.target.closest('button[data-view]');
     if (btn) switchSideView(btn.dataset.view);
@@ -486,16 +521,7 @@ function bindUI() {
     btn.addEventListener('mousedown', (e) => e.preventDefault());
   }
 
-  // 输入多了自己长高，长句不用挤在一条缝里看
-  $('#input').addEventListener('input', () => {
-    const el = $('#input');
-    const base = 132;              // 和 CSS 里的初始高度保持一致
-    const prev = el.style.height;
-    el.style.height = 'auto';
-    const want = Math.min(Math.max(base, el.scrollHeight + 2), window.innerHeight * 0.44);
-    el.style.height = want > base ? want + 'px' : prev || '';
-    syncComposer();
-  });
+  $('#input').addEventListener('input', syncComposer);
   $('#input').addEventListener('keydown', (e) => {
     if (e.key !== 'Enter' || e.shiftKey || e.isComposing) return;
     e.preventDefault();

@@ -58,8 +58,10 @@ def next_speaker(sess):
     if mode_for(sess) == "normal":
         return ""
     chars = ensure_characters(sess)
+    on, _off = scene_split(chars, sess.get("status"))
+    pool = on or chars              # 全离场（状态写坏）时退回全体，总得有人说话
     turn = int(sess.get("turn") or 0)
-    return chars[turn % len(chars)]["name"]
+    return pool[turn % len(pool)]["name"]
 
 
 def advance_turn(sess):
@@ -126,7 +128,10 @@ MARK_KEYS = {
     "物品": "items", "携带": "items",
     "目标": "goal", "意图": "goal",
     "事实": "facts",
+    # 谁在这一幕里：角色会随剧情进出场景，不能永远全员在场
+    "在场": "present", "离场": "away", "退场": "away",
 }
+NAME_SPLIT_RE = re.compile(r"[,，、/]")
 
 
 def _take_mark_line(text):
@@ -152,9 +157,54 @@ def _take_mark_line(text):
             got = split_facts(value)
             if got:
                 status[FACT_KEY] = got
+        elif key in ("present", "away"):
+            names = [n.strip() for n in NAME_SPLIT_RE.split(value) if n.strip()]
+            if names:
+                status[key] = names[:MAX_CHARACTERS]
         else:
             status[key] = value
     return src, status
+
+
+def merge_status(old, new):
+    """状态是累积的：这一轮没写到的字段沿用上一轮，别把已有信息清空。
+
+    小模型经常只写两三个字段，整体覆盖会让地点、在场名单来回丢。
+    """
+    out = dict(old or {})
+    new = new or {}
+    on_off = ("present", "away")
+    if any(new.get(k) for k in on_off):     # 在场名单成对更新，避免只写一半
+        for k in on_off:
+            names = [n for n in (new.get(k) or []) if n]
+            if names or k in new:
+                out[k] = names
+    else:
+        for k in on_off:
+            if old and k in old:
+                out[k] = old[k]
+    for key, value in new.items():
+        if key in on_off:
+            continue
+        if value:
+            out[key] = value
+    return out
+
+
+def scene_split(chars, status):
+    """把角色分成「这一幕在场」和「这一幕不在场」。没标过就都算在场。"""
+    status = status or {}
+    present = [n for n in (status.get("present") or []) if n]
+    away = [n for n in (status.get("away") or []) if n]
+    if not present and not away:
+        return list(chars), []
+    if present:                       # 明确列了在场，其余都算离场
+        on = [c for c in chars if c["name"] in present]
+        off = [c for c in chars if c["name"] not in present]
+        return on, off
+    return [c for c in chars if c["name"] not in away], [c for c in chars if c["name"] in away]
+
+
 STATUS_FIELDS = ("location", "time", "relations", "items", "goal")
 # 状态块里额外允许一条事实账本：模型每轮声明"刚刚定下的事"
 FACT_KEY = "facts"
@@ -185,6 +235,14 @@ def extract_status(text):
     status = {}
     if facts:
         status[FACT_KEY] = facts[:3]
+    for key in ("present", "away"):
+        names = obj.get(key)
+        if isinstance(names, str):
+            names = NAME_SPLIT_RE.split(names)
+        if isinstance(names, list):
+            names = [str(n).strip()[:24] for n in names if str(n).strip()]
+            if names:
+                status[key] = names[:MAX_CHARACTERS]
     for key in STATUS_FIELDS:
         value = obj.get(key)
         if isinstance(value, list):

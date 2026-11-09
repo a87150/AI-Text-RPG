@@ -89,10 +89,36 @@ BACKUP_DEFAULTS = {"enabled": False, "every_hours": 24}
 BACKUP_BOUNDS = {"every_hours": (1, 720)}
 _backup = dict(BACKUP_DEFAULTS)
 
+# 模型能力档位：决定状态行用多重的格式，能力越差给的结构要越简单
+TIERS = ("basic", "standard", "advanced")
+TIER_DEFAULT = "basic"
+TIER_LABELS = {
+    "basic": "初级 —— 小模型（9B 以下），单行标记 + 两条示例",
+    "standard": "标准 —— 中等模型，单行标记 + 一条示例",
+    "advanced": "高级 —— 大模型，结构化 JSON，不给示例",
+}
+_tier = TIER_DEFAULT
+
 # 思考强度：本地支持思考的模型默认会想很久，显式给一档
 REASONING_LEVELS = ("none", "low", "medium", "high")
 REASONING_DEFAULT = "medium"
 _reasoning = REASONING_DEFAULT
+
+
+def tier():
+    with _model_lock:
+        return _tier
+
+
+def save_tier(value, persist=True):
+    global _tier
+    if value not in TIERS:
+        return tier()
+    with _model_lock:
+        _tier = value
+    if persist:
+        persist_settings()
+    return tier()
 
 
 def reasoning_effort():
@@ -259,6 +285,7 @@ def persist_settings():
         "writing_version": 1,
         "mode": _mode,
         "reasoning": _reasoning,
+        "tier": _tier,
         "backup": _backup,
     }
     tmp = "%s.%s.tmp" % (SETTINGS_PATH, uuid.uuid4().hex[:8])
@@ -316,6 +343,8 @@ def load_settings():
         save_writing(write_conf, persist=False)
     if data.get("mode") in MODES:
         save_mode(data["mode"], persist=False)
+    if data.get("tier") in TIERS:
+        save_tier(data["tier"], persist=False)
     backup_saved = data.get("backup")
     if isinstance(backup_saved, dict):
         if "enabled" in backup_saved:

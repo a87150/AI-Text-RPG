@@ -9,8 +9,8 @@ import re
 from difflib import SequenceMatcher
 from string import Template
 
-from ..characters import ensure_characters, guess_name, role_labels
-from ..config import mode_for, writing
+from ..characters import ensure_characters, guess_name, role_labels, scene_split
+from ..config import mode_for, tier, writing
 from ..llm import strip_status_leaks, strip_thinking
 
 _DIR = os.path.dirname(os.path.abspath(__file__))
@@ -25,10 +25,29 @@ def render(name, **kw):
     return Template(load(name)).safe_substitute(**kw).strip()
 
 
+# 贴在最后一条用户消息末尾的格式提醒，越弱的模型越需要
+TAIL_HINT = {
+    "basic": "（正文写完后，另起一行写一行状态，形如："
+             "[[地点：银月酒馆|时间：深夜|关系：戒备|目标：等他开口|事实：钥匙到了沈砚手里]]）",
+    "standard": "（正文后另起一行写 [[地点：…|时间：…|关系：…|目标：…]]，没有的字段就不写）",
+    "advanced": "",
+}
+
+STATUS_FILE = {
+    "basic": "status.md",          # 单行标记 + 两条示例
+    "standard": "status_standard.md",
+    "advanced": "status_advanced.md",
+}
+
+
+def status_prompt():
+    return render(STATUS_FILE.get(tier(), "status.md"))
+
+
 def build_rules(user_name, mode=None, names=""):
     w = writing()
     mode = mode or mode_for({})
-    status_block = render("status.md")
+    status_block = status_prompt()
     if mode == "normal":
         return render(
             "normal.md",
@@ -50,18 +69,53 @@ def build_rules(user_name, mode=None, names=""):
     )
 
 
-def build_character_block(chars, speaker=None):
-    lines = ["【在场角色】"]
-    for c in chars:
-        line = "· %s：%s" % (c["name"], c["role"] or "（未设定）")
+def build_character_block(chars, speaker=None, status=None):
+    """角色卡整段展开，并分「在场 / 不在场」。
+
+    压成一行只剩标签，模型就写不出人；不分在场离场，设定里的人会无脑出现。
+    """
+    on, off = scene_split(chars, status)
+    if not on:                        # 状态写坏了也不能一个人都没有
+        on, off = list(chars), []
+    lines = []
+    for c in sorted(on, key=lambda c: 0 if c["name"] == speaker else 1):
+        role = (c.get("role") or "").strip() or "（未设定，按名字与场景合理发挥）"
+        # 用 ◆ 而不是【】：方括号留给格式标记，别让模型把角色卡当成输出格式
+        if c["name"] == speaker and speaker:
+            lines.append("◆ 你这一轮演的就是：%s\n%s" % (c["name"], role))
+        else:
+            lines.append("◆ 在场：%s\n%s" % (c["name"], role))
+        extra = []
         if c.get("state"):
-            line += "｜当前：%s" % c["state"]
+            extra.append("此刻：%s" % c["state"])
         if c.get("history"):
-            line += "｜近况：%s" % "；".join(c["history"][-2:])
-        lines.append(line)
+            extra.append("近况：%s" % "；".join(c["history"][-2:]))
+        if extra:
+            lines.append("｜" + "｜".join(extra))
+    if off:
+        lines.append("◆ 不在这一场（已经离开，不要让他们出现在这一轮）：%s"
+                     % "、".join(c["name"] for c in off))
     if speaker:
-        lines.append("【本回合发言人】%s —— 这一轮只让这一位说话" % speaker)
+        lines.append("这一轮只写【%s】一个人的话，别人只出现在旁白里。" % speaker)
     return "\n".join(lines)
+
+
+def build_status_scene(sess):
+    """状态字段本身是数据，读起来像后台日志；串成一句话模型才当情境用。"""
+    status = sess.get("status") or {}
+    bits = []
+    if status.get("time") and status.get("location"):
+        bits.append("现在是%s，%s。" % (status["time"], status["location"]))
+    elif status.get("location"):
+        bits.append("此刻在%s。" % status["location"])
+    elif status.get("time"):
+        bits.append("现在是%s。" % status["time"])
+    other = role_labels(sess)[0]
+    for key, label in (("relations", "你和她（%s）之间" % other), ("items", "你身上带着"),
+                       ("goal", "你这会儿想")):
+        if status.get(key):
+            bits.append("%s：%s。" % (label, status[key]))
+    return "".join(bits)
 
 
 def build_system_prompt(sess, speaker=None):
@@ -73,33 +127,39 @@ def build_system_prompt(sess, speaker=None):
     if mode == "normal":
         speaker = ""
     names = "、".join(c["name"] for c in chars)
-    parts = ["你正在进行一场沉浸式的长篇角色扮演（roleplay）。"
-             if mode == "rp" else "你正在写一段沉浸式的长篇故事叙述。"]
+
+    parts = []
+    if mode == "rp" and speaker:
+        # 先把身份钉死，再说别的。缺这一句模型就退化成全知叙述者，谁都不像
+        parts.append(
+            "你这一轮就是【%s】本人，不是旁观者、不是作者。下面写的是你的处境、你的脾气、"
+            "你和【%s】之间的账，不是给你参考的资料。用%s的眼睛看，用%s的语气说，"
+            "只写这一轮，不解释、不总结、不跳出角色。"
+            % (speaker, user_name, speaker, speaker)
+        )
+    else:
+        parts.append("你正在写一段沉浸式的长篇故事叙述，用第三人称旁白的口吻，"
+                     "把场景、动作和在场角色的反应写出来。")
+
     if sess.get("world"):
         parts.append("【故事背景与世界观】\n" + sess["world"])
-    parts.append(build_character_block(chars, speaker))
+    parts.append(build_character_block(chars, speaker, sess.get("status")))
     if sess.get("user_role"):
-        parts.append("【用户扮演的角色：%s】\n%s" % (user_name, sess["user_role"]))
+        who = ("【%s（和你说话的人）】" % user_name) if mode == "rp" else ("【用户扮演的角色：%s】" % user_name)
+        parts.append(who + "\n" + sess["user_role"])
     if sess.get("summary"):
-        parts.append("【前情提要（更早剧情）】\n" + sess["summary"])
-    status = sess.get("status") or {}
-    if status:
-        labels = (("location", "地点"), ("time", "时间"), ("relations", "关系"),
-                  ("items", "物品"), ("goal", "目标"))
-        lines = ["【当前状态（上一轮结束时）】"]
-        for key, label in labels:
-            if status.get(key):
-                lines.append("· %s：%s" % (label, status[key]))
-        if len(lines) > 1:
-            parts.append("\n".join(lines))
+        parts.append("【前情提要（更早发生过的事）】\n" + sess["summary"])
+    scene = build_status_scene(sess)
+    if scene:
+        parts.append("【此刻的处境】\n" + scene)
     book = [f for f in (sess.get("facts") or [])
             if isinstance(f, dict) and f.get("state") == "active"][-12:]
     if book:
-        lines = ["【已经定下的事（不要写反过来）】"]
+        lines = ["【这些已经发生，不能当成没发生、也不能反悔】"]
         for f in book:
             lines.append("· 第 %s 轮：%s" % (f.get("turn") or "?", f.get("fact") or ""))
         parts.append("\n".join(lines))
-    parts.append("【旁白与扮演规则】\n" + build_rules(user_name, mode, names))
+    parts.append("【写法】\n" + build_rules(user_name, mode, names))
     if sess.get("rules"):
         parts.append("【额外要求】\n" + sess["rules"])
     return "\n\n".join(parts)
@@ -223,14 +283,13 @@ def build_messages(sess, speaker=None):
                 messages.append({"role": "assistant", "content": head + "【%s】%s" % (name, content)})
             else:
                 messages.append({"role": "assistant", "content": head + content})
-    # 格式要求写在 system 里离生成点太远，小模型容易忘；补在最后一条 user 尾巴上
-    for item in reversed(messages):
-        if item.get("role") == "user":
-            item["content"] = item["content"].rstrip() + (
-                "\n\n（正文写完后，另起一行写一行状态，形如："
-                "[[地点：银月酒馆|时间：深夜|关系：戒备|目标：等他开口|事实：钥匙到了沈砚手里]]）"
-            )
-            break
+    tail = TAIL_HINT.get(tier(), "")
+    if tail:
+        # 格式要求写在 system 里离生成点太远，小模型容易忘；补在最后一条 user 尾巴上
+        for item in reversed(messages):
+            if item.get("role") == "user":
+                item["content"] = item["content"].rstrip() + "\n\n" + tail
+                break
     return messages
 
 

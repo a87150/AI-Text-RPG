@@ -11,16 +11,18 @@ from flask import Response, jsonify, render_template, request, send_file
 
 from .characters import (
     MAX_CHARACTERS, advance_turn, apply_change, ensure_characters,
-    merge_facts, next_speaker, parse_turn, role_labels, upsert_character,
+    merge_facts, merge_status, next_speaker, parse_turn, role_labels,
+    upsert_character,
 )
 from . import backup
 from .config import (
     DEFAULT_MODEL, DEFAULT_PROVIDER, MAX_CHAT_ATTEMPTS, MAX_ENHANCE_ATTEMPTS,
     MAX_OPENING_ATTEMPTS, MIN_CHAT_CHARS, MODES, PROVIDERS,
-    REASONING_LEVELS, app, backup_conf, current_target, list_local_models,
-    load_settings, mode_for, mode_of, provider_public, provider_usable,
-    reasoning_effort, save_backup_conf, save_mode, save_provider,
-    save_reasoning, save_writing, set_current_model, writing,
+    REASONING_LEVELS, TIERS, TIER_LABELS, app, backup_conf, current_target,
+    list_local_models, load_settings, mode_for, mode_of, provider_public,
+    provider_usable, reasoning_effort, save_backup_conf, save_mode,
+    save_provider, save_reasoning, save_tier, save_writing, set_current_model,
+    tier, writing,
 )
 from .context import (
     background_compress, build_summary_prompt, compress_session, context_chars,
@@ -65,6 +67,9 @@ def api_config():
         "max_enhance_attempts": MAX_ENHANCE_ATTEMPTS,
         "reasoning_effort": reasoning_effort(),
         "reasoning_levels": REASONING_LEVELS,
+        "tier": tier(),
+        "tiers": TIERS,
+        "tier_labels": TIER_LABELS,
     })
 
 
@@ -76,8 +81,10 @@ def api_writing():
         save_mode(data["mode"])
     if data.get("reasoning_effort"):
         save_reasoning(data["reasoning_effort"])
+    if data.get("tier"):
+        save_tier(data["tier"])
     return jsonify({"writing": conf, "mode": mode_of(),
-                    "reasoning_effort": reasoning_effort()})
+                    "reasoning_effort": reasoning_effort(), "tier": tier()})
 
 
 @app.get("/api/models")
@@ -345,6 +352,19 @@ def api_update_session(sid):
                  "content": str(e.get("content") or "")[:2000]}
                 for e in data["lore"] if isinstance(e, dict) and str(e.get("content") or "").strip()
             ][:40]
+        wanted = data.get("status")
+        if isinstance(wanted, dict):
+            # 模型判断不准时，用户手动纠正在场名单：只认这几个字段
+            patch = {}
+            for key in ("present", "away"):
+                names = wanted.get(key)
+                if isinstance(names, list):
+                    patch[key] = [str(n).strip()[:24] for n in names if str(n).strip()]
+            for key in ("location", "time", "relations", "items", "goal"):
+                if isinstance(wanted.get(key), str) and wanted[key].strip():
+                    patch[key] = wanted[key].strip()[:160]
+            if patch:
+                sess["status"] = merge_status(sess.get("status"), patch)
         custom_chars = isinstance(data.get("characters"), list)
         if custom_chars:
             # 用户手工编辑/删除/新增的角色表优先，随后由 ensure_characters 归一化
@@ -446,10 +466,10 @@ def api_edit_message(sid):
         if index < 0 or index >= len(msgs):
             return jsonify({"error": "索引超出范围"}), 400
         msg = msgs[index]
-        if not msg.get("content") and msg.get("narrator"):
-            msg["narrator"] = text        # 一般模式：正文在 narrator 里
-        else:
-            msg["content"] = text
+        if msg.get("role") != "user":
+            # 只让用户改自己说过的话；改 AI 的台词既不自然，也会让状态对不上
+            return jsonify({"error": "只能修改自己发的消息"}), 400
+        msg["content"] = text
         save_session(sess)
         sess["context_chars"] = context_chars(sess)
         sess["context"] = context_info(sess)
@@ -643,26 +663,9 @@ def api_opening(sid):
     def generate():
         try:
             yield sse({"type": "speaker", "name": first_speaker})
-            text = ""
-            attempts_used = 0
-            for ev in completion_events(
-                messages, base_temp=0.9,
-                max_attempts=MAX_OPENING_ATTEMPTS, min_chars=MIN_CHAT_CHARS,
-                validate=lambda t: None if (not use_rp or "【" in t)
-                else "缺少【旁白】/【角色名】格式",
-            ):
-                if ev["type"] == "final":
-                    text = ev["text"]
-                    attempts_used = ev["attempts"]
-                    break
-                if ev["type"] == "error":
-                    yield sse({"type": "error",
-                               "message": ev["message"] + "。请稍后再试。"})
-                    return
-                yield sse(ev)
-
+            text, attempts_used = yield from _stream_model(
+                messages, first_speaker, 0.9, MAX_OPENING_ATTEMPTS, use_rp)
             if not text:
-                yield sse({"type": "error", "message": "开场生成失败，请稍后再试。"})
                 return
 
             turn = parse_turn(text, first_speaker)
@@ -674,29 +677,9 @@ def api_opening(sid):
             with get_session_lock(sid):
                 s2 = load_session(sid)
                 if s2 and not s2.get("messages"):
-                    if use_rp:
-                        msg = {"role": "assistant", "content": turn["line"],
-                               "speaker": turn["speaker"]}
-                        if turn["narrator"]:
-                            msg["narrator"] = turn["narrator"]
-                    else:
-                        msg = {"role": "assistant", "content": "",
-                               "narrator": turn["narrator"]}
-                    if turn.get("status"):
-                        s2["status"] = turn["status"]
-                    merge_facts(s2, turn.get("facts"), s2.get("turn"))
+                    s2["messages"] = []       # 先清空，_commit_turn 往里塞第一条
+                    _commit_turn(s2, turn, use_rp)
                     s2["opening"] = body
-                    s2["messages"] = [msg]
-                    if turn["new_character"]:
-                        upsert_character(s2, turn["new_character"])
-                        # 新冒出来的人顺手升格成故事的长期角色
-                        promote_characters(s2, writing()["max_characters"])
-                    for upd in turn["updates"]:
-                        apply_change(s2, upd)
-                    advance_turn(s2)
-                    turn_no = int(s2.get("turn") or 0)
-                    if turn_no > 0 and turn_no % 15 == 0:
-                        snapshot(s2, "turn")      # 每 15 轮留个存档点
                     save_session(s2)
                     sess["messages"] = s2["messages"]
                     sess["opening"] = turn["line"]
@@ -720,6 +703,53 @@ def api_opening(sid):
         mimetype="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+def _stream_model(messages, speaker, temperature, max_attempts, use_rp):
+    """把 completion_events 包成 SSE 事件流；成功时返回 (正文, 尝试次数)。
+
+    用 yield from 的返回值传结果，调用方不用再写一遍同样的循环。
+    """
+    for ev in completion_events(
+        messages, base_temp=temperature, max_attempts=max_attempts,
+        min_chars=MIN_CHAT_CHARS,
+        validate=lambda t: None if (not use_rp or "【" in t)
+        else "缺少【旁白】/【角色名】格式",
+    ):
+        if ev["type"] == "final":
+            return ev["text"], ev["attempts"]
+        if ev["type"] == "error":
+            yield sse({"type": "error", "message": ev["message"] + "。请稍后手动重试。"})
+            return None, 0
+        yield sse(ev)
+    yield sse({"type": "error", "message": "生成失败，请稍后手动重试。"})
+    return None, 0
+
+
+def _commit_turn(s2, turn, use_rp):
+    """一轮生成之后要落盘的所有副作用：消息、状态、账本、角色、轮次、存档。"""
+    if use_rp:
+        msg = {"role": "assistant", "content": turn["line"], "speaker": turn["speaker"]}
+        if turn["narrator"]:
+            msg["narrator"] = turn["narrator"]
+    else:
+        # 系统叙述：正文放 narrator，前端渲染成旁白块
+        msg = {"role": "assistant", "content": "", "narrator": turn["narrator"]}
+    s2.setdefault("messages", []).append(msg)
+    if turn.get("status"):
+        s2["status"] = merge_status(s2.get("status"), turn["status"])
+    merge_facts(s2, turn.get("facts"), s2.get("turn"))
+    if turn["new_character"]:
+        upsert_character(s2, turn["new_character"])
+        promote_characters(s2, writing()["max_characters"])
+    for upd in turn["updates"]:
+        apply_change(s2, upd)
+    advance_turn(s2)                  # 一般模式也要数轮次，锚定和存档都靠它
+    turn_no = int(s2.get("turn") or 0)
+    if turn_no > 0 and turn_no % 15 == 0:
+        snapshot(s2, "turn")
+    save_session(s2)
+    return msg
 
 
 @app.post("/api/chat")
@@ -780,26 +810,9 @@ def api_chat():
         try:
             # 先告诉前端这轮由谁发言，流式渲染才能丢掉别人抢话的段落
             yield sse({"type": "speaker", "name": speaker})
-            answer = None
-            attempts_used = 0
-            for ev in completion_events(
-                messages, base_temp=temperature,
-                max_attempts=MAX_CHAT_ATTEMPTS, min_chars=MIN_CHAT_CHARS,
-                validate=lambda t: None if (not use_rp or "【" in t)
-                else "缺少【旁白】/【角色名】格式",
-            ):
-                if ev["type"] == "final":
-                    answer = ev["text"]
-                    attempts_used = ev["attempts"]
-                    break
-                if ev["type"] == "error":
-                    yield sse({"type": "error",
-                               "message": ev["message"] + "。请稍后手动重试。"})
-                    return
-                yield sse(ev)
-
+            answer, attempts_used = yield from _stream_model(
+                messages, speaker, temperature, MAX_CHAT_ATTEMPTS, use_rp)
             if answer is None:
-                yield sse({"type": "error", "message": "生成失败，请稍后手动重试。"})
                 return
 
             turn = parse_turn(answer, speaker)
@@ -814,30 +827,7 @@ def api_chat():
             with get_session_lock(sid):
                 s2 = load_session(sid)
                 if s2 is not None:
-                    if use_rp:
-                        msg = {"role": "assistant", "content": turn["line"],
-                               "speaker": turn["speaker"]}
-                        if turn["narrator"]:
-                            msg["narrator"] = turn["narrator"]
-                    else:
-                        # 系统叙述：正文放 narrator，前端渲染成旁白块
-                        msg = {"role": "assistant", "content": "",
-                               "narrator": turn["narrator"]}
-                    s2.setdefault("messages", [])
-                    s2["messages"].append(msg)
-                    if turn.get("status"):
-                        s2["status"] = turn["status"]
-                    merge_facts(s2, turn.get("facts"), s2.get("turn"))
-                    if turn["new_character"]:
-                        upsert_character(s2, turn["new_character"])
-                        promote_characters(s2, writing()["max_characters"])
-                    for upd in turn["updates"]:
-                        apply_change(s2, upd)
-                    advance_turn(s2)      # 一般模式也要数轮次，锚定和存档都靠它
-                    turn_no = int(s2.get("turn") or 0)
-                    if turn_no > 0 and turn_no % 15 == 0:
-                        snapshot(s2, "turn")
-                    save_session(s2)
+                    _commit_turn(s2, turn, use_rp)
                     context = context_chars(s2)
                     count = len(s2.get("messages") or [])
                     characters = ensure_characters(s2)
