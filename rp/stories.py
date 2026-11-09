@@ -1,0 +1,170 @@
+# -*- coding: utf-8 -*-
+"""故事：可复用的设定模板，一个故事能开多个对话。"""
+import json
+import os
+import re
+import threading
+import time
+import uuid
+
+from .config import DATA_DIR
+from .storage import DEFAULT_TITLE, SID_RE
+
+STORY_DIR = os.path.join(DATA_DIR, "stories")
+STORY_FIELDS = ("title", "user_name", "user_role", "world", "rules", "opening")
+
+_lock = threading.RLock()
+os.makedirs(STORY_DIR, exist_ok=True)
+
+
+def story_path(sid):
+    if not sid or not SID_RE.fullmatch(sid):
+        return None
+    return os.path.join(STORY_DIR, sid + ".json")
+
+
+def new_story(title=DEFAULT_TITLE):
+    now = time.time()
+    return {
+        "id": uuid.uuid4().hex[:12],
+        "title": title,
+        "user_name": "", "ai_name": "", "user_role": "", "ai_role": "",
+        "world": "", "rules": "", "opening": "",
+        "characters": [],
+        "created_at": now, "updated_at": now,
+    }
+
+
+def load_story(sid):
+    path = story_path(sid)
+    if not path or not os.path.isfile(path):
+        return None
+    with _lock:
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            return None
+    return data if isinstance(data, dict) else None
+
+
+def save_story(story):
+    path = story_path(story.get("id"))
+    if not path:
+        raise ValueError("非法的故事 ID")
+    with _lock:
+        story["updated_at"] = time.time()
+        tmp = "%s.%s.tmp" % (path, uuid.uuid4().hex[:8])
+        try:
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(story, f, ensure_ascii=False, indent=2)
+            os.replace(tmp, path)
+        finally:
+            if os.path.isfile(tmp):
+                try:
+                    os.remove(tmp)
+                except OSError:
+                    pass
+    return story
+
+
+def list_stories():
+    with _lock:
+        try:
+            files = [f for f in os.listdir(STORY_DIR) if f.endswith(".json")]
+        except OSError:
+            files = []
+    items = []
+    for fn in files:
+        story = load_story(fn[:-5])
+        if story:
+            items.append({
+                "id": story["id"],
+                "title": story.get("title") or DEFAULT_TITLE,
+                "updated_at": story.get("updated_at", 0),
+                "user_name": story.get("user_name") or "",
+                "ai_name": story.get("ai_name") or "",
+                "character_count": len(story.get("characters") or []),
+            })
+    items.sort(key=lambda x: x["updated_at"], reverse=True)
+    return items
+
+
+def delete_story(sid):
+    path = story_path(sid)
+    if not path or not os.path.isfile(path):
+        return False
+    with _lock:
+        try:
+            os.remove(path)
+        except OSError:
+            return False
+    return True
+
+
+def snapshot_from(sess):
+    """把会话当前的设定写成一份故事模板（不含对话内容）。"""
+    story = new_story((sess.get("title") or DEFAULT_TITLE).strip() or DEFAULT_TITLE)
+    story["id"] = sess.get("story_id") or story["id"]
+    update_from(story, sess)
+    return story
+
+
+def update_from(story, sess):
+    for key in STORY_FIELDS:
+        story[key] = sess.get(key) or ""
+    story["characters"] = json.loads(json.dumps(sess.get("characters") or []))
+    story["lore"] = json.loads(json.dumps(sess.get("lore") or []))
+    # 角色表是唯一来源，第一个角色就是「AI 角色」
+    first = story["characters"][0] if story["characters"] else {}
+    story["ai_name"] = first.get("name") or ""
+    story["ai_role"] = first.get("role") or ""
+    story["title"] = (sess.get("title") or story.get("title") or DEFAULT_TITLE).strip()
+    story["title"] = story["title"] or DEFAULT_TITLE
+    return story
+
+
+def promote_characters(sess, limit):
+    """对话里新出现的人回流成故事的长期角色。
+
+    只带名字和身份：state / history 是这一局自己的进展，不能带进下一局。
+    故事角色已满就停手，别把模板撑爆。
+    """
+    story = load_story(sess.get("story_id") or "")
+    if not story:
+        return []
+    cards = story.setdefault("characters", [])
+    known = {(c.get("name") or "").strip() for c in cards}
+    added = []
+    for c in sess.get("characters") or []:
+        name = (c.get("name") or "").strip()
+        if not name or name in known:
+            continue
+        if len(cards) >= limit:
+            break
+        cards.append({"name": name, "role": (c.get("role") or "").strip(),
+                      "state": "", "history": []})
+        known.add(name)
+        added.append(name)
+    if added:
+        first = cards[0] if cards else {}
+        story["ai_name"] = first.get("name") or ""
+        story["ai_role"] = first.get("role") or ""
+        save_story(story)
+    return added
+
+
+def apply_to(sess, story):
+    """用故事模板填一个空会话；对话内容（消息/前情/回合）保持干净。"""
+    for key in STORY_FIELDS:
+        if key == "title":
+            continue
+        sess[key] = story.get(key) or ""
+    sess["title"] = (story.get("title") or DEFAULT_TITLE).strip() or DEFAULT_TITLE
+    sess["characters"] = json.loads(json.dumps(story.get("characters") or []))
+    sess["lore"] = json.loads(json.dumps(story.get("lore") or []))
+    sess["story_id"] = story.get("id") or ""
+    sess["messages"] = []
+    sess["summary"] = ""
+    sess["turn"] = 0
+    return sess

@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>角色扮演 · RP Chat</title>
+<link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+
+<div class="app">
+  <div class="nav-mask" id="nav-mask"></div>
+  <aside class="sidebar">
+    <div class="brand">🎭 角色扮演</div>
+    <div class="seg side-seg" id="side-seg">
+      <button type="button" data-view="stories" class="active">故事</button>
+      <button type="button" data-view="sessions">对话</button>
+    </div>
+    <div class="side-block" id="story-block">
+      <button class="side-btn" id="btn-new-story" type="button">＋ 新建故事</button>
+      <div class="session-list" id="story-list"></div>
+      <div class="pager hidden" id="story-pager"></div>
+    </div>
+    <div class="side-block hidden" id="session-block">
+      <button class="side-btn" id="btn-new-session" type="button">＋ 新对话</button>
+      <div class="session-list" id="session-list"></div>
+      <div class="pager hidden" id="session-pager"></div>
+    </div>
+    <div class="side-foot">
+      <div class="model-row">
+        <label for="model-select">模型</label>
+        <select id="model-select" title="切换模型"></select>
+        <button class="icon-btn" id="btn-refresh-models" type="button" title="刷新模型列表">⟳</button>
+        <button class="icon-btn" id="btn-prefs" type="button" title="设置：外观、模型、云端、写作">⚙</button>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <button class="icon-btn nav-toggle" id="btn-nav" type="button" title="打开故事与对话列表">☰</button>
+      <div class="title-wrap">
+        <h1 id="chat-title">未选择故事</h1>
+        <div class="sub" id="chat-sub"></div>
+      </div>
+      <div class="actions">
+        <button id="btn-context" type="button" disabled title="上下文用量、压缩情况与在场角色">📊</button>
+        <button id="btn-settings" type="button" disabled>⚙ 设定</button>
+        <button id="btn-compress" type="button" disabled>🗜 压缩</button>
+        <button id="btn-clear" type="button" disabled>🧹 清空</button>
+        <button id="btn-theme" type="button" title="切换亮色 / 暗色模式">🌙</button>
+      </div>
+    </header>
+
+    <div class="conn-banner hidden" id="conn-banner">
+      <span id="conn-text"></span>
+      <button id="btn-retry-conn" type="button">重试连接</button>
+    </div>
+
+    <section class="story-pane hidden" id="story-pane">
+      <div class="pane-empty" id="pane-empty">
+        <h3>选一份故事改设定</h3>
+        <p>左边是故事的原始模板：角色、世界观、开场白。右边改完保存，之后开的每一局都继承它。</p>
+      </div>
+    </section>
+
+    <div class="messages" id="messages"></div>
+
+    <footer class="composer">
+      <div class="composer-row">
+        <textarea id="input" disabled placeholder="先新建或选择一个故事，才能开始对话"></textarea>
+        <button id="btn-send" type="button" disabled>发送</button>
+      </div>
+      <div class="composer-hint">
+        <span id="ai-status"></span>
+        <span id="composer-count"></span>
+      </div>
+    </footer>
+  </main>
+</div>
+
+<div class="modal hidden" id="ctx-modal">
+  <div class="modal-box narrow">
+    <h2>上下文</h2>
+    <div id="ctx-detail"></div>
+    <div class="modal-actions">
+      <button id="btn-ctx-close" type="button">关闭</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal hidden" id="settings-modal">
+  <div class="modal-box">
+    <div id="settings-form">
+    <h2 id="settings-title">故事设定</h2>
+    <div class="hint" id="story-meta"></div>
+
+    <div class="grid2">
+      <div class="field"><label for="f-story-title">故事名（设定本身，可以开很多局）</label><input id="f-story-title" placeholder="例如：雨夜的旧城"></div>
+      <div class="field"><label>这个对话的模式</label>
+        <div class="seg" id="f-mode">
+          <button type="button" data-mode-value="normal">一般（系统叙述）</button>
+          <button type="button" data-mode-value="rp">角色扮演</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="field"><label for="f-user-name">我扮演的角色名</label><input id="f-user-name" placeholder="例如：林晚"></div>
+    <div class="field">
+      <div class="field-head">
+        <label for="f-user-role">我扮演的角色</label>
+        <button type="button" class="field-ai" data-field="user_role" title="只重写这一项">✦ AI</button>
+        <button type="button" class="field-undo hidden" data-undo-slot="user_role">↺ 撤销</button>
+      </div>
+      <textarea id="f-user-role" placeholder="身份、年龄、性格、外貌、秘密、和对方的关系…"></textarea>
+    </div>
+
+    <div class="field"><label id="char-label">AI 角色</label><div class="char-list" id="char-list"></div></div>
+
+    <div class="field">
+      <div class="field-head">
+        <label for="f-world">故事背景与世界观</label>
+        <button type="button" class="field-ai" data-field="world" title="只重写这一项">✦ AI</button>
+        <button type="button" class="field-undo hidden" data-undo-slot="world">↺ 撤销</button>
+      </div>
+      <textarea id="f-world" placeholder="时代、地点、势力、规则禁忌、当前局势、故事开始时各自的处境…"></textarea>
+    </div>
+
+    <div class="field">
+      <label>世界书（只有对话里提到关键词才注入，设定再多也不稀释人设）</label>
+      <div class="lore-list" id="lore-list"></div>
+      <button type="button" class="lore-add" id="btn-add-lore">＋ 添加条目</button>
+    </div>
+
+    <div class="field">
+      <div class="field-head">
+        <label for="f-opening">开场白（保存后若还没有对话，会作为第一幕）</label>
+        <button type="button" class="field-ai" data-field="opening" title="只重写这一项">✦ AI</button>
+        <button type="button" class="field-undo hidden" data-undo-slot="opening">↺ 撤销</button>
+      </div>
+      <textarea id="f-opening" placeholder="可以让 AI 完善设定时自动生成，也可以自己写"></textarea>
+    </div>
+
+    <div class="modal-actions">
+      <button id="btn-new-run" type="button">＋ 用这份设定再开一局</button>
+      <button id="btn-enhance" type="button">✨ AI 帮我完善设定</button>
+      <button id="btn-regen-opening" type="button">🎬 重新生成开场</button>
+      <span class="spacer"></span>
+      <button id="btn-cancel" type="button">取消</button>
+      <button id="btn-save" type="button" class="primary">保存</button>
+    </div>
+    <div id="enhance-status"></div>
+
+    <div class="idea-pop hidden" id="ask-pop">
+      <label id="ask-title">只改这一项</label>
+      <div class="hint" id="ask-hint">写下这次想怎么改，只重写这一项，别的字段不动。</div>
+      <textarea id="ask-note" placeholder="例：更冷一点，别用感叹号；加上她怕黑的设定"></textarea>
+      <div class="idea-actions">
+        <button type="button" id="btn-ask-cancel">取消</button>
+        <button type="button" id="btn-ask-start" class="primary">生成并替换</button>
+      </div>
+    </div>
+
+    <div class="idea-pop hidden" id="idea-pop">
+      <label for="f-rules">先说说你想要什么故事</label>
+      <div class="hint">一句就够：题材、基调、你不想要的东西。写下的会被揉进设定正文里。</div>
+      <textarea id="f-rules" placeholder="例：日常向，别搞悬疑；对手嘴硬但心软；每轮别太长；不要出现超自然的东西"></textarea>
+      <div class="idea-actions">
+        <button type="button" id="btn-idea-cancel">取消</button>
+        <button type="button" id="btn-idea-start" class="primary">开始生成</button>
+      </div>
+    </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal hidden" id="pick-story-modal">
+    <div class="modal-box narrow pick-modal">
+      <h2>从哪份设定开始</h2>
+      <div class="hint">对话继承故事的设定；之后在「设定」里改的只影响这一局，故事本身不变。</div>
+      <div class="pick-list" id="pick-list"></div>
+      <div class="pager pick-pager" id="pick-pager"></div>
+      <div class="modal-actions">
+        <button type="button" id="pick-blank">从空白开始</button>
+        <div class="spacer"></div>
+        <button type="button" id="pick-cancel">取消</button>
+      </div>
+    </div>
+  </div>
+
+<div class="modal hidden" id="prefs-modal">
+  <div class="modal-box" style="width:min(640px,100%)">
+    <h2>设置</h2>
+
+    <div class="prefs-sec">
+      <h3>新建对话的默认模式</h3>
+      <div class="field">
+        <label>新对话默认由谁回复（已有对话在「设定」里各自切换）</label>
+        <div class="seg" id="prefs-mode">
+          <button type="button" data-mode-value="normal">一般模式</button>
+          <button type="button" data-mode-value="rp">角色扮演</button>
+        </div>
+      </div>
+      <div class="hint" id="mode-hint"></div>
+    </div>
+
+    <div class="prefs-sec">
+      <h3>外观</h3>
+      <div class="grid2">
+        <div class="field">
+          <label>主题</label>
+          <div class="seg" id="prefs-theme">
+            <button type="button" data-theme-value="dark">暗色</button>
+            <button type="button" data-theme-value="light">亮色</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="prefs-font">字号（整个界面一起缩放）</label>
+          <select id="prefs-font">
+            <option value="sm">小</option>
+            <option value="md">标准</option>
+            <option value="lg">大</option>
+            <option value="xl">特大</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="prefs-sec">
+      <h3>模型</h3>
+      <div class="field">
+        <label for="prefs-model">当前使用的模型</label>
+        <div class="model-row">
+          <select id="prefs-model"></select>
+          <button class="icon-btn" id="prefs-refresh" type="button" title="刷新模型列表">⟳</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>思考强度（本地支持思考的模型）</label>
+        <div class="seg" id="reasoning-seg">
+          <button type="button" data-level="none">不思考</button>
+          <button type="button" data-level="low">低</button>
+          <button type="button" data-level="medium">中</button>
+          <button type="button" data-level="high">高</button>
+        </div>
+        <div class="hint">
+          不给档位时模型会一直想。同一段角色卡实测：中等 29s、不思考 14s、不给 39s。
+        </div>
+      </div>
+    </div>
+
+    <div class="prefs-sec">
+      <h3>云端模型</h3>
+      <div class="hint">
+        填 OpenAI 兼容接口即可：DeepSeek 用 <code>https://api.deepseek.com/v1</code>，模型名 <code>deepseek-chat</code> 或 <code>deepseek-reasoner</code>。
+        Key 只保存在本机 <code>data/settings.json</code>，页面不回显。不配置也能只用本地模型。
+      </div>
+      <div class="field">
+        <label for="p-provider">提供方</label>
+        <select id="p-provider"></select>
+      </div>
+      <div class="field">
+        <label for="p-base">接口地址（Base URL）</label>
+        <input id="p-base" placeholder="https://api.deepseek.com/v1">
+      </div>
+      <div class="field">
+        <label for="p-key">API Key（留空表示不修改）</label>
+        <input id="p-key" type="password" placeholder="sk-…" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="p-models">模型名（逗号分隔）</label>
+        <input id="p-models" placeholder="deepseek-chat, deepseek-reasoner">
+      </div>
+      <div class="modal-actions">
+        <button id="p-clear-key" type="button">清除已存 Key</button>
+        <span class="spacer"></span>
+        <button id="p-save" type="button">保存云端设置</button>
+      </div>
+      <div id="p-status"></div>
+    </div>
+
+    <div class="prefs-sec">
+      <h3>写作</h3>
+      <div class="hint">字数直接影响生成量与耗时；改完点下面的「保存」。</div>
+      <div class="grid2">
+        <div class="field"><label for="w-narrator-min">旁白最少字数</label><input id="w-narrator-min" type="number" min="10" max="300"></div>
+        <div class="field"><label for="w-narrator-max">旁白最多字数</label><input id="w-narrator-max" type="number" min="20" max="600"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label for="w-line-min">角色言行最少字数</label><input id="w-line-min" type="number" min="40" max="1200"></div>
+        <div class="field"><label for="w-line-max">角色言行最多字数</label><input id="w-line-max" type="number" min="60" max="2000"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label for="w-context">上下文上限（字数）</label><input id="w-context" type="number" min="2000" max="60000" step="500"></div>
+        <div class="field"><label for="w-keep">压缩后保留最近消息数</label><input id="w-keep" type="number" min="4" max="60"></div>
+      </div>
+      <div class="field"><label for="w-chars">同时在场角色上限</label><input id="w-chars" type="number" min="1" max="8"></div>
+    </div>
+
+    <div class="modal-actions">
+      <span class="spacer"></span>
+      <button id="prefs-close" type="button">关闭</button>
+      <button id="prefs-save" type="button" class="primary">保存</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="/static/js/main.js"></script>
+</body>
+</html>

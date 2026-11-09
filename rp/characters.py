@@ -1,0 +1,280 @@
+# -*- coding: utf-8 -*-
+"""角色表：新增、轮换、设定演进，以及模型输出的拆分。"""
+import re
+from difflib import SequenceMatcher
+
+from .config import mode_for, writing
+from .llm import extract_json, strip_thinking
+
+# ============================== 提示词构造 ==============================
+def guess_name(text):
+    if not text:
+        return ""
+    m = re.search(r"(?:姓名|名字|名称|角色名|代号)[：:]\s*([^\n，,。；;、\s]{1,20})", text)
+    return m.group(1).strip() if m else ""
+
+
+MAX_CHARACTERS = 6            # 同时在场角色上限
+CHARACTER_HISTORY_KEEP = 4    # 每个角色保留的最近变化条数
+
+
+def default_character(sess):
+    name = (sess.get("ai_name") or "").strip() \
+        or guess_name(sess.get("ai_role", "")) or "AI 角色"
+    return {
+        "name": name,
+        "role": (sess.get("ai_role") or "").strip(),
+        "state": "",
+        "history": [],
+    }
+
+
+def ensure_characters(sess):
+    """归一化角色表；老会话没有角色表时用 ai_name/ai_role 兜底成一个。"""
+    chars = sess.get("characters")
+    cleaned = []
+    if isinstance(chars, list):
+        for item in chars:
+            if not isinstance(item, dict):
+                continue
+            name = (item.get("name") or "").strip()[:24]
+            if not name:
+                continue
+            cleaned.append({
+                "name": name,
+                "role": (item.get("role") or "").strip()[:400],
+                "state": (item.get("state") or "").strip()[:200],
+                "history": [h for h in (item.get("history") or [])
+                            if isinstance(h, str)][-CHARACTER_HISTORY_KEEP:],
+            })
+    if not cleaned:
+        cleaned = [default_character(sess)]
+    sess["characters"] = cleaned
+    return cleaned
+
+
+def next_speaker(sess):
+    """轮流发言：由代码决定，模型只负责内容。一般模式没有发言人。"""
+    if mode_for(sess) == "normal":
+        return ""
+    chars = ensure_characters(sess)
+    turn = int(sess.get("turn") or 0)
+    return chars[turn % len(chars)]["name"]
+
+
+def advance_turn(sess):
+    sess["turn"] = int(sess.get("turn") or 0) + 1
+
+
+def upsert_character(sess, data):
+    """登记新角色 / 更新已有角色的设定与变化，返回 (名字, 是否新增)。"""
+    if not isinstance(data, dict):
+        return None
+    name = (data.get("name") or "").strip()[:24]
+    if not name:
+        return None
+    chars = ensure_characters(sess)
+    for c in chars:
+        if c["name"] == name:
+            # 已存在的角色：只让模型推进状态，人设文字归用户所有，不被覆盖
+            change = (data.get("change") or "").strip()
+            if change:
+                c["history"] = (c["history"] + [change[:120]])[-CHARACTER_HISTORY_KEEP:]
+                c["state"] = change[:120]
+            return (name, False)
+    if len(chars) >= writing()["max_characters"]:
+        return None
+    chars.append({
+        "name": name,
+        "role": (data.get("role") or "").strip()[:400],
+        "state": (data.get("relation") or "").strip()[:120],
+        "history": [],
+    })
+    return (name, True)
+
+
+def apply_change(sess, data):
+    if not isinstance(data, dict):
+        return None
+    name = (data.get("name") or "").strip()[:24]
+    change = (data.get("change") or "").strip()
+    if not name or not change:
+        return None
+    chars = ensure_characters(sess)
+    for c in chars:
+        if c["name"] == name:
+            c["history"] = (c["history"] + [change[:120]])[-CHARACTER_HISTORY_KEEP:]
+            c["state"] = change[:120]
+            return name
+    return None
+
+
+def role_labels(sess):
+    ai_name = (sess.get("ai_name") or "").strip() \
+        or guess_name(sess.get("ai_role", "")) or "AI 角色"
+    user_name = (sess.get("user_name") or "").strip() \
+        or guess_name(sess.get("user_role", "")) or "用户角色"
+    return user_name, ai_name
+SEG_RE = re.compile(r"【([^】]{1,24})】")
+STATUS_RE = re.compile(r"<StatusBlock>(.*?)</StatusBlock>", re.S | re.I)
+STATUS_FIELDS = ("location", "time", "relations", "items", "goal")
+# 状态块里额外允许一条事实账本：模型每轮声明"刚刚定下的事"
+FACT_KEY = "facts"
+
+
+def extract_status(text):
+    """取出状态块与事实行，并从正文里删掉它们。
+
+    事实两种写法都认：StatusBlock 里的 facts 数组，或正文末尾单独一行
+    「【事实】甲；乙」。小模型维护 JSON 数组会犹豫，纯文本行反而稳定。
+    """
+    src = text or ""
+    match = STATUS_RE.search(src)
+    cleaned = STATUS_RE.sub("", src).strip() if match else src
+    obj = extract_json(match.group(1)) or {} if match else {}
+    facts = obj.get(FACT_KEY)
+    if isinstance(facts, str):
+        facts = [facts]
+    facts = [str(f).strip()[:120] for f in facts if str(f).strip()] if isinstance(facts, list) else []
+    status = {}
+    if facts:
+        status[FACT_KEY] = facts[:3]
+    for key in STATUS_FIELDS:
+        value = obj.get(key)
+        if isinstance(value, list):
+            value = "，".join(str(v).strip() for v in value if str(v).strip())
+        elif value is not None:
+            value = str(value).strip()
+        if value:
+            status[key] = value[:160]
+    line = FACT_LINE_RE.search(cleaned)
+    if line:
+        cleaned = (cleaned[:line.start()] + cleaned[line.end():]).strip()
+        extra = split_facts(line.group(1))
+        if extra:
+            status[FACT_KEY] = (status.get(FACT_KEY) or []) + extra
+            status[FACT_KEY] = status[FACT_KEY][:3]
+    return cleaned, (status or None)
+
+
+FACT_LINE_RE = re.compile(r"^[ \t]*【事实】[ \t]*[:：]?[ \t]*(.+)$", re.M)
+
+
+def split_facts(text):
+    """一句一条，太短的丢掉，最多三条。"""
+    parts = re.split(r"[；;。\n]", text or "")
+    out = []
+    for part in parts:
+        item = part.strip(" ·、,，\t")
+        if len(item) >= 4:
+            out.append(item[:120])
+    return out[:3]
+
+
+FACTS_MAX = 40
+FACTS_KEEP = 12
+
+
+def _norm(text):
+    return re.sub(r"\s+", "", (text or "").lower())
+
+
+def merge_facts(sess, new_facts, turn=None):
+    """把这一轮声明的事实并进账本：相似的旧事实让位，总数封顶。"""
+    if not new_facts:
+        return []
+    book = sess.setdefault("facts", [])
+    if not isinstance(book, list):
+        book = sess["facts"] = []
+    fresh = []
+    for raw in new_facts:
+        text = str(raw or "").strip()[:120]
+        if not text:
+            continue
+        norm = _norm(text)
+        superseded = None
+        for old in book:
+            if not isinstance(old, dict) or old.get("state") != "active":
+                continue
+            if SequenceMatcher(None, norm, _norm(old.get("fact") or "")).ratio() > 0.55:
+                superseded = old
+                break
+        if superseded is not None:
+            superseded["state"] = "resolved"
+        entry = {"turn": int(turn or sess.get("turn") or 0), "fact": text,
+                 "subject": _fact_subject(text), "state": "active"}
+        book.append(entry)
+        fresh.append(entry)
+    if len(book) > FACTS_MAX:
+        del book[:len(book) - FACTS_MAX]
+    return fresh
+
+
+def _fact_subject(text):
+    """拿句子开头当主体，够用来分组，不用做分词。"""
+    head = re.split(r"[，,。；;：:！？!?\s]", text.strip(), maxsplit=1)[0]
+    return head[:12]
+
+
+def active_facts(sess, limit=FACTS_KEEP):
+    book = sess.get("facts") or []
+    live = [f for f in book if isinstance(f, dict) and f.get("state") == "active"]
+    return live[-limit:]
+
+
+def parse_turn(text, speaker):
+    """拆出旁白与指定角色的台词。
+
+    只认【本回合发言人】那一段：模型额外写给其它角色的台词一律丢弃，
+    保证一轮只有一个人说话，不会出现角色互相刷屏。
+    """
+    text = strip_thinking(text or "").strip()
+    text, status = extract_status(text)
+    facts = list((status or {}).pop(FACT_KEY, []) or [])
+    result = {"narrator": "", "speaker": speaker, "line": "",
+              "new_character": None, "updates": [], "status": status,
+              "facts": facts}
+    if not text:
+        return result
+
+    if not speaker:
+        # 一般模式：整段都是叙述者的话，不拆角色
+        result["narrator"] = text
+        return result
+
+    marks = list(SEG_RE.finditer(text))
+    if not marks:
+        result["line"] = text
+        return result
+
+    segments = []
+    for i, m in enumerate(marks):
+        end = marks[i + 1].start() if i + 1 < len(marks) else len(text)
+        segments.append((m.group(1).strip(), text[m.end():end].strip()))
+
+    narrator_parts, speaker_parts = [], []
+    for tag, body in segments:
+        if not body:
+            continue
+        if tag in ("旁白", "叙述", "系统"):
+            narrator_parts.append(body)
+        elif tag in ("新角色", "新增角色", "角色"):
+            obj = extract_json(body)
+            if obj and (obj.get("name") or "").strip():
+                result["new_character"] = obj
+        elif tag in ("变化", "状态", "设定变化"):
+            obj = extract_json(body)
+            if obj and (obj.get("name") or "").strip() and (obj.get("change") or "").strip():
+                result["updates"].append(obj)
+        elif tag == speaker:
+            speaker_parts.append(body)
+        # 其它角色的段落：丢弃
+
+    line = "\n\n".join(speaker_parts).strip()
+    if not line:
+        # 模型没给指定角色台词时，用旁白兜底，避免整轮空白
+        line = "\n\n".join(narrator_parts).strip()
+        narrator_parts = []
+    result["narrator"] = "\n\n".join(narrator_parts).strip()
+    result["line"] = line
+    return result
