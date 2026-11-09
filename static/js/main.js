@@ -12,7 +12,7 @@ import {
   renderSessionList, renderStoryList, savedView, savedStory, savedSession,
   openSession,
 } from './sessions.js';
-import { openBackup, closeBackup, runBackup, saveBackupConf } from './backup.js';
+import { refreshBackups, runBackup, saveBackupConf } from './backup.js';
 import { sendFromInput, bindRetryEvents } from './chat.js';
 import { bindMessageActions } from './msgops.js';
 import {
@@ -100,6 +100,30 @@ async function loadModels(notify = true) {
     if (refresh) refresh.disabled = false;
     if (select) select.disabled = false;
     syncAll();
+  }
+}
+
+/** 设置面板的折叠状态：点标题开合，记到 localStorage，刷新后照旧。 */
+const PREFS_KEY = 'lt.prefs';
+const PREFS_OPEN = { mode: true, model: true };   // 头一次打开时先展开这两节
+
+function bindPrefsSections() {
+  const secs = [...document.querySelectorAll('#prefs-modal details[data-sec]')];
+  if (!secs.length) return;
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(PREFS_KEY) || 'null'); } catch { saved = null; }
+  for (const el of secs) {
+    // 先定初始状态再挂监听，免得初始化自己写一遍存储
+    const want = saved && typeof saved[el.dataset.sec] === 'boolean'
+      ? saved[el.dataset.sec]
+      : !!PREFS_OPEN[el.dataset.sec];
+    el.open = want;
+    el.addEventListener('toggle', () => {
+      const map = {};
+      for (const s of secs) map[s.dataset.sec] = s.open;
+      try { localStorage.setItem(PREFS_KEY, JSON.stringify(map)); } catch { /* 隐私模式写不进去就算了 */ }
+      if (el.dataset.sec === 'backup' && el.open) refreshBackups();
+    });
   }
 }
 
@@ -419,13 +443,9 @@ function bindUI() {
   });
   $('#btn-nav').onclick = () => document.body.classList.toggle('nav-open');
   $('#nav-mask').onclick = closeNav;
-  $('#btn-open-backup').onclick = openBackup;
   $('#btn-backup-now').onclick = runBackup;
   $('#btn-backup-save').onclick = saveBackupConf;
-  $('#btn-backup-close').onclick = closeBackup;
-  $('#backup-modal').addEventListener('click', (e) => {
-    if (e.target.id === 'backup-modal') closeBackup();
-  });
+  bindPrefsSections();
   $('#pick-cancel').onclick = closePickStory;
   $('#pick-story-modal').addEventListener('click', (e) => {
     if (e.target.id === 'pick-story-modal') closePickStory();   // 点背景也能退

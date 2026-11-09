@@ -459,12 +459,25 @@ body.story-view .composer { display: none !important; }
 .err { color: var(--danger); font-size: .8125rem; }
 
 /* 统一设置窗：分区 + 二选一的按钮组 */
-.prefs-sec { border-top: 1px solid var(--border); padding: 14px 0 6px; margin-top: 6px; }
-.prefs-sec:first-of-type { border-top: 0; margin-top: 0; padding-top: 0; }
-.prefs-sec h3 {
-  margin: 0 0 10px; font-size: .875rem; font-weight: 600;
-  color: var(--text-dim); letter-spacing: .02em;
+.prefs-sec { border-top: 1px solid var(--border); }
+.prefs-sec:first-of-type { border-top: 0; }
+/* 标题即开关：点标题展开，收起后六个标题一屏看得完 */
+.prefs-sec > summary {
+  list-style: none; cursor: pointer; padding: 12px 2px;
+  display: flex; align-items: center; gap: 8px;
+  font-size: .875rem; font-weight: 600; color: var(--text-dim);
+  letter-spacing: .02em; user-select: none;
 }
+.prefs-sec > summary::-webkit-details-marker { display: none; }
+.prefs-sec > summary::before {
+  content: '▸'; font-size: .7rem; color: var(--text-mute);
+  transition: transform .15s ease; transform-origin: center;
+}
+.prefs-sec[open] > summary::before { transform: rotate(90deg); }
+.prefs-sec > summary:hover { color: var(--text); }
+.prefs-sec > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+.prefs-body { padding: 0 2px 14px; }
+.prefs-body > .field:first-child { margin-top: 0; }
 .seg { display: flex; gap: 6px; }
 .seg button {
   flex: 1; padding: 8px 10px; border-radius: 8px; cursor: pointer;

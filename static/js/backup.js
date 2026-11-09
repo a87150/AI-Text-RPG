@@ -17,16 +17,6 @@ function setMsg(text, kind = '') {
   el.className = 'backup-msg' + (kind ? ' ' + kind : '');
 }
 
-export function openBackup() {
-  $('#backup-modal').classList.remove('hidden');
-  setMsg('');
-  refreshBackups();
-}
-
-export function closeBackup() {
-  $('#backup-modal').classList.add('hidden');
-}
-
 export async function refreshBackups() {
   const box = $('#backup-list');
   if (!box) return;

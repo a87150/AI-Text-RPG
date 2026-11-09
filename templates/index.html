@@ -31,31 +31,6 @@
     </div>
   </aside>
 
-  <div class="modal hidden" id="backup-modal">
-    <div class="modal-box narrow">
-      <h2>备份</h2>
-      <div class="hint">把 data/ 整个打包成 zip 存到 backups/。包里的 API Key 会被抹掉，所以可以放心挪走。</div>
-      <div class="backup-actions">
-        <button type="button" id="btn-backup-now">立即备份</button>
-        <span class="backup-msg" id="backup-msg"></span>
-      </div>
-      <div class="backup-conf">
-        <label class="backup-toggle">
-          <input type="checkbox" id="backup-enabled"> 定时自动备份
-        </label>
-        <span>每隔</span>
-        <input type="number" id="backup-hours" min="1" max="720" value="24">
-        <span>小时</span>
-        <button type="button" class="ghost" id="btn-backup-save">保存</button>
-      </div>
-      <div class="backup-list" id="backup-list"></div>
-      <div class="modal-actions">
-        <div class="spacer"></div>
-        <button type="button" id="btn-backup-close">关闭</button>
-      </div>
-    </div>
-  </div>
-
   <main class="main">
     <header class="topbar">
       <button class="icon-btn nav-toggle" id="btn-nav" type="button" title="打开故事与对话列表">☰</button>
@@ -216,131 +191,147 @@
   <div class="modal-box" style="width:min(640px,100%)">
     <h2>设置</h2>
 
-    <div class="prefs-sec">
-      <h3>新建对话的默认模式</h3>
-      <div class="field">
-        <label>新对话默认由谁回复（已有对话在「设定」里各自切换）</label>
-        <div class="seg" id="prefs-mode">
-          <button type="button" data-mode-value="normal">一般模式</button>
-          <button type="button" data-mode-value="rp">角色扮演</button>
-        </div>
-      </div>
-      <div class="hint" id="mode-hint"></div>
-    </div>
-
-    <div class="prefs-sec">
-      <h3>外观</h3>
-      <div class="grid2">
+        <details class="prefs-sec" data-sec="mode">
+      <summary>新建对话的默认模式</summary>
+      <div class="prefs-body">
         <div class="field">
-          <label>主题</label>
-          <div class="seg" id="prefs-theme">
-            <button type="button" data-theme-value="dark">暗色</button>
-            <button type="button" data-theme-value="light">亮色</button>
-          </div>
-        </div>
+                <label>新对话默认由谁回复（已有对话在「设定」里各自切换）</label>
+                <div class="seg" id="prefs-mode">
+                  <button type="button" data-mode-value="normal">一般模式</button>
+                  <button type="button" data-mode-value="rp">角色扮演</button>
+                </div>
+              </div>
+              <div class="hint" id="mode-hint"></div>
+      </div>
+    </details>
+    <details class="prefs-sec" data-sec="look">
+      <summary>外观</summary>
+      <div class="prefs-body">
+        <div class="grid2">
+                <div class="field">
+                  <label>主题</label>
+                  <div class="seg" id="prefs-theme">
+                    <button type="button" data-theme-value="dark">暗色</button>
+                    <button type="button" data-theme-value="light">亮色</button>
+                  </div>
+                </div>
+                <div class="field">
+                  <label for="prefs-font">字号（整个界面一起缩放）</label>
+                  <select id="prefs-font">
+                    <option value="sm">小</option>
+                    <option value="md">标准</option>
+                    <option value="lg">大</option>
+                    <option value="xl">特大</option>
+                  </select>
+                </div>
+              </div>
+      </div>
+    </details>
+    <details class="prefs-sec" data-sec="model">
+      <summary>模型</summary>
+      <div class="prefs-body">
         <div class="field">
-          <label for="prefs-font">字号（整个界面一起缩放）</label>
-          <select id="prefs-font">
-            <option value="sm">小</option>
-            <option value="md">标准</option>
-            <option value="lg">大</option>
-            <option value="xl">特大</option>
-          </select>
-        </div>
+                <label for="prefs-model">当前使用的模型</label>
+                <div class="model-row">
+                  <select id="prefs-model"></select>
+                  <button class="icon-btn" id="prefs-refresh" type="button" title="刷新模型列表">⟳</button>
+                </div>
+              </div>
+              <div class="field">
+                <label>模型能力档位（决定状态行用多轻的格式）</label>
+                <div class="seg" id="tier-seg">
+                  <button type="button" data-tier="basic">初级</button>
+                  <button type="button" data-tier="standard">标准</button>
+                  <button type="button" data-tier="advanced">高级</button>
+                </div>
+                <div class="hint" id="tier-hint">
+                  初级给单行标记加两条示例，高级直接要结构化 JSON。换了大模型记得调上来。
+                </div>
+              </div>
+              <div class="field">
+                <label>思考强度（本地支持思考的模型）</label>
+                <div class="seg" id="reasoning-seg">
+                  <button type="button" data-level="none">不思考</button>
+                  <button type="button" data-level="low">低</button>
+                  <button type="button" data-level="medium">中</button>
+                  <button type="button" data-level="high">高</button>
+                </div>
+                <div class="hint">
+                  不给档位时模型会一直想。同一段角色卡实测：中等 29s、不思考 14s、不给 39s。
+                </div>
+              </div>
       </div>
-    </div>
-
-    <div class="prefs-sec">
-      <h3>模型</h3>
-      <div class="field">
-        <label for="prefs-model">当前使用的模型</label>
-        <div class="model-row">
-          <select id="prefs-model"></select>
-          <button class="icon-btn" id="prefs-refresh" type="button" title="刷新模型列表">⟳</button>
-        </div>
-      </div>
-      <div class="field">
-        <label>模型能力档位（决定状态行用多轻的格式）</label>
-        <div class="seg" id="tier-seg">
-          <button type="button" data-tier="basic">初级</button>
-          <button type="button" data-tier="standard">标准</button>
-          <button type="button" data-tier="advanced">高级</button>
-        </div>
-        <div class="hint" id="tier-hint">
-          初级给单行标记加两条示例，高级直接要结构化 JSON。换了大模型记得调上来。
-        </div>
-      </div>
-      <div class="field">
-        <label>思考强度（本地支持思考的模型）</label>
-        <div class="seg" id="reasoning-seg">
-          <button type="button" data-level="none">不思考</button>
-          <button type="button" data-level="low">低</button>
-          <button type="button" data-level="medium">中</button>
-          <button type="button" data-level="high">高</button>
-        </div>
+    </details>
+    <details class="prefs-sec" data-sec="cloud">
+      <summary>云端模型</summary>
+      <div class="prefs-body">
         <div class="hint">
-          不给档位时模型会一直想。同一段角色卡实测：中等 29s、不思考 14s、不给 39s。
+                填 OpenAI 兼容接口即可：DeepSeek 用 <code>https://api.deepseek.com/v1</code>，模型名 <code>deepseek-chat</code> 或 <code>deepseek-reasoner</code>。
+                Key 只保存在本机 <code>data/settings.json</code>，页面不回显。不配置也能只用本地模型。
+              </div>
+              <div class="field">
+                <label for="p-provider">提供方</label>
+                <select id="p-provider"></select>
+              </div>
+              <div class="field">
+                <label for="p-base">接口地址（Base URL）</label>
+                <input id="p-base" placeholder="https://api.deepseek.com/v1">
+              </div>
+              <div class="field">
+                <label for="p-key">API Key（留空表示不修改）</label>
+                <input id="p-key" type="password" placeholder="sk-…" autocomplete="off">
+              </div>
+              <div class="field">
+                <label for="p-models">模型名（逗号分隔）</label>
+                <input id="p-models" placeholder="deepseek-chat, deepseek-reasoner">
+              </div>
+              <div class="modal-actions">
+                <button id="p-clear-key" type="button">清除已存 Key</button>
+                <span class="spacer"></span>
+                <button id="p-save" type="button">保存云端设置</button>
+              </div>
+              <div id="p-status"></div>
+      </div>
+    </details>
+    <details class="prefs-sec" data-sec="writing">
+      <summary>写作</summary>
+      <div class="prefs-body">
+        <div class="hint">字数直接影响生成量与耗时；改完点下面的「保存」。</div>
+              <div class="grid2">
+                <div class="field"><label for="w-narrator-min">旁白最少字数</label><input id="w-narrator-min" type="number" min="10" max="300"></div>
+                <div class="field"><label for="w-narrator-max">旁白最多字数</label><input id="w-narrator-max" type="number" min="20" max="600"></div>
+              </div>
+              <div class="grid2">
+                <div class="field"><label for="w-line-min">角色言行最少字数</label><input id="w-line-min" type="number" min="40" max="1200"></div>
+                <div class="field"><label for="w-line-max">角色言行最多字数</label><input id="w-line-max" type="number" min="60" max="2000"></div>
+              </div>
+              <div class="grid2">
+                <div class="field"><label for="w-context">上下文上限（字数）</label><input id="w-context" type="number" min="2000" max="60000" step="500"></div>
+                <div class="field"><label for="w-keep">压缩后保留最近消息数</label><input id="w-keep" type="number" min="4" max="60"></div>
+              </div>
+              <div class="field"><label for="w-chars">同时在场角色上限</label><input id="w-chars" type="number" min="1" max="8"></div>
+      </div>
+    </details>
+    <details class="prefs-sec" data-sec="backup">
+      <summary>备份</summary>
+      <div class="prefs-body">
+        <div class="hint">把 data/ 整个打包成 zip 存到 backups/。包里的 API Key 会被抹掉，所以可以放心挪走。只保留最近 30 份。</div>
+        <div class="backup-actions">
+          <button type="button" id="btn-backup-now">立即备份</button>
+          <span class="backup-msg" id="backup-msg"></span>
         </div>
-      </div>
-    </div>
-
-    <div class="prefs-sec">
-      <h3>云端模型</h3>
-      <div class="hint">
-        填 OpenAI 兼容接口即可：DeepSeek 用 <code>https://api.deepseek.com/v1</code>，模型名 <code>deepseek-chat</code> 或 <code>deepseek-reasoner</code>。
-        Key 只保存在本机 <code>data/settings.json</code>，页面不回显。不配置也能只用本地模型。
-      </div>
-      <div class="field">
-        <label for="p-provider">提供方</label>
-        <select id="p-provider"></select>
-      </div>
-      <div class="field">
-        <label for="p-base">接口地址（Base URL）</label>
-        <input id="p-base" placeholder="https://api.deepseek.com/v1">
-      </div>
-      <div class="field">
-        <label for="p-key">API Key（留空表示不修改）</label>
-        <input id="p-key" type="password" placeholder="sk-…" autocomplete="off">
-      </div>
-      <div class="field">
-        <label for="p-models">模型名（逗号分隔）</label>
-        <input id="p-models" placeholder="deepseek-chat, deepseek-reasoner">
-      </div>
-      <div class="modal-actions">
-        <button id="p-clear-key" type="button">清除已存 Key</button>
-        <span class="spacer"></span>
-        <button id="p-save" type="button">保存云端设置</button>
-      </div>
-      <div id="p-status"></div>
-    </div>
-
-    <div class="prefs-sec">
-      <h3>写作</h3>
-      <div class="hint">字数直接影响生成量与耗时；改完点下面的「保存」。</div>
-      <div class="grid2">
-        <div class="field"><label for="w-narrator-min">旁白最少字数</label><input id="w-narrator-min" type="number" min="10" max="300"></div>
-        <div class="field"><label for="w-narrator-max">旁白最多字数</label><input id="w-narrator-max" type="number" min="20" max="600"></div>
-      </div>
-      <div class="grid2">
-        <div class="field"><label for="w-line-min">角色言行最少字数</label><input id="w-line-min" type="number" min="40" max="1200"></div>
-        <div class="field"><label for="w-line-max">角色言行最多字数</label><input id="w-line-max" type="number" min="60" max="2000"></div>
-      </div>
-      <div class="grid2">
-        <div class="field"><label for="w-context">上下文上限（字数）</label><input id="w-context" type="number" min="2000" max="60000" step="500"></div>
-        <div class="field"><label for="w-keep">压缩后保留最近消息数</label><input id="w-keep" type="number" min="4" max="60"></div>
-      </div>
-      <div class="field"><label for="w-chars">同时在场角色上限</label><input id="w-chars" type="number" min="1" max="8"></div>
-    </div>
-
-    <div class="prefs-sec">
-      <h3>备份</h3>
-      <div class="field">
-        <button class="ghost wide" id="btn-open-backup" type="button">打开备份面板</button>
-        <div class="hint">
-          把 data/ 整个打包成 zip 存到 backups/，包里的 API Key 会被抹掉。可以手动备份，也可以设定时自动备份。
+        <div class="backup-conf">
+          <label class="backup-toggle">
+            <input type="checkbox" id="backup-enabled"> 定时自动备份
+          </label>
+          <span>每隔</span>
+          <input type="number" id="backup-hours" min="1" max="720" value="24">
+          <span>小时</span>
+          <button type="button" class="ghost" id="btn-backup-save">保存</button>
         </div>
+        <div class="backup-list" id="backup-list"></div>
       </div>
-    </div>
+    </details>
 
     <div class="modal-actions">
       <span class="spacer"></span>

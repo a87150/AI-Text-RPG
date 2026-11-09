@@ -5,6 +5,7 @@
 """
 import json
 import os
+import pathlib
 import shutil
 import tempfile
 import zipfile
@@ -728,6 +729,19 @@ def main():
     rp_config.save_tier("basic", persist=False)
     check("配置接口带出完整策略",
           client.get("/api/config").get_json()["tier_limits"]["history_msgs"] == 16)
+
+    # 33. 设置面板是折叠节，备份并进来了，不再有第二个弹窗
+    _html = (pathlib.Path(__file__).parent / "templates" / "index.html").read_text(encoding="utf-8")
+    check("设置分成六个折叠节", _html.count('<details class="prefs-sec"') == 6,
+          str(_html.count('<details class="prefs-sec"')))
+    check("每节都有标题和内容",
+          _html.count("<summary>") == 6 and _html.count('class="prefs-body"') == 6)
+    check("备份弹窗已删掉", 'id="backup-modal"' not in _html)
+    check("备份控件搬进设置", 'data-sec="backup"' in _html and 'id="btn-backup-now"' in _html)
+    check("不再有「打开备份面板」按钮", 'id="btn-open-backup"' not in _html)
+    _main = (pathlib.Path(__file__).parent / "static" / "js" / "main.js").read_text(encoding="utf-8")
+    check("折叠状态存 localStorage", "lt.prefs" in _main and "PREFS_KEY" in _main)
+    check("展开备份节会去取列表", "refreshBackups" in _main)
 
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
