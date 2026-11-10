@@ -795,7 +795,7 @@ export function hueOf(name) {
   return h;
 }
 
-export function buildMessage(role, content, name) {
+export function buildMessage(role, content, name, edited) {
   const el = document.createElement('div');
   el.className = 'msg ' + role;
   el.style.setProperty('--char-hue', hueOf(name));
@@ -815,6 +815,13 @@ export function buildMessage(role, content, name) {
   const bubble = document.createElement('div');
   bubble.className = 'bubble';
   bubble.innerHTML = mdToHtml(content);
+  if (edited) {
+    const tag = document.createElement('span');
+    tag.className = 'edited-tag';
+    tag.textContent = '已编辑';
+    tag.title = '这条改过，之后的回复仍是按原话写的';
+    bubble.appendChild(tag);
+  }
 
   el.append(who, bubble);
   return { el, who, bubble };
@@ -942,7 +949,7 @@ export function renderMessages() {
   msgs.forEach((m, index) => {
     let host;
     if (m.role === 'user') {
-      host = buildMessage('user', m.content, userLabel).el;
+      host = buildMessage('user', m.content, userLabel, m.edited).el;
     } else if (m.speaker) {
       host = buildTurn(m.narrator || '', m.speaker, m.content).el;
     } else {

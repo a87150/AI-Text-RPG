@@ -605,6 +605,25 @@ body.story-view .composer { display: none !important; }
 .pick-item .pi-go { flex: none; color: var(--text-mute); font-size: .75rem; }
 /* 显式写了 display 的元素会盖掉 hidden 属性，得补一刀 */
 [hidden] { display: none !important; }
+/* 改过的消息留个记号：提醒后面的回复是对着旧话写的 */
+.edited-tag {
+  display: inline-block; margin-left: 8px; padding: 0 6px;
+  border-radius: 5px; font-size: .6875rem; vertical-align: middle;
+  border: 1px solid var(--border); color: var(--text-mute);
+  line-height: 1.6;
+}
+.edit-ask {
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border);
+}
+.edit-ask span { flex: 1; font-size: .75rem; color: var(--text-mute); }
+.edit-ask button {
+  padding: 5px 12px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--border); background: transparent;
+  color: var(--text-dim); font-size: .75rem;
+}
+.edit-ask .ask-yes { border-color: var(--accent); color: var(--accent); }
+.edit-ask button:hover { filter: brightness(1.15); }
 /* 生成中把「发送」换成「停止」，位置和尺寸都和发送按钮一致，省得按钮跳 */
 #btn-stop {
   flex: none; align-self: flex-end;

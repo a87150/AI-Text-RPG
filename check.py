@@ -1118,6 +1118,33 @@ def main():
     check("账本注入不带轮次", "第 28 轮" not in _ftext)
     check("账本事实本身还在", "钥匙在抽屉里" in _ftext)
 
+    # 45. 改了自己的话：记下 edited、问要不要重生成
+    _es = client.post("/api/sessions", json={}).get_json()
+    _esess = rp_storage.load_session(_es["id"])
+    _esess["messages"] = [
+        {"role": "user", "content": "我推门进去。"},
+        {"role": "assistant", "content": "你来了。", "speaker": "沈砚"},
+    ]
+    rp_storage.save_session(_esess)
+    _e1 = client.put("/api/sessions/%s/message" % _es["id"],
+                     json={"index": 0, "content": "我推门进去，风跟着灌了进来。"}).get_json()
+    check("改过内容就打 edited 标记", _e1["messages"][0].get("edited") is True)
+    check("内容确实换了", _e1["messages"][0]["content"] == "我推门进去，风跟着灌了进来。")
+    check("后面的回复没被删", len(_e1["messages"]) == 2)
+    _e2 = client.put("/api/sessions/%s/message" % _es["id"],
+                     json={"index": 0, "content": "我推门进去，风跟着灌了进来。"}).get_json()
+    check("原样再存不会重复动", _e2["messages"][0].get("edited") is True)
+    check("还是只有一条用户消息",
+          sum(1 for m in _e2["messages"] if m["role"] == "user") == 1)
+    client.delete("/api/sessions/%s" % _es["id"])
+
+    _edjs = (pathlib.Path(__file__).parent / "static" / "js" / "msgops.js").read_text(encoding="utf-8")
+    check("内容变了才问要不要重生成", "text !== original && hasAfter(index)" in _edjs)
+    check("问的时候给两个出路", "ask-yes" in _edjs and "就这样" in _edjs)
+    check("点重新生成走回退重写", "rewrite(index)" in _edjs)
+    _uijs = (pathlib.Path(__file__).parent / "static" / "js" / "ui.js").read_text(encoding="utf-8")
+    check("消息能渲染已编辑标", "edited-tag" in _uijs and "m.edited" in _uijs)
+
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")

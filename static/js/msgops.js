@@ -54,6 +54,35 @@ async function branch(index) {
   }
 }
 
+/** 这条后面还有别人的话吗？没有就不用问，重生成也无从谈起。 */
+function hasAfter(index) {
+  return messagesOf().length > index + 1;
+}
+
+/** 改了内容之后问一句：后面的回复是照着旧话写的，要不要重来。 */
+function askRegenerate(index) {
+  const host = document.querySelector('#messages [data-index="' + index + '"]');
+  if (!host || host.querySelector('.edit-ask')) return;
+  const bar = document.createElement('div');
+  bar.className = 'edit-ask';
+  const tip = document.createElement('span');
+  tip.textContent = '已保存。后面的回复还是按原话写的。';
+  const yes = document.createElement('button');
+  yes.type = 'button';
+  yes.className = 'ask-yes';
+  yes.textContent = '重新生成';
+  const no = document.createElement('button');
+  no.type = 'button';
+  no.textContent = '就这样';
+  yes.onclick = () => {
+    bar.remove();
+    rewrite(index);
+  };
+  no.onclick = () => bar.remove();
+  bar.append(tip, yes, no);
+  host.appendChild(bar);
+}
+
 function startEdit(index, host) {
   const msg = messagesOf()[index];
   if (!msg) return;
@@ -86,7 +115,8 @@ function startEdit(index, host) {
       });
       await refreshCurrentSession();
       renderMessages();
-      toast('已保存这条消息', 'ok');
+      if (text !== original && hasAfter(index)) askRegenerate(index);
+      else toast('已保存这条消息', 'ok');
     } catch (e) {
       save.disabled = false;
       toast('保存失败：' + e.message, 'error');

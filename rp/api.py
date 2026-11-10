@@ -651,7 +651,9 @@ def api_edit_message(sid):
         if msg.get("role") != "user":
             # 只让用户改自己说过的话；改 AI 的台词既不自然，也会让状态对不上
             return jsonify({"error": "只能修改自己发的消息"}), 400
-        msg["content"] = text
+        if text != (msg.get("content") or ""):
+            msg["content"] = text
+            msg["edited"] = True    # 界面上留个记号：后面的回复是对着旧话写的
         save_session(sess)
         sess["context_chars"] = context_chars(sess)
         sess["context"] = context_info(sess)
