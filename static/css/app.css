@@ -145,6 +145,22 @@ button.ghost.wide { width: 100%; }
 }
 .icon-btn:hover:not(:disabled) { background: var(--bg-hover); color: var(--text); }
 .icon-btn:disabled { opacity: .5; }
+/* 删除提供方：平时安静待着，指着它才亮出危险色，不会误按也不会看不见 */
+.del-btn {
+  flex: none; width: 30px; height: 30px; padding: 0;
+  display: grid; place-items: center; cursor: pointer;
+  border-radius: 8px; font-size: .8125rem; line-height: 1;
+  border: 1px solid var(--border-strong);
+  background: transparent; color: var(--text-mute);
+  transition: color .15s, border-color .15s, background .15s;
+}
+.del-btn:hover {
+  border-color: var(--danger); color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+.del-btn:active { transform: scale(.94); }
+.del-btn:focus-visible { outline: 2px solid var(--danger); outline-offset: 1px; }
+.del-btn[hidden] { display: none !important; }
 
 /* ------------------------------ 旁白与回合 ------------------------------ */
 .turn {

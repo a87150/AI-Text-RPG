@@ -1216,6 +1216,20 @@ def main():
           str(_rb2.get("compressed_upto")))
     client.delete("/api/sessions/%s" % _rs2["id"])
 
+    # 49. 角色弹窗只留状态和近况；删除提供方按钮改成图标
+    _uijs2 = (pathlib.Path(__file__).parent / "static" / "js" / "ui.js").read_text(encoding="utf-8")
+    _pop = _uijs2[_uijs2.index("function toggleCharPop"):]
+    _pop = _pop[:_pop.index("function ", 40)]
+    check("角色弹窗不写时间", "status.time" not in _pop)
+    check("角色弹窗仍写状态", "c.state" in _pop)
+    _html2 = (pathlib.Path(__file__).parent / "templates" / "index.html").read_text(encoding="utf-8")
+    check("删除按钮是图标", 'class="del-btn"' in _html2 and 'id="p-del"' in _html2)
+    check("删除按钮有可读名称", 'aria-label="删除这个自定义提供方"' in _html2)
+    check("删除按钮不再是文字按钮", ">删除</button>" not in _html2)
+    _css2 = (pathlib.Path(__file__).parent / "static" / "css" / "app.css").read_text(encoding="utf-8")
+    check("删除按钮有危险色悬停", ".del-btn:hover" in _css2 and "var(--danger)" in _css2)
+    check("删除按钮有键盘焦点样式", ".del-btn:focus-visible" in _css2)
+
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")
