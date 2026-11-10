@@ -260,39 +260,37 @@
                   不给档位时模型会一直想。同一段角色卡实测：中等 29s、不思考 14s、不给 39s。
                 </div>
               </div>
-      </div>
-    </details>
-    <details class="prefs-sec" data-sec="cloud">
-      <summary>云端模型</summary>
-      <div class="prefs-body">
-        <div class="hint">
-                填 OpenAI 兼容接口即可：DeepSeek 用 <code>https://api.deepseek.com/v1</code>，模型名 <code>deepseek-chat</code> 或 <code>deepseek-reasoner</code>。
-                Key 只保存在本机 <code>data/settings.json</code>，页面不回显。不配置也能只用本地模型。
-              </div>
-              <div class="field">
-                <label for="p-provider">提供方</label>
-                <select id="p-provider"></select>
-              </div>
-              <div class="field">
-                <label for="p-base">接口地址（Base URL）</label>
-                <input id="p-base" placeholder="https://api.deepseek.com/v1">
-              </div>
-              <div class="field">
-                <label for="p-key">API Key（留空表示不修改）</label>
-                <input id="p-key" type="password" placeholder="sk-…" autocomplete="off">
-              </div>
-              <div class="field">
-                <label for="p-models">模型名（逗号分隔）</label>
-                <input id="p-models" placeholder="deepseek-chat, deepseek-reasoner">
-              </div>
-              <div class="modal-actions">
-                <button id="p-clear-key" type="button">清除已存 Key</button>
-                <span class="spacer"></span>
-                <button id="p-save" type="button">保存云端设置</button>
-              </div>
+      
+        <h4 class="prefs-sub">云端模型（可选）</h4>
+              <div class="hint">
+                  填 OpenAI 兼容接口即可：DeepSeek 用 <code>https://api.deepseek.com/v1</code>，模型名 <code>deepseek-chat</code> 或 <code>deepseek-reasoner</code>。
+                  Key 只保存在本机 <code>data/settings.json</code>，页面不回显。不配置也能只用本地模型。
+                </div>
+                <div class="field">
+                  <label for="p-provider">提供方</label>
+                  <select id="p-provider"></select>
+                </div>
+                <div class="field">
+                  <label for="p-base">接口地址（Base URL）</label>
+                  <input id="p-base" placeholder="https://api.deepseek.com/v1">
+                </div>
+                <div class="field">
+                  <label for="p-key">API Key（留空表示不修改）</label>
+                  <input id="p-key" type="password" placeholder="sk-…" autocomplete="off">
+                </div>
+                <div class="field">
+                  <label for="p-models">模型名（逗号分隔）</label>
+                  <input id="p-models" placeholder="deepseek-chat, deepseek-reasoner">
+                </div>
+                <div class="modal-actions">
+                  <button id="p-clear-key" type="button">清除已存 Key</button>
+                  <span class="spacer"></span>
+                  <button id="p-save" type="button">保存云端设置</button>
+                </div>
               <div id="p-status"></div>
       </div>
     </details>
+
     <details class="prefs-sec" data-sec="writing">
       <summary>写作</summary>
       <div class="prefs-body">

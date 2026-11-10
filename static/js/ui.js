@@ -248,15 +248,34 @@ export function renderCharacterEditor(box, list, onChange) {
     role.className = 'cc-input cc-area';
     role.placeholder = '身份、性格、外貌、和你的关系…';
     role.value = c.role || '';
-    role.oninput = () => { c.role = role.value; };
 
-    const state = document.createElement('input');
-    state.className = 'cc-input';
-    state.placeholder = '当前状态（可留空，AI 会随剧情更新）';
-    state.value = c.state || '';
-    state.oninput = () => { c.state = state.value; };
+    // 超出档位上限的部分模型根本看不到，得让人知道，不能悄悄截掉
+    const cap = ((state.conf && state.conf.tier_limits) || {}).role_chars || 0;
+    const count = document.createElement('div');
+    count.className = 'cc-count';
+    const paint = () => {
+      const n = (c.role || '').length;
+      if (!cap) {
+        count.textContent = n + ' 字 · 当前档位不限制长度';
+        count.classList.remove('over');
+        return;
+      }
+      const over = n > cap;
+      count.textContent = n + ' 字 · 这一档只注入前 ' + cap + ' 字'
+        + (over ? '，超出的 ' + (n - cap) + ' 字模型看不到' : '');
+      count.classList.toggle('over', over);
+    };
+    role.oninput = () => { c.role = role.value; paint(); };
+    paint();
 
-    card.append(head, name, role, state);
+    // 别叫 state：会遮蔽从 state.js 导入的全局状态，上面读档位时正好落在死区
+    const stateField = document.createElement('input');
+    stateField.className = 'cc-input';
+    stateField.placeholder = '当前状态（可留空，AI 会随剧情更新）';
+    stateField.value = c.state || '';
+    stateField.oninput = () => { c.state = stateField.value; };
+
+    card.append(head, name, role, count, stateField);
     box.appendChild(card);
   });
 

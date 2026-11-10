@@ -31,11 +31,11 @@
 }
 
 /* 字号：根字号驱动，侧栏、按钮、弹窗、消息一起变 */
-html { font-size: 16px; }
-html[data-font="sm"] { font-size: 14px; }
-html[data-font="md"] { font-size: 16px; }
-html[data-font="lg"] { font-size: 17.5px; }
-html[data-font="xl"] { font-size: 19.5px; }
+html { font-size: 14px; }
+html[data-font="sm"] { font-size: 13px; }
+html[data-font="md"] { font-size: 14px; }
+html[data-font="lg"] { font-size: 16px; }
+html[data-font="xl"] { font-size: 17.5px; }
 
 [data-theme="light"] {
   --bg: #f5f6fb;
@@ -537,6 +537,9 @@ body.story-view .composer { display: none !important; }
 .cp-row { display: flex; gap: 8px; margin-bottom: 6px; }
 .cp-row b { flex: none; width: 32px; color: var(--text-mute); font-weight: 500; }
 .cp-row span { flex: 1; min-width: 0; white-space: pre-wrap; }
+.cc-count { font-size: .6875rem; color: var(--text-mute); margin: -4px 0 6px; }
+.cc-count.over { color: var(--danger); }
+
 .cp-act {
   width: 100%; margin-top: 4px; padding: 5px 0; border-radius: 7px; cursor: pointer;
   border: 1px solid var(--border-strong); background: transparent;
@@ -599,7 +602,18 @@ body.story-view .composer { display: none !important; }
 }
 .pick-item span { font-size: .6875rem; color: var(--text-mute); }
 .pick-item .pi-go { flex: none; color: var(--text-mute); font-size: .75rem; }
-.backup-actions { display: flex; align-items: center; gap: 10px; margin: 14px 0 10px; }
+.prefs-sub {
+  margin: 18px 0 8px; padding-top: 12px; border-top: 1px dashed var(--border);
+  font-size: .8125rem; font-weight: 600; color: var(--text-dim);
+}
+.backup-actions { display: flex; align-items: center; gap: 10px; margin: 12px 0 10px; }
+#btn-backup-now {
+  padding: 7px 16px; border-radius: 9px; cursor: pointer;
+  border: 1px solid transparent; background: var(--accent); color: #fff;
+  font-size: .7813rem; font-weight: 500;
+}
+#btn-backup-now:hover:not(:disabled) { filter: brightness(1.08); }
+#btn-backup-now:disabled { opacity: .55; cursor: default; }
 .backup-msg { font-size: .75rem; color: var(--text-mute); }
 .backup-msg.ok { color: var(--ok); }
 .backup-msg.error { color: var(--danger); }
@@ -632,8 +646,11 @@ body.story-view .composer { display: none !important; }
 }
 .backup-item .bi-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .backup-item b { flex: none; color: var(--text-mute); font-weight: 500; }
+.bi-restore { border-color: var(--accent) !important; color: var(--accent) !important; }
+.bi-restore:hover { background: var(--accent); color: #fff !important; }
 .bi-btn {
-  flex: none; padding: 2px 9px; border-radius: 6px; cursor: pointer;
+  flex: none; padding: 3px 10px; border-radius: 7px; cursor: pointer;
+  text-decoration: none; line-height: 1.5; font-size: .7188rem; color: var(--text-dim);
   border: 1px solid var(--border-strong); background: transparent;
   color: var(--text-dim); font-size: .7188rem; text-decoration: none;
 }

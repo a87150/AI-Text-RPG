@@ -6,6 +6,7 @@ settings.json 里的 API Key 一律抹掉再写进包，备份文件因此可以
 """
 import json
 import os
+import shutil
 import threading
 import time
 import zipfile
@@ -49,7 +50,7 @@ def create(reason="manual"):
     """打一个包；返回 {name, size, at, files, skipped}。"""
     ensure_dir()
     stamp = time.strftime("%Y%m%d-%H%M%S", time.localtime())
-    tag = "".join(ch for ch in str(reason) if ch.isalnum()) or "manual"
+    tag = "".join(ch for ch in str(reason) if ch.isalnum() or ch in "-_") or "manual"
     name = "lt-data-%s-%s.zip" % (stamp, tag)
     target = os.path.join(BACKUP_DIR, name)
     files = 0
@@ -125,6 +126,86 @@ def delete(name):
 def prune(keep=KEEP_MAX):
     for item in listing()[keep:]:
         delete(item["name"])
+
+
+def _read_keys():
+    """当前 settings.json 里存着的 api_key，按提供方分。"""
+    path = os.path.join(DATA_DIR, "settings.json")
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return {pid: (item or {}).get("api_key") or ""
+            for pid, item in (data.get("providers") or {}).items()
+            if isinstance(item, dict)}
+
+
+def restore(name):
+    """把一份备份解回 data/。
+
+    两个不能省的步骤：
+    1. 先给当前数据打一个 before-restore 的包，还原错了还能退回来；
+    2. 备份里的 api_key 是被抹掉的，写回前用还原前的 Key 补上，
+       否则用户一点还原就把云端 Key 弄没了。
+    """
+    full = path_of(name)
+    if not full:
+        return None
+    try:
+        zf = zipfile.ZipFile(full)
+    except (OSError, zipfile.BadZipFile):
+        return None
+
+    keys = _read_keys()
+    guard = create("before-restore")
+    root = os.path.normpath(DATA_DIR)
+    sep = os.sep
+    written = 0
+    settings_body = None
+
+    with zf:
+        for info in zf.infolist():
+            if info.is_dir():
+                continue
+            rel = info.filename.replace(chr(92), "/")
+            if not rel.startswith("data/") or not rel.endswith(".json"):
+                continue
+            inner = rel[len("data/"):]
+            if inner == "settings.json":
+                settings_body = zf.read(info)
+                continue
+            target = os.path.normpath(os.path.join(DATA_DIR, inner))
+            # 挡住 ../ 这类跑出 data/ 的路径
+            if not target.startswith(root + sep):
+                continue
+            folder = os.path.dirname(target)
+            if folder:
+                os.makedirs(folder, exist_ok=True)
+            with open(target, "wb") as dst:
+                dst.write(zf.read(info))
+            written += 1
+
+    filled = 0
+    if settings_body is not None:
+        written += 1
+        try:
+            data = json.loads(settings_body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            data = None
+        if isinstance(data, dict):
+            for pid, item in (data.get("providers") or {}).items():
+                if not isinstance(item, dict) or item.get("api_key"):
+                    continue
+                if keys.get(pid):
+                    item["api_key"] = keys[pid]
+                    filled += 1
+            try:
+                with open(os.path.join(DATA_DIR, "settings.json"), "w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+            except OSError:
+                pass
+    return {"files": written, "guard": guard["name"], "keys": filled}
 
 
 def due(conf, latest_at, now=None):

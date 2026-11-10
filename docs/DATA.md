@@ -125,8 +125,17 @@ POST /api/sessions/<sid>/branch {"index": n}
     GET    /api/backups                   备份列表与定时配置
     POST   /api/backups                    立即备份
     GET    /api/backups/<name>            下载备份
+    POST   /api/backups/<name>/restore    还原这份备份
     DELETE /api/backups/<name>            删除备份
     PUT    /api/backup-config              定时备份开关
+
+还原的三个要点：
+
+1. 先把当前数据打一个 -beforerestore 的保险包，点错了还能退回来
+2. 备份里的 api_key 是被抹掉的，写回前用还原前的 Key 补上，否则点一次还原云端 Key 就没了
+3. 还原完调 load_settings() 重新读配置，不然磁盘上的 settings.json 回来了、进程里还是旧值
+
+解压只接受 data/ 下、以 .json 结尾的条目，路径做 normpath 后必须落在 DATA_DIR 里，挡掉 zip slip。
 
 ## 错误约定
 

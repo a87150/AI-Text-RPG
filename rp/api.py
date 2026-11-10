@@ -284,6 +284,16 @@ def api_backup_download(name):
     return send_file(full, as_attachment=True, download_name=name)
 
 
+@app.post("/api/backups/<name>/restore")
+def api_backup_restore(name):
+    result = backup.restore(name)
+    if not result:
+        return jsonify({"error": "备份不存在或已损坏"}), 404
+    # 配置在启动时读进内存的，还原了 settings.json 得重新读一次才生效
+    load_settings()
+    return jsonify({"result": result, "items": backup.listing()})
+
+
 @app.delete("/api/backups/<name>")
 def api_backup_delete(name):
     if not backup.delete(name):

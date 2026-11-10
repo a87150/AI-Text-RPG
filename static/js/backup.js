@@ -50,6 +50,28 @@ export async function refreshBackups() {
       get.textContent = '下载';
       get.href = '/api/backups/' + encodeURIComponent(item.name);
       get.download = item.name;
+      const redo = document.createElement('button');
+      redo.type = 'button';
+      redo.className = 'bi-btn bi-restore';
+      redo.textContent = '还原';
+      redo.title = '用这份备份覆盖当前数据';
+      redo.onclick = async () => {
+        if (!confirm('用这份备份覆盖当前所有对话和设定？\n\n还原前会自动打一份保险包，点错了还能退回来。')) return;
+        redo.disabled = true;
+        setMsg('正在还原…');
+        try {
+          const data = await api('/api/backups/' + encodeURIComponent(item.name) + '/restore',
+            { method: 'POST' });
+          const r = data.result || {};
+          setMsg('已还原 ' + (r.files || 0) + ' 个文件，页面即将刷新…', 'ok');
+          // 内存里的会话已经过期了，只能整体刷新
+          setTimeout(() => location.reload(), 900);
+        } catch (e) {
+          setMsg('还原失败：' + e.message, 'error');
+          redo.disabled = false;
+        }
+      };
+
       const del = document.createElement('button');
       del.type = 'button';
       del.className = 'bi-btn bi-del';
@@ -63,7 +85,7 @@ export async function refreshBackups() {
           toast('删除失败：' + e.message, 'error');
         }
       };
-      row.append(name, size, get, del);
+      row.append(name, size, get, redo, del);
       box.appendChild(row);
     }
   } catch (e) {

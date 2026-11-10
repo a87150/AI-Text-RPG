@@ -707,9 +707,12 @@ def main():
     hist = [m for m in msgs if m["role"] != "system"]
     check("初级只带最近 16 条历史", len(hist) == 16, str(len(hist)))
     check("历史不从 assistant 开头", msgs[-16]["role"] == "user", msgs[-16]["role"])
-    check("初级每条人设截到 200 字",
-          rp_prompts.clip("守灯人，话少。" * 30, 200).__len__() <= 201)
-    check("截断断在句号上", rp_prompts.clip("守灯人，话少。" * 30, 200).endswith("。"))
+    _cut = rp_prompts.clip("守灯人，话少。" * 30, 200)
+    check("初级每条人设截到 200 字左右", _cut.__len__() <= 240, str(len(_cut)))
+    check("截断断在句号上", _cut.startswith("守灯人") and _cut.rstrip("…")[-1] in "。！？", _cut[-26:])
+    check("截断后告诉模型这是节选",
+          "节选" in rp_prompts.build_character_block(
+              [{"name": "沈砚", "role": "守灯人，话少。" * 40}], "沈砚"))
     body = rp_prompts.build_system_prompt(_fat_sess(), "沈砚")
     check("初级只注入 6 条账本", body.count("· 第") == 6, str(body.count("· 第")))
     check("初级第 8 轮就重插人设",
@@ -732,10 +735,14 @@ def main():
 
     # 33. 设置面板是折叠节，备份并进来了，不再有第二个弹窗
     _html = (pathlib.Path(__file__).parent / "templates" / "index.html").read_text(encoding="utf-8")
-    check("设置分成六个折叠节", _html.count('<details class="prefs-sec"') == 6,
+    check("设置分成五个折叠节（云端并进模型）", _html.count('<details class="prefs-sec"') == 5,
           str(_html.count('<details class="prefs-sec"')))
     check("每节都有标题和内容",
-          _html.count("<summary>") == 6 and _html.count('class="prefs-body"') == 6)
+          _html.count("<summary>") == 5 and _html.count('class="prefs-body"') == 5)
+    check("云端控件并在模型节里",
+          'data-sec="cloud"' not in _html and 'id="p-provider"' in _html)
+    _bkjs = (pathlib.Path(__file__).parent / "static" / "js" / "backup.js").read_text(encoding="utf-8")
+    check("每个备份都能还原", "bi-restore" in _bkjs and "/restore" in _bkjs)
     check("备份弹窗已删掉", 'id="backup-modal"' not in _html)
     check("备份控件搬进设置", 'data-sec="backup"' in _html and 'id="btn-backup-now"' in _html)
     check("不再有「打开备份面板」按钮", 'id="btn-open-backup"' not in _html)
@@ -788,6 +795,44 @@ def main():
     check("原会话不受影响", len(rp_storage.load_session(br["id"])["messages"]) == 4)
     check("分叉标题带标记", cut["title"].endswith("（分支）"), cut["title"])
     check("分叉换新 id", cut["id"] != br["id"])
+
+    # 36. 备份能还原，且 Key 不会被包里的空值冲掉
+    import rp.backup as rp_backup
+    made_restore = client.post("/api/sessions", json={}).get_json()
+    client.put("/api/sessions/%s" % made_restore["id"], json={"title": "还原标记"})
+    settings_path = os.path.join(rp_config.DATA_DIR, "settings.json")
+    with open(settings_path, encoding="utf-8") as f:
+        cfg = json.load(f)
+    cfg.setdefault("providers", {})["deepseek"] = {
+        "base_url": "https://api.deepseek.com/v1", "api_key": "sk-keep-me", "models": "deepseek-chat"}
+    with open(settings_path, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, ensure_ascii=False)
+
+    item = rp_backup.create("manual")
+    pack = rp_backup.path_of(item["name"])
+    with zipfile.ZipFile(pack) as zf:
+        packed = json.loads(zf.read("data/settings.json").decode("utf-8"))
+    check("包里不含 API Key",
+          packed["providers"]["deepseek"]["api_key"] == "", repr(packed["providers"]["deepseek"]))
+
+    client.delete("/api/sessions/%s" % made_restore["id"])
+    check("还原前会话已删掉", not rp_storage.load_session(made_restore["id"]))
+
+    res = client.post("/api/backups/%s/restore" % item["name"]).get_json()["result"]
+    check("还原写回了文件", res["files"] > 0, str(res))
+    check("还原留了保险包", "beforerestore" in res["guard"].replace("-", ""), res["guard"])
+    check("会话回来了", bool(rp_storage.load_session(made_restore["id"])))
+    with open(settings_path, encoding="utf-8") as f:
+        after = json.load(f)
+    check("还原后 Key 被补回来",
+          after["providers"]["deepseek"]["api_key"] == "sk-keep-me",
+          after["providers"]["deepseek"].get("api_key", "")[:8])
+    check("还原后配置重新读进内存", res["keys"] >= 0)
+
+    # 路径穿越的包名进不来
+    check("备份名挡住 ../", rp_backup.path_of("../settings.json") is None)
+    bad = client.post("/api/backups/%s/restore" % "..%2F..%2Fetc")
+    check("非法备份名还原被拒", bad.status_code in (404, 400), str(bad.status_code))
 
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:

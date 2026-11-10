@@ -33,8 +33,12 @@ TAIL_HINT = {
     "advanced": "",
 }
 
-def clip(text, limit):
-    """按字数截断，尽量断在句号上，别把人设砍成半句话。"""
+def clip(text, limit, tail="…"):
+    """按字数截断，尽量断在句号上，别把人设砍成半句话。
+
+    截断了要明确告诉模型这是节选：突然断掉的人设会被它当成写完了，
+    然后凭空补出一段跟自己冲突的性格。
+    """
     text = (text or "").strip()
     if not limit or len(text) <= limit:
         return text
@@ -42,8 +46,20 @@ def clip(text, limit):
     for sep in ("。", "！", "？", "；", "\n"):
         pos = head.rfind(sep)
         if pos >= limit * 0.6:
-            return head[:pos + 1]
-    return head.rstrip("，、, ") + "…"
+            return head[:pos + 1] + tail
+    return head.rstrip("，、, ") + tail
+
+
+def role_range(cap=None):
+    """AI 生成角色卡的目标字数，落在这一档实际能注入的上限之内。
+
+    写超了就白写：超出 role_chars 的部分在注入时会被 clip 掉，
+    用户看到的是一张卡，模型看到的是前半张。
+    """
+    cap = tier_limits()["role_chars"] if cap is None else cap
+    if not cap:
+        return 320, 520
+    return max(60, int(cap * 0.6)), max(120, int(cap * 0.9))
 
 
 def active_facts(sess, limit=None):
@@ -109,7 +125,9 @@ def build_character_block(chars, speaker=None, status=None):
     role_cap = tier_limits()["role_chars"]     # 小模型吃长设定会串味
     lines = []
     for c in sorted(on, key=lambda c: 0 if c["name"] == speaker else 1):
-        role = clip(c.get("role"), role_cap) or "（未设定，按名字与场景合理发挥）"
+        raw = (c.get("role") or "").strip()
+        role = (clip(raw, role_cap, "…（这条设定还有后续，此处只是节选）")
+                or "（未设定，按名字与场景合理发挥）")
         # 用 ◆ 而不是【】：方括号留给格式标记，别让模型把角色卡当成输出格式
         if c["name"] == speaker and speaker:
             lines.append("◆ 你这一轮演的就是：%s\n%s" % (c["name"], role))
@@ -423,8 +441,10 @@ def build_field_prompt(field, name="", user_name="", ai_name="", user_role="",
                        opening="", lore=None, mode="", ai_state=""):
     if field == "character":
         who = (name or "").strip() or "AI 角色"
-        task = ("把「%s」写成 120~200 字的角色卡：外貌、性格、说话方式与口头禅、"
-                "和用户角色的关系与张力。用户写过的这个人设要合并进结果，不要另起一段重复。" % who)
+        lo, hi = role_range()
+        task = ("把「%s」写成 %d~%d 字的角色卡：外貌、性格、说话方式与口头禅、"
+                "和用户角色的关系与张力。用户写过的这个人设要合并进结果，不要另起一段重复。"
+                % (who, lo, hi))
         if not name.strip():
             task += "\n这个角色还没有名字：第一行写「名字：XXX」，第二行起再写设定。"
     else:
