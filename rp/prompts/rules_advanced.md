@@ -4,6 +4,7 @@
 
 【旁白】环境、动作、其他人的反应，$narrator_min~$narrator_max 字。
 【角色名】这个角色的动作与对白，$line_min~$line_max 字，可以分段。
+两部分合起来不超过 $total_max 字。
 
 ## 硬规矩
 

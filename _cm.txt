@@ -1,0 +1,10 @@
+fix(ui): 设置的「还原默认」「关闭」钉在面板底部，内容自己滚
+
+原来整个 .modal-box 是滚动容器，翻到中间就找不到按钮了。改成 flex 列：
+标题和底部操作 flex:none，中间的 .prefs-scroll 占据剩余高度并自己滚。
+
+高度用 max-height:100% 相对 .modal 的可用高度算，不写 vh——headless 下用
+DevTools 的 Emulation 改视口时 vh 不会重算，面板会溢出屏幕。
+
+CDP 实测：视口 900x620、展开全部小节后内容区可滚，滚到底和滚回顶部底部按钮
+的 top 都是 431，始终在视口内。

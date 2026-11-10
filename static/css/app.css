@@ -831,6 +831,25 @@ body.story-view .composer { display: none !important; }
   padding-top: 16px; border-top: 1px solid var(--border);
 }
 .modal-actions .spacer { flex: 1; }
+/* 设置面板：内容自己滚，还原默认和关闭钉在底部，翻到哪都在手边 */
+#prefs-modal .modal-box {
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  /* 相对 .modal 的可用高度，不写 vh：Emulation 改视口时 vh 不会重算 */
+  max-height: 100%;
+}
+#prefs-modal .modal-box > h2 { flex: none; }
+.prefs-scroll {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto;
+  padding-right: 6px; overscroll-behavior: contain;
+}
+.prefs-scroll::-webkit-scrollbar { width: 8px; }
+.prefs-scroll::-webkit-scrollbar-thumb {
+  background: var(--border-strong); border-radius: 4px;
+}
+#prefs-modal .modal-actions {
+  flex: none; margin-top: 0; padding-top: 14px; background: var(--bg-panel);
+}
 .modal-actions button {
   padding: 9px 18px; border-radius: 10px; font-size: .8438rem; font-weight: 600;
   border: 1px solid var(--border-strong); background: var(--bg-elev); color: var(--text-dim);
