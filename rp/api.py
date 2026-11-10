@@ -25,7 +25,7 @@ from .config import (
     CREATIVITY_LABELS, CREATIVITY_LEVELS, CREATIVITY_TEMP,
     MODE_DEFAULT, creativity, creativity_temp, delete_provider, provider_ids,
     reset_settings, save_creativity,
-    tier, tier_context, tier_limits, writing,
+    tier, tier_context, tier_keep, tier_limits, writing,
 )
 from .context import (
     background_compress, build_summary_prompt, compress_session, context_chars,
@@ -75,6 +75,7 @@ def api_config():
         "tier_labels": TIER_LABELS,
         "tier_context": tier_context(),
         "tier_limits": tier_limits(),
+        "tier_keep": tier_keep(),
         "creativity": creativity(),
         "creativities": CREATIVITY_LEVELS,
         "creativity_labels": CREATIVITY_LABELS,

@@ -18,6 +18,7 @@ DEFAULT_MODEL = "dmtx/qwen3.5-9b-abliterated:latest"
 # ============================== 参数 ==============================
 MAX_CONTEXT_CHARS = 8000
 KEEP_RECENT_MESSAGES = 16
+KEEP_RECENT_MAX = 60        # 高级档不限条数，压缩后最多留这么多
 REQUEST_TIMEOUT = (15, 300)
 
 MAX_CHAT_ATTEMPTS = 3
@@ -159,8 +160,10 @@ def save_tier(value, persist=True):
         return tier()
     with _model_lock:
         _tier = value
-    # 换档位就换上下文预算；用户之后仍可在写作参数里手动改
-    save_writing({"context_limit": TIER_LIMITS[value]["context"]}, persist=False)
+    # 换档位就换整份预算：上下文上限和压缩后保留的条数一起换，
+    # 否则高级档能带更多历史，压缩却还只留 16 条，等于白换
+    save_writing({"context_limit": TIER_LIMITS[value]["context"],
+                  "keep_recent": tier_keep(value)}, persist=False)
     if persist:
         persist_settings()
     return tier()
@@ -168,6 +171,11 @@ def save_tier(value, persist=True):
 
 def tier_limits(level=None):
     return TIER_LIMITS.get(level or tier(), TIER_LIMITS["basic"])
+
+
+def tier_keep(level=None):
+    """这档压缩后该留几条：跟历史能带的量走，高级档不限条数就用到上限。"""
+    return tier_limits(level)["history_msgs"] or KEEP_RECENT_MAX
 
 
 def tier_context(level=None):

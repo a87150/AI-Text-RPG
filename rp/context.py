@@ -42,7 +42,9 @@ def context_info(sess):
         "limit": writing()["context_limit"],
         "debug": debug,
         "messages": len(msgs),
-        "keep_recent": writing()["keep_recent"],
+        # 显示压缩真正会留下的条数，别跟实际行为对不上
+        "keep_recent": max(writing()["keep_recent"],
+                           tier_limits()["history_msgs"] or writing()["keep_recent"]),
         "summary_chars": len(sess.get("summary") or ""),
         "compress": {
             "times": int(comp.get("times") or 0),
@@ -62,8 +64,8 @@ def compress_session(sid, force=False, max_attempts=2):
         start = int(sess.get("compressed_upto") or 0)
         start = min(max(start, 0), len(all_msgs))
         messages = all_msgs[start:]      # 只管还没摘要过的那一截
-        # 压缩后留下的条数不能少于历史能带的条数，否则压了个寂寞：
-        # 比如标准档能带 40 条历史，只留 16 条，下次照样得带全部
+        # 压缩后留下的条数不能少于历史能带的条数，否则压了个寂寞。
+        # 切档位时 save_tier 已把两者对齐，这里的 max 是给旧配置兜底
         keep = max(writing()["keep_recent"], tier_limits()["history_msgs"] or 0)
         limit = writing()["context_limit"]
         if len(messages) <= keep + 2:

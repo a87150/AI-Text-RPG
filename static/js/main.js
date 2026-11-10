@@ -341,6 +341,8 @@ function syncTierSeg() {
     const bits = [];
     if (budget) bits.push('上下文 ' + budget + ' 字');
     if (lim.history_msgs) bits.push('历史 ' + lim.history_msgs + ' 条');
+    const keep = (state.conf && state.conf.tier_keep) || 0;
+    if (keep) bits.push('压缩后留 ' + keep + ' 条');
     if (lim.role_chars) bits.push('人设每条 ' + lim.role_chars + ' 字');
     if (lim.facts) bits.push('账本 ' + lim.facts + ' 条');
     if (lim.anchor_every) bits.push('每 ' + lim.anchor_every + ' 轮重插人设');

@@ -998,7 +998,7 @@ def main():
     check("忙的时候显示正在写", "AI 正在写这一轮" in _ui)
     check("会盯着会话等它写完", "setInterval" in _ui and "sess.busy" in _ui)
     check("角色弹层用状态不用设定", "['设定', c.role]" not in _ui)
-    check("顶栏带场景和时间", "status.location" in _ui and "sub-key" in _ui)
+    check("顶栏带场景和时间", "['location', '地点']" in _ui and "['time', '时间']" in _ui)
     _css = (pathlib.Path(__file__).parent / "static" / "css" / "app.css").read_text(encoding="utf-8")
     check("hidden 属性不会被 display 盖掉", "[hidden] { display: none !important; }" in _css)
 
@@ -1229,6 +1229,33 @@ def main():
     _css2 = (pathlib.Path(__file__).parent / "static" / "css" / "app.css").read_text(encoding="utf-8")
     check("删除按钮有危险色悬停", ".del-btn:hover" in _css2 and "var(--danger)" in _css2)
     check("删除按钮有键盘焦点样式", ".del-btn:focus-visible" in _css2)
+
+    # 50. 切档位要连「压缩后留几条」一起换
+    for _t, _want in (("basic", 16), ("standard", 40), ("advanced", 60)):
+        client.post("/api/writing", json={"tier": _t})
+        _cf = client.get("/api/config").get_json()
+        check("切到%s档后保留条数跟着变" % _t,
+              _cf["writing"]["keep_recent"] == _want,
+              "%d vs %d" % (_cf["writing"]["keep_recent"], _want))
+        check("%s档的 tier_keep 一致" % _t, _cf["tier_keep"] == _want, str(_cf["tier_keep"]))
+        check("%s档上下文预算也跟着换" % _t,
+              _cf["writing"]["context_limit"] == rp_config.TIER_LIMITS[_t]["context"],
+              str(_cf["writing"]["context_limit"]))
+    # 面板显示的值要等于压缩真正会留的值
+    _pv = client.post("/api/sessions", json={}).get_json()
+    client.post("/api/writing", json={"tier": "advanced"})
+    _ci = client.get("/api/sessions/%s" % _pv["id"]).get_json()["context"]
+    check("面板的保留条数等于实际生效值", _ci["keep_recent"] == 60, str(_ci["keep_recent"]))
+    client.delete("/api/sessions/%s" % _pv["id"])
+    client.post("/api/writing", json={"tier": "basic"})
+
+    # 51. 顶栏那一行显示当前状态
+    _uijs3 = (pathlib.Path(__file__).parent / "static" / "js" / "ui.js").read_text(encoding="utf-8")
+    check("顶栏画当前状态", "sub-state" in _uijs3 and "🧭" in _uijs3)
+    for _f, _lab in (("location", "地点"), ("time", "时间"), ("relations", "关系"),
+                     ("goal", "目标"), ("items", "物品")):
+        check("顶栏带%s" % _lab, "['%s', '%s']" % (_f, _lab) in _uijs3)
+    check("数组型字段会拼成顿号", "Array.isArray(v)" in _uijs3)
 
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
