@@ -261,6 +261,18 @@
                 </div>
               </div>
       
+        <div class="field">
+          <label>创意程度（越高越不顺着最顺的路走）</label>
+          <div class="seg" id="creativity-seg">
+            <button type="button" data-creativity="standard">标准</button>
+            <button type="button" data-creativity="creative">创意</button>
+            <button type="button" data-creativity="wild">发散</button>
+          </div>
+          <div class="hint" id="creativity-hint">
+            标准最稳；创意会换一个角度接话；发散允许节外生枝，也可能跑偏。改的是采样温度加一句写法倾向。
+          </div>
+        </div>
+
         <h4 class="prefs-sub">云端模型（可选）</h4>
               <div class="hint">
                   填 OpenAI 兼容接口即可：DeepSeek 用 <code>https://api.deepseek.com/v1</code>，模型名 <code>deepseek-chat</code> 或 <code>deepseek-reasoner</code>。

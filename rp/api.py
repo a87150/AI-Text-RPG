@@ -22,6 +22,8 @@ from .config import (
     list_local_models, load_settings, mode_for, mode_of, provider_public,
     provider_usable, reasoning_effort, save_backup_conf, save_mode,
     save_provider, save_reasoning, save_tier, save_writing, set_current_model,
+    CREATIVITY_LABELS, CREATIVITY_LEVELS, CREATIVITY_TEMP,
+    creativity, creativity_temp, save_creativity,
     tier, tier_context, tier_limits, writing,
 )
 from .context import (
@@ -72,6 +74,10 @@ def api_config():
         "tier_labels": TIER_LABELS,
         "tier_context": tier_context(),
         "tier_limits": tier_limits(),
+        "creativity": creativity(),
+        "creativities": CREATIVITY_LEVELS,
+        "creativity_labels": CREATIVITY_LABELS,
+        "creativity_temps": CREATIVITY_TEMP,
     })
 
 
@@ -85,8 +91,11 @@ def api_writing():
         save_reasoning(data["reasoning_effort"])
     if data.get("tier"):
         save_tier(data["tier"])
+    if data.get("creativity"):
+        save_creativity(data["creativity"])
     return jsonify({"writing": conf, "mode": mode_of(),
-                    "reasoning_effort": reasoning_effort(), "tier": tier()})
+                    "reasoning_effort": reasoning_effort(), "tier": tier(),
+                    "creativity": creativity()})
 
 
 @app.get("/api/models")
@@ -827,10 +836,11 @@ def api_chat():
         app.logger.exception("追加用户消息失败：%s", exc)
         return jsonify({"error": "保存消息失败：%s" % exc}), 500
 
+    # 前端不再传温度，改成创意档位；显式传的 temperature 仍然优先（兼容旧页面）
     try:
-        temperature = float(data.get("temperature", 0.8))
+        temperature = float(data.get("temperature", creativity_temp()))
     except (TypeError, ValueError):
-        temperature = 0.85
+        temperature = creativity_temp()
     temperature = max(0.0, min(1.5, temperature))
 
     def generate():

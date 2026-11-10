@@ -117,6 +117,37 @@ REASONING_LEVELS = ("none", "low", "medium", "high")
 REASONING_DEFAULT = "medium"
 _reasoning = REASONING_DEFAULT
 
+# 创意程度：只调温度是让措辞变花，不会让剧情变意外，所以还配一句写法倾向
+CREATIVITY_LEVELS = ("standard", "creative", "wild")
+CREATIVITY_DEFAULT = "standard"
+CREATIVITY_LABELS = {
+    "standard": "标准 — 顺着人设往下写，稳定",
+    "creative": "创意 — 换一个角度接，愿意出点意外",
+    "wild": "发散 — 允许节外生枝，可能跑偏",
+}
+CREATIVITY_TEMP = {"standard": 0.75, "creative": 0.95, "wild": 1.1}
+_creativity = CREATIVITY_DEFAULT
+
+
+def creativity():
+    with _model_lock:
+        return _creativity
+
+
+def creativity_temp(level=None):
+    return CREATIVITY_TEMP.get(level or creativity(), CREATIVITY_TEMP["standard"])
+
+
+def save_creativity(value, persist=True):
+    global _creativity
+    if value not in CREATIVITY_LEVELS:
+        return creativity()
+    with _model_lock:
+        _creativity = value
+    if persist:
+        persist_settings()
+    return creativity()
+
 
 def tier():
     with _model_lock:
@@ -308,6 +339,7 @@ def persist_settings():
         "writing_version": 1,
         "mode": _mode,
         "reasoning": _reasoning,
+        "creativity": _creativity,
         "tier": _tier,
         "backup": _backup,
     }
@@ -368,6 +400,8 @@ def load_settings():
         save_mode(data["mode"], persist=False)
     if data.get("tier") in TIERS:
         save_tier(data["tier"], persist=False)
+    if data.get("creativity") in CREATIVITY_LEVELS:
+        save_creativity(data["creativity"], persist=False)
     backup_saved = data.get("backup")
     if isinstance(backup_saved, dict):
         if "enabled" in backup_saved:

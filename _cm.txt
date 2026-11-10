@@ -1,0 +1,14 @@
+feat(prompt): creativity levels — standard / creative / wild
+
+只调温度是让用词变花，剧情还是走最顺那条路，所以两样一起给：
+- 温度 0.75 / 0.95 / 1.1（重试会在此基础上加步长，1.1 起步仍留得住格式）
+- 尾部提醒追加一句写法倾向：创意档要求「别写第一反应，换一个同样合理但没那么顺的」，
+  发散档允许节外生枝但明确不许替用户决定、不许破人设底线
+
+实现：
+- config：CREATIVITY_LEVELS / CREATIVITY_TEMP / CREATIVITY_LABELS，持久化到 settings.json
+- api：/api/chat 的温度改成读档位（显式传 temperature 仍优先，兼容旧页面）
+- prompts：CREATIVE_HINT 拼在 TAIL_HINT 后面，不要覆盖原来的状态格式提醒
+- 设置「模型」节加创意程度 seg，提示行显示当前档位对应的温度
+
+check.py 补 10 条断言（温度递增、上限、三档提示词差异、落盘读回、非法值忽略）。

@@ -834,6 +834,35 @@ def main():
     bad = client.post("/api/backups/%s/restore" % "..%2F..%2Fetc")
     check("非法备份名还原被拒", bad.status_code in (404, 400), str(bad.status_code))
 
+    # 37. 创意程度：温度 + 写法倾向，两样都随档位走
+    check("创意档位有三个", list(rp_config.CREATIVITY_LEVELS) == ["standard", "creative", "wild"])
+    _temps = [rp_config.creativity_temp(x) for x in rp_config.CREATIVITY_LEVELS]
+    check("温度逐档变高", _temps == sorted(_temps) and len(set(_temps)) == 3, str(_temps))
+    check("发散档不超过重试上限", rp_config.creativity_temp("wild") <= 1.2)
+
+    def _tail(level):
+        rp_config.save_creativity(level, persist=False)
+        sess = {"turn": 1, "mode": "rp", "user_name": "甲",
+                "characters": [{"name": "沈砚", "role": "守灯人"}],
+                "messages": [{"role": "user", "content": "我推门进去。"}]}
+        return rp_prompts.build_messages(sess, "沈砚")[-1]["content"]
+
+    check("标准档不提换角度", "别写第一反应" not in _tail("standard"))
+    check("创意档要求换一个接法", "别写第一反应" in _tail("creative"))
+    _wild = _tail("wild")
+    check("发散档允许节外生枝", "节外生枝" in _wild)
+    check("发散档仍然不许替用户决定", "不能替用户决定" in _wild)
+    rp_config.save_creativity("standard", persist=False)
+    check("创意档落盘再读回",
+          (client.post("/api/writing", json={"creativity": "creative"}).get_json()["creativity"])
+          == "creative")
+    client.post("/api/writing", json={"creativity": "standard"})
+    check("配置接口带出三个档位",
+          client.get("/api/config").get_json()["creativities"] == ["standard", "creative", "wild"])
+    check("非法创意档被忽略",
+          client.post("/api/writing", json={"creativity": "insane"}).get_json()["creativity"]
+          == "standard")
+
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")

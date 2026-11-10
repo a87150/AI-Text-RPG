@@ -10,7 +10,7 @@ from difflib import SequenceMatcher
 from string import Template
 
 from ..characters import ensure_characters, guess_name, role_labels, scene_split
-from ..config import mode_for, tier, tier_limits, writing
+from ..config import creativity, mode_for, tier, tier_limits, writing
 from ..llm import strip_status_leaks, strip_thinking
 
 _DIR = os.path.dirname(os.path.abspath(__file__))
@@ -76,6 +76,15 @@ RULES_FILE = {
     "basic": "rules_basic.md",
     "standard": "rules_standard.md",
     "advanced": "rules_advanced.md",
+}
+
+# 创意档位的写法倾向。只调温度是让用词变花，剧情还是最顺的那条路；
+# 这两句才是真正把"换个反应"推到模型面前。
+CREATIVE_HINT = {
+    "standard": "",
+    "creative": "（这一轮别写第一反应。如果最顺的接法是顺从或解释，换一个同样合理但没那么顺的。）",
+    "wild": "（允许节外生枝：环境里可以冒出意外，角色可以做出不符合期待的选择。"
+            "但人设的底线不能变，也不能替用户决定。）",
 }
 
 STATUS_FILE = {
@@ -335,7 +344,7 @@ def build_messages(sess, speaker=None):
                 messages.append({"role": "assistant", "content": head + "【%s】%s" % (name, content)})
             else:
                 messages.append({"role": "assistant", "content": head + content})
-    tail = TAIL_HINT.get(tier(), "")
+    tail = TAIL_HINT.get(tier(), "") + CREATIVE_HINT.get(creativity(), "")
     if tail:
         # 格式要求写在 system 里离生成点太远，小模型容易忘；补在最后一条 user 尾巴上
         for item in reversed(messages):

@@ -255,6 +255,7 @@ function fillWritingForm() {
   if (font) font.value = localStorage.getItem(FONT_KEY) || 'md';
   syncReasoningSeg();
   syncTierSeg();
+  syncCreativitySeg();
 }
 
 function currentReasoning() {
@@ -266,6 +267,25 @@ function syncReasoningSeg() {
   if (!seg) return;
   for (const btn of seg.querySelectorAll('button')) {
     btn.classList.toggle('active', btn.dataset.level === currentReasoning());
+  }
+}
+
+function currentCreativity() {
+  return (state.conf && state.conf.creativity) || 'standard';
+}
+
+function syncCreativitySeg() {
+  const seg = $('#creativity-seg');
+  if (!seg) return;
+  for (const btn of seg.querySelectorAll('button')) {
+    btn.classList.toggle('active', btn.dataset.creativity === currentCreativity());
+  }
+  const hint = $('#creativity-hint');
+  const temps = (state.conf && state.conf.creativity_temps) || {};
+  const temp = temps[currentCreativity()];
+  if (hint && temp) {
+    const base = (state.conf.creativity_labels || {})[currentCreativity()] || '';
+    hint.textContent = base + '（温度 ' + temp + '）';
   }
 }
 
@@ -312,6 +332,7 @@ async function saveWriting() {
   body.mode = currentMode();
   body.reasoning_effort = currentReasoning();
   body.tier = currentTier();
+  body.creativity = currentCreativity();
   try {
     const res = await api('/api/writing', { method: 'POST', body });
     state.conf = Object.assign({}, state.conf, {
@@ -319,6 +340,7 @@ async function saveWriting() {
       mode: res.mode || currentMode(),
       reasoning_effort: res.reasoning_effort || currentReasoning(),
       tier: res.tier || currentTier(),
+      creativity: res.creativity || currentCreativity(),
     });
     fillWritingForm();
     syncModeSeg();
@@ -480,6 +502,12 @@ function bindUI() {
     if (!btn) return;
     state.conf = Object.assign({}, state.conf, { reasoning_effort: btn.dataset.level });
     syncReasoningSeg();
+  };
+  $('#creativity-seg').onclick = (e) => {
+    const btn = e.target.closest('button[data-creativity]');
+    if (!btn) return;
+    state.conf = Object.assign({}, state.conf, { creativity: btn.dataset.creativity });
+    syncCreativitySeg();
   };
   $('#prefs-refresh').onclick = () => loadModels(true);
   $('#prefs-font').onchange = (e) => applyFont(e.target.value);
