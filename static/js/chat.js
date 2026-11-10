@@ -5,6 +5,7 @@ import {
   $, toast, buildMessage, buildTurn, renderTurn, renderStreaming,
   setAiStatus, appendRetryHint, renderMessages, updateStatusCard, askCharacterPick,
   scrollToBottom, syncAll, syncComposer, focusComposer, mdToHtml, escapeHtml, updateSub,
+  clearDraft,
 } from './ui.js';
 import { loadSessions, refreshCurrentSession } from './sessions.js';
 import { api } from './api.js';
@@ -31,6 +32,8 @@ function itemConflict(text) {
   const sess = state.session;
   if (!sess) return null;
   const items = (sess.status && sess.status.items) || {};
+  // 旧数据里 items 可能是一串文字（没写名字的公共物品），那种分不出归属，不拦
+  if (!items || typeof items !== 'object' || Array.isArray(items)) return null;
   const me = sess.user_name || '我';
   const split = (bag) => (Array.isArray(bag) ? bag : String(bag || '').split(/[、,，;；]/))
     .map((n) => String(n).trim())
@@ -111,6 +114,7 @@ export async function sendFromInput() {
   conflictPassed = '';
   hideConflict();
   input.value = '';
+  clearDraft(state.session.id);
   syncComposer();
   await sendMessage(text, { isRetry: false });
 }

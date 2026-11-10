@@ -1503,6 +1503,10 @@ def main():
     check("有冲突提示挂点", 'id="conflict-tip"' in _html67)
     _chat67 = (pathlib.Path(__file__).parent / "static" / "js" / "chat.js").read_text(encoding="utf-8")
     check("发送前查物品归属", "function itemConflict" in _chat67 and "conflictPassed" in _chat67)
+    check("发送后清掉草稿",
+          "clearDraft(state.session.id)" in _chat67 and "export function clearDraft" in _ui67)
+    check("清草稿时顺手取消尚未执行的写入",
+          "clearTimeout(draftTimer);" in _ui67[_ui67.index("export function clearDraft"):][:400])
     check("单字物品不参与比对", "name.length < 2" in _chat67)
     check("冲突判定先看主角名下有没有",
           "const mine = new Set(split(items[me]))" in _chat67 and "if (mine.has(name)) continue;" in _chat67)

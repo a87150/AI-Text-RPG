@@ -129,6 +129,15 @@ export function saveDraftSoon() {
   }, 500);
 }
 
+/** 发送成功后要清掉：那句话已经进了对话记录，要重发直接点重试。
+ * 顺手清掉定时器：输入后 500ms 内就发送时，那次尚未执行的写入会把旧文本又写回去。
+ */
+export function clearDraft(sid) {
+  if (!sid) return;
+  clearTimeout(draftTimer);
+  try { localStorage.removeItem(DRAFT_PREFIX + sid); } catch (e) { /* ignore */ }
+}
+
 export function loadDraft(sid) {
   try {
     return (sid && localStorage.getItem(DRAFT_PREFIX + sid)) || '';

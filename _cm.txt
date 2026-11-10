@@ -1,0 +1,19 @@
+fix: 发送后清掉草稿；清死代码与两处会崩的入参
+
+1. 已发出的消息不该留在草稿里。sendFromInput 里 input.value = '' 是程序赋值，
+   不触发 input 事件，saveDraftSoon 根本没跑，localStorage 里那条文本原样留着，
+   下次进会话又被读回来。新增 clearDraft(sid)：removeItem + clearTimeout
+   （输入后 500ms 内就发送时，那次尚未执行的写入会把旧文本写回去）。
+   要重发直接点对话记录的重试，不需要草稿兜着。
+
+2. next_speaker 的 return "" 后面还有五行永不可达的选人逻辑，删掉。
+   函数留着，调用方不用判空。
+
+3. /api/search 的 limit 用 int() 直解，传个 limit=abc 就是 500；改成 try/except 兜 80。
+
+4. itemConflict 里 items 若非字典（旧数据把它存成公共物品的裸字符串）会取错东西，
+   加 typeof 判断直接放行。
+
+5. settings.js 的 editingStoryId 导出没有任何调用方，删掉。
+
+check.py 第 67 组补两条：发送后清草稿、清草稿时取消定时写入。

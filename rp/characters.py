@@ -54,17 +54,11 @@ def ensure_characters(sess):
 
 
 def next_speaker(sess):
-    """以前按人轮，一个回合只让一位角色说话。
+    """圆桌式之后不再由代码指定发言人，一轮里在场角色各自发言。
 
-    现在 rp 模式改成「旁白 + 在场角色各自发言」，不再有单一发言人，
-    这里恒返回空，只留给旧代码和开场逻辑调用。
+    保留这个名字是为了让调用方不用判空；它永远返回空字符串。
     """
     return ""
-    chars = ensure_characters(sess)
-    on, _off = scene_split(chars, sess.get("status"))
-    pool = on or chars              # 全离场（状态写坏）时退回全体，总得有人说话
-    turn = int(sess.get("turn") or 0)
-    return pool[turn % len(pool)]["name"]
 
 
 def advance_turn(sess):

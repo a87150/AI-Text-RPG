@@ -191,10 +191,6 @@ export async function openSettings(opts = {}) {
   }
 }
 
-export function editingStoryId() {
-  return editingStory;
-}
-
 /* ------------------------------ 单项重生成 ------------------------------ */
 
 /** 打开「只改这一项」浮层；target 说明生成结果写回哪里。 */

@@ -111,7 +111,10 @@ def api_writing_reset():
 def api_search():
     """全文搜索：几千条消息直接扫 json 就够快，不需要索引。"""
     query = (request.args.get("q") or "").strip()
-    limit = min(int(request.args.get("limit") or 80), 200)
+    try:
+        limit = max(1, min(int(request.args.get("limit") or 80), 200))
+    except (TypeError, ValueError):
+        limit = 80
     if len(query) < 2:
         return jsonify({"hits": [], "query": query})
     needle = query.lower()
