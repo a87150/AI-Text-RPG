@@ -167,23 +167,20 @@ button.ghost.wide { width: 100%; }
   display: flex; flex-direction: column; gap: 10px;
   max-width: min(80%, 760px); align-self: flex-start;
 }
+/* 旁白/叙述：字号字色跟角色台词一模一样，只留左边一道细线做区分。
+   别用灰字、小字号或者小徽章——那是给自己看的设计，不是给读者看的。
+   生成中和生成完之后这里必须是同一套样式，不然文字会在收尾时跳一下。 */
 .narrator {
   margin-left: 4px;
   padding: 10px 14px;
   border-left: 2px solid var(--border-strong);
   background: var(--bg-elev);
   border-radius: 0 10px 10px 0;
-  color: var(--text-dim);
-  font-size: calc(var(--msg-fs) - 1px);
+  color: var(--text);
+  font-size: var(--msg-fs);
   line-height: 1.8;
 }
 .narrator p:last-child { margin-bottom: 0; }
-.narrator .narr-tag {
-  display: inline-block; margin-bottom: 6px; padding: 1px 8px;
-  border-radius: 999px; border: 1px solid var(--border-strong);
-  font-size: .6875rem; font-style: normal; letter-spacing: .04em;
-  color: var(--text-mute);
-}
 
 /* 角色卡直接平铺，跟其他设定一样跟着页面滚，不要再套一层小滚动框 */
 .char-list {

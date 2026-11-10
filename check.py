@@ -1325,6 +1325,20 @@ def main():
     check("底部按钮不参与滚动", "#prefs-modal .modal-actions" in _css2 and "flex: none" in _css2)
     check("高度按父容器算不写 vh", "max-height: 100%" in _css2)
 
+    # 56. 旁白/叙述的样子：正常字，只留一道线做区分，收尾时不换脸
+    _css3 = (pathlib.Path(__file__).parent / "static" / "css" / "app.css").read_text(encoding="utf-8")
+    _ui4 = (pathlib.Path(__file__).parent / "static" / "js" / "ui.js").read_text(encoding="utf-8")
+    _narr_css = _css3[_css3.index(".narrator {"):][:400]
+    check("旁白不用灰字", "--text-dim" not in _narr_css and "color: var(--text)" in _narr_css, _narr_css[:120])
+    check("旁白不用小字号", "font-size: var(--msg-fs)" in _narr_css and "msg-fs) - 1px" not in _narr_css)
+    check("旁白留一道左边线做区分", "border-left: 2px solid" in _narr_css)
+    check("不再有系统徽章样式", ".narr-tag" not in _css3)
+    check("不再生成系统徽章", "narr-tag" not in _ui4)
+    check("一般模式的流式也画成旁白块",
+          "if (plain) {" in _ui4 and "const el = narratorNode(text || '')" in _ui4)
+    check("流式和落盘共用同一套旁白结构",
+          _ui4.count("narratorNode(") >= 4)
+
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")

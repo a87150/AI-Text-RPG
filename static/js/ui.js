@@ -730,15 +730,12 @@ export function pickTurn(text, speaker) {
   return out;
 }
 
-export function narratorNode(text, tag = '') {
+/** 旁白。不加「系统」之类的小徽章：生成中和生成完之后必须长得一样，
+ *  区别只靠左边那道细线和浅色底，字号字色跟角色台词一致。
+ */
+export function narratorNode(text) {
   const el = document.createElement('div');
   el.className = 'narrator';
-  if (tag) {
-    const label = document.createElement('span');
-    label.className = 'narr-tag';
-    label.textContent = tag;
-    el.appendChild(label);
-  }
   const body = document.createElement('div');
   body.className = 'narr-body';
   body.innerHTML = mdToHtml(text);
@@ -760,8 +757,7 @@ export function buildTurn(narrator, speaker, line) {
 export function renderTurn(container, turn) {
   if (!container) return null;
   container.innerHTML = '';
-  const isSystem = !turn.speaker;
-  if (turn.narrator) container.appendChild(narratorNode(turn.narrator, isSystem ? '系统' : ''));
+  if (turn.narrator) container.appendChild(narratorNode(turn.narrator));
   if (!turn.line) return null;          // 一般模式只有叙述，没有角色气泡
   const msg = buildMessage('assistant', turn.line, turn.speaker || 'AI');
   container.appendChild(msg.el);
@@ -776,7 +772,20 @@ export function renderStreaming(container, text, speaker, seconds = 0, plain = f
   if (!container) return null;
   const picked = pickTurn(text, speaker);
   container.innerHTML = '';
-  if (!plain && picked.narrator) container.appendChild(narratorNode(picked.narrator));
+  if (plain) {
+    // 一般模式整段都是叙述：流式也直接画成旁白块。
+    // 以前流式走气泡、收尾换成旁白块，一收尾整个框就换了个样子。
+    const el = narratorNode(text || '');
+    const body = el.querySelector('.narr-body');
+    if (!text) body.innerHTML = '<span class="dots">⋯</span>';
+    const tick = document.createElement('span');
+    tick.className = 'tick';
+    tick.textContent = seconds + 's';
+    body.appendChild(tick);
+    container.appendChild(el);
+    return { el, bubble: body };
+  }
+  if (picked.narrator) container.appendChild(narratorNode(picked.narrator));
 
   const el = document.createElement('div');
   el.className = 'msg assistant';
@@ -784,7 +793,7 @@ export function renderStreaming(container, text, speaker, seconds = 0, plain = f
 
   const bubble = document.createElement('div');
   bubble.className = 'bubble typing';
-  const shown = plain ? (text || '') : picked.line;
+  const shown = picked.line;
   const body = document.createElement('span');
   if (shown) body.innerHTML = mdToHtml(shown);
   else body.innerHTML = '<span class="dots">⋯</span>';
@@ -967,7 +976,7 @@ export function renderMessages() {
       // 一般模式：系统叙述，没有角色名
       host = document.createElement('div');
       host.className = 'turn';
-      host.appendChild(narratorNode(m.narrator || m.content || '', '系统'));
+      host.appendChild(narratorNode(m.narrator || m.content || ''));
     }
     host.dataset.index = index;
     host.appendChild(toolsNode(m.role === 'user' ? 'user' : 'assistant'));
