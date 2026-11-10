@@ -64,7 +64,7 @@ def main():
                            persist=False)
     clamped = rp_config.writing()
     check("写作参数越界被夹紧",
-          clamped["max_characters"] == 8 and clamped["line_min"] == 40
+          clamped["max_characters"] == 10 and clamped["line_min"] == 40
           and clamped["keep_recent"] == 60, clamped)
     rp_config.save_writing({"max_characters": 4, "line_min": 120, "keep_recent": 16},
                            persist=False)
@@ -212,7 +212,7 @@ def main():
     # 第二回合必须换人说话
     speaker2 = lt.next_speaker(after_turn)
     check("第二回合轮到另一个角色", speaker2 == "周惠兰", speaker2)
-    check("角色数不超过上限", len(after_turn["characters"]) <= lt.MAX_CHARACTERS)
+    check("角色数不超过上限", len(after_turn["characters"]) <= rp_config.writing()["max_characters"])
 
     # 8. 模式切换：一般模式由系统叙述，不分配发言人
     rp_config.save_mode("normal", persist=False)
@@ -1338,6 +1338,30 @@ def main():
           "if (plain) {" in _ui4 and "const el = narratorNode(text || '')" in _ui4)
     check("流式和落盘共用同一套旁白结构",
           _ui4.count("narratorNode(") >= 4)
+
+    # 57. 角色上限由设置决定，最高 10 个；一般模式也要真的写进角色表
+    _cs = rp_storage.new_session()
+    _cs["mode"] = "normal"
+    _cs["characters"] = [{"name": "谭谈", "role": "主角", "state": "", "history": []}]
+    rp_config.save_writing({"max_characters": 10}, persist=False)
+    _NL2 = chr(10)
+    for _i in range(1, 10):
+        _t2 = rp_characters.parse_turn(
+            "雨还在下。" + _NL2 + "【新角色】" + ('{"name": "角色%d", "role": "路人"}' % _i), None)
+        rp_characters.upsert_character(_cs, _t2["new_character"])
+    check("角色上限 10 能招满", len(_cs["characters"]) == 10, str(len(_cs["characters"])))
+    check("第 11 个超出上限被拒",
+          rp_characters.upsert_character(_cs, {"name": "第十一个"}) is None)
+    check("调小上限不会踢掉已有角色", len(_cs["characters"]) == 10)
+    rp_config.save_writing({"max_characters": 4}, persist=False)
+    check("调小上限后不再收新人",
+          rp_characters.upsert_character(_cs, {"name": "再来一个"}) is None)
+    check("上限范围是 1 到 10", rp_config.WRITING_BOUNDS["max_characters"] == (1, 10),
+          str(rp_config.WRITING_BOUNDS["max_characters"]))
+    _html4 = (pathlib.Path(__file__).parent / "templates" / "index.html").read_text(encoding="utf-8")
+    check("界面写的是角色上限不是同时在场",
+          "角色上限" in _html4 and "同时在场角色上限" not in _html4)
+    check("输入框 max 跟着改成 10", 'id="w-chars" type="number" min="1" max="10"' in _html4)
 
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:

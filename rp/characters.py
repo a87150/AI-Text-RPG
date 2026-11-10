@@ -14,7 +14,6 @@ def guess_name(text):
     return m.group(1).strip() if m else ""
 
 
-MAX_CHARACTERS = 6            # 同时在场角色上限
 CHARACTER_HISTORY_KEEP = 4    # 每个角色保留的最近变化条数
 
 
@@ -160,7 +159,7 @@ def _take_mark_line(text):
         elif key in ("present", "away"):
             names = [n.strip() for n in NAME_SPLIT_RE.split(value) if n.strip()]
             if names:
-                status[key] = names[:MAX_CHARACTERS]
+                status[key] = names[:writing()["max_characters"]]
         else:
             status[key] = value
     return src, status
@@ -242,7 +241,7 @@ def extract_status(text):
         if isinstance(names, list):
             names = [str(n).strip()[:24] for n in names if str(n).strip()]
             if names:
-                status[key] = names[:MAX_CHARACTERS]
+                status[key] = names[:writing()["max_characters"]]
     for key in STATUS_FIELDS:
         value = obj.get(key)
         if isinstance(value, list):

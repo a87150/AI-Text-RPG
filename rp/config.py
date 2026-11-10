@@ -80,7 +80,7 @@ WRITING_BOUNDS = {
     "line_max": (60, 2000),
     "context_limit": (2000, 60000),
     "keep_recent": (4, 60),
-    "max_characters": (1, 8),
+    "max_characters": (1, 10),
 }
 _writing = dict(WRITING_DEFAULTS)
 

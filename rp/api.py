@@ -10,7 +10,7 @@ import requests
 from flask import Response, jsonify, render_template, request, send_file
 
 from .characters import (
-    MAX_CHARACTERS, advance_turn, apply_change, ensure_characters,
+    advance_turn, apply_change, ensure_characters,
     merge_facts, merge_status, next_speaker, parse_turn, role_labels,
     upsert_character,
 )

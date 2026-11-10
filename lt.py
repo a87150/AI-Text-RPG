@@ -7,7 +7,7 @@ import os
 
 from rp.api import app  # noqa: F401
 from rp.characters import (  # noqa: F401
-    MAX_CHARACTERS, apply_change, ensure_characters, next_speaker, parse_turn,
+    apply_change, ensure_characters, next_speaker, parse_turn,
     role_labels, upsert_character,
 )
 from rp.config import (  # noqa: F401
