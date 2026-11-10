@@ -30,7 +30,9 @@ TAIL_HINT = {
     "basic": "（正文写完后，另起一行写一行状态，形如："
              "[[地点：银月酒馆|时间：深夜|关系：戒备|目标：等他开口|事实：钥匙到了沈砚手里]]）",
     "standard": "（正文后另起一行写 [[地点：…|时间：…|关系：…|目标：…]]，没有的字段就不写）",
-    "advanced": "",
+    # 高级档原来靠 system 里的示例，实测强模型聊久了就当没看见，
+    # 状态和在场名单一直不更新
+    "advanced": "（正文后另起一行写 [[地点：…|时间：…|关系：…|目标：…]]，没有的字段就不写）",
 }
 
 def clip(text, limit, tail="…"):
@@ -102,13 +104,18 @@ def build_rules(user_name, mode=None, names=""):
     w = writing()
     mode = mode or mode_for({})
     status_block = status_prompt()
+    # 四个字数设置合成一轮的总量：旁白那份 + 台词那份。
+    # 一般模式整段都是叙述，用总量；rp 模式拆开写，但也要给出合计上限
+    total_min = w["narrator_min"] + w["line_min"]
+    total_max = w["narrator_max"] + w["line_max"]
     if mode == "normal":
         return render(
             "normal.md",
             user_name=user_name or "用户角色",
             character_names=names or "（暂无）",
-            line_min=w["line_min"],
-            line_max=w["line_max"],
+            line_min=total_min,
+            line_max=total_max,
+            max_characters=w["max_characters"],
             status_block=status_block,
         )
     return render(
@@ -118,6 +125,7 @@ def build_rules(user_name, mode=None, names=""):
         narrator_max=w["narrator_max"],
         line_min=w["line_min"],
         line_max=w["line_max"],
+        total_max=total_max,
         max_characters=w["max_characters"],
         status_block=status_block,
     )

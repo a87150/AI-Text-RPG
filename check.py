@@ -1259,6 +1259,72 @@ def main():
         check("顶栏带%s" % _lab, "['%s', '%s']" % (_f, _lab) in _uijs3)
     check("数组型字段会拼成顿号", "Array.isArray(v)" in _uijs3)
 
+    # 52. 四个字数设置合起来决定一轮的总量
+    _ws = {"turn": 1, "mode": "rp", "user_name": "我",
+           "characters": [{"name": "沈砚", "role": "守灯人"}],
+           "status": {}, "messages": [{"role": "user", "content": "我点头。"}]}
+    _w = rp_config.writing()
+    _total = _w["narrator_max"] + _w["line_max"]
+    for _t in ("basic", "standard", "advanced"):
+        rp_config.save_tier(_t, persist=False)
+        _bd = rp_prompts.build_system_prompt(_ws, "沈砚")
+        check("%s档的规则给出合计上限" % _t, ("不超过 %d 字" % _total) in _bd)
+    rp_config.save_tier("basic", persist=False)
+    _nb = rp_prompts.build_system_prompt(dict(_ws, mode="normal"), None)
+    _lo = _w["narrator_min"] + _w["line_min"]
+    check("一般模式用总量而不是只算台词",
+          ("%d~%d 字" % (_lo, _total)) in _nb, _nb[_nb.find("每次"):][:40])
+    # 改设置，规则和尾巴都要跟着变
+    rp_config.save_writing({"line_max": 120}, persist=False)
+    _bd2 = rp_prompts.build_system_prompt(_ws, "沈砚")
+    check("调小台词上限后合计上限跟着降",
+          ("不超过 %d 字" % (_w["narrator_max"] + 120)) in _bd2)
+    _tl = rp_prompts.build_messages(_ws, "沈砚")[-1]["content"]
+    _tl_hi = rp_prompts.input_density(_ws)[1][1]
+    check("尾巴里的上限也跟着降", ("最多 %d 字" % _tl_hi) in _tl, _tl[-120:])
+    check("尾巴上限是密度缩放后的值", _tl_hi >= _w["narrator_max"] + 120, str(_tl_hi))
+    rp_config.save_writing({"line_max": _w["line_max"]}, persist=False)
+
+    # 53. 一般模式也要认【新角色】【变化】，这两块以前被整段跳过
+    _NL = chr(10)
+    _raw = ("雨点砸在窗户上。" + _NL + "【新角色】" + '{"name": "阿珍", "role": "杂货铺女儿"}'
+            + _NL + "【变化】" + '{"name": "玉芬", "change": "开始招呼新人"}'
+            + _NL + "[[地点：客厅|时间：深夜]]")
+    _n = rp_characters.parse_turn(_raw, None)
+    check("一般模式能认出新角色", (_n["new_character"] or {}).get("name") == "阿珍",
+          str(_n["new_character"]))
+    check("一般模式能认出变化", len(_n["updates"]) == 1 and _n["updates"][0]["name"] == "玉芬",
+          str(_n["updates"]))
+    check("一般模式也能读到状态行", _n["status"].get("location") == "客厅", str(_n["status"]))
+    check("新角色那行不留在正文里", '"name"' not in _n["narrator"] and "新角色" not in _n["narrator"],
+          _n["narrator"])
+    check("第一个标签之前的正文没被吞", _n["narrator"].startswith("雨点砸在窗户上"), _n["narrator"])
+    _n2 = rp_characters.parse_turn("他念了一句【别过来】，转身走了。", None)
+    check("正文里普通的方括号不吞内容", "别过来" in _n2["narrator"], _n2["narrator"])
+    _n3 = rp_characters.parse_turn("雨还在下。【新角色】{坏掉的 json", None)
+    check("写坏的新角色不吞正文", "雨还在下" in _n3["narrator"], _n3["narrator"])
+
+    # 54. 高级档也要提醒写状态行，不然聊久了状态就不更新了
+    rp_config.save_tier("advanced", persist=False)
+    _ts = {"turn": 2, "mode": "normal", "user_name": "我", "characters": [],
+           "status": {}, "messages": [{"role": "user", "content": "我把外套挂在门边。"}]}
+    check("高级档尾巴提醒写状态行", "[[地点" in rp_prompts.build_messages(_ts, None)[-1]["content"])
+    _nb2 = rp_prompts.build_system_prompt(_ts, None)
+    check("一般模式规则给了新角色格式", "【新角色】" in _nb2)
+    check("一般模式规则给了人数上限", ("全场最多 %d 人" % rp_config.writing()["max_characters"]) in _nb2)
+    rp_config.save_tier("basic", persist=False)
+
+    # 55. 设置面板的底部按钮固定
+    _html3 = (pathlib.Path(__file__).parent / "templates" / "index.html").read_text(encoding="utf-8")
+    check("设置面板有独立滚动区", 'class="prefs-scroll"' in _html3)
+    check("底部按钮在滚动区之外",
+          _html3.index('class="prefs-scroll"') < _html3.index('id="prefs-reset"')
+          and _html3.rindex("</div>", 0, _html3.index('id="prefs-reset"')) > _html3.index('class="prefs-scroll"'))
+    _css2 = (pathlib.Path(__file__).parent / "static" / "css" / "app.css").read_text(encoding="utf-8")
+    check("滚动区自己滚不带动底部", ".prefs-scroll" in _css2 and "flex: 1 1 auto" in _css2)
+    check("底部按钮不参与滚动", "#prefs-modal .modal-actions" in _css2 and "flex: none" in _css2)
+    check("高度按父容器算不写 vh", "max-height: 100%" in _css2)
+
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")

@@ -350,8 +350,36 @@ def parse_turn(text, speaker):
         return result
 
     if not speaker:
-        # 一般模式：整段都是叙述者的话，不拆角色
-        result["narrator"] = text
+        # 一般模式：整段都是叙述者的话，不拆角色。但【新角色】【变化】仍要认，
+        # 否则用户说「加个角色」永远没反应，那行 JSON 还会原样漏进正文。
+        marks = list(SEG_RE.finditer(text))
+        if not marks:
+            result["narrator"] = text
+            return result
+        keep = []
+        head = text[:marks[0].start()].strip()
+        if head:
+            keep.append(head)       # 第一个【】之前还有正文，别吞
+        for i, m in enumerate(marks):
+            end = marks[i + 1].start() if i + 1 < len(marks) else len(text)
+            tag = m.group(1).strip()
+            body = text[m.end():end].strip()
+            if not body:
+                continue
+            obj = None
+            if tag in ("新角色", "新增角色", "角色"):
+                obj = extract_json(body)
+                if obj and (obj.get("name") or "").strip():
+                    result["new_character"] = obj
+                    continue
+            elif tag in ("变化", "状态", "设定变化"):
+                obj = extract_json(body)
+                if obj and (obj.get("name") or "").strip() and (obj.get("change") or "").strip():
+                    result["updates"].append(obj)
+                    continue
+            # 认不出来的标签、或格式写坏的，原样留在正文里，不吞内容
+            keep.append(m.group(0) + body)
+        result["narrator"] = "\n\n".join(keep).strip()
         return result
 
     marks = list(SEG_RE.finditer(text))
@@ -360,6 +388,9 @@ def parse_turn(text, speaker):
         return result
 
     segments = []
+    head = text[:marks[0].start()].strip()
+    if head:
+        segments.append(("旁白", head))     # 第一个【】之前的内容按旁白算
     for i, m in enumerate(marks):
         end = marks[i + 1].start() if i + 1 < len(marks) else len(text)
         segments.append((m.group(1).strip(), text[m.end():end].strip()))
