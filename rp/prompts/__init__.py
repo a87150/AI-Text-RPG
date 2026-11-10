@@ -12,6 +12,7 @@ from string import Template
 from ..characters import ensure_characters, guess_name, role_labels, scene_split
 from ..config import creativity, mode_for, tier, tier_limits, writing
 from ..llm import strip_status_leaks, strip_thinking
+from ..stories import fill_names
 
 _DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -211,8 +212,9 @@ def build_system_prompt(sess, speaker=None):
         parts.append("你正在写一段沉浸式的长篇故事叙述，用第三人称旁白的口吻，"
                      "把场景、动作和在场角色的反应写出来。")
 
+    lead = chars[0]["name"] if chars else ""
     if sess.get("world"):
-        parts.append("【故事背景与世界观】\n" + sess["world"])
+        parts.append("【故事背景与世界观】\n" + fill_names(sess["world"], lead))
     parts.append(build_character_block(chars, speaker, sess.get("status")))
     if sess.get("user_role"):
         who = ("【%s（和你说话的人）】" % user_name) if mode == "rp" else ("【用户扮演的角色：%s】" % user_name)
@@ -232,7 +234,7 @@ def build_system_prompt(sess, speaker=None):
         parts.append("\n".join(lines))
     parts.append("【写法】\n" + build_rules(user_name, mode, names))
     if sess.get("rules"):
-        parts.append("【额外要求】\n" + sess["rules"])
+        parts.append("【额外要求】\n" + fill_names(sess["rules"], lead))
     return "\n\n".join(parts)
 
 
@@ -269,7 +271,10 @@ def build_lore_block(sess, recent_text=""):
     hits = lore_hits(sess, recent_text)
     if not hits:
         return ""
-    return "【世界书（本轮相关设定）】\n" + "\n".join("· " + h["content"] for h in hits)
+    chars = ensure_characters(sess)
+    lead = chars[0]["name"] if chars else ""
+    return ("【世界书（本轮相关设定）】\n"
+            + "\n".join("· " + fill_names(h["content"], lead) for h in hits))
 
 
 

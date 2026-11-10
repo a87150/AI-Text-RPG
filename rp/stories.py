@@ -128,7 +128,8 @@ def promote_characters(sess, limit):
     """对话里新出现的人回流成故事的长期角色。
 
     只带名字和身份：state / history 是这一局自己的进展，不能带进下一局。
-    故事角色已满就停手，别把模板撑爆。
+    模板满员也不静默丢，照局内那套做法：记下来交给玩家选，
+    别替他决定谁该被换掉。
     """
     story = load_story(sess.get("story_id") or "")
     if not story:
@@ -136,12 +137,14 @@ def promote_characters(sess, limit):
     cards = story.setdefault("characters", [])
     known = {(c.get("name") or "").strip() for c in cards}
     added = []
+    blocked = []
     for c in sess.get("characters") or []:
         name = (c.get("name") or "").strip()
         if not name or name in known:
             continue
         if len(cards) >= limit:
-            break
+            blocked.append(c)      # 不 break：后面可能还有已在册的，不能一刀切
+            continue
         cards.append({"name": name, "role": (c.get("role") or "").strip(),
                       "state": "", "history": []})
         known.add(name)
@@ -151,6 +154,14 @@ def promote_characters(sess, limit):
         story["ai_name"] = first.get("name") or ""
         story["ai_role"] = first.get("role") or ""
         save_story(story)
+    if blocked and not sess.get("pending_character"):
+        # 复用局内那个待定角色的位置，前端会弹选择框
+        c0 = blocked[0]
+        sess["pending_character"] = {
+            "name": (c0.get("name") or "").strip(),
+            "role": (c0.get("role") or "").strip()[:400],
+            "state": "",
+        }
     return added
 
 
@@ -168,3 +179,19 @@ def apply_to(sess, story):
     sess["summary"] = ""
     sess["turn"] = 0
     return sess
+
+PLACEHOLDER = "{主角}"   # 设定里的主角占位符
+
+
+def fill_names(text, lead=""):
+    """把设定里的 {主角} 换成这一局实际的名字。
+
+    模板一层只写占位符，运行时才知道真名；换名只改角色表，世界观和开场白自动跟上，
+    不用全局替换。只认带花括号的写法，裸的“主角”不动，免得把普通词也替了。
+    """
+    if not text:
+        return text
+    lead = (lead or "").strip()
+    if not lead:
+        return str(text)
+    return str(text).replace(PLACEHOLDER, lead)

@@ -1668,6 +1668,40 @@ def main():
           (bool(_blank72.get("story_id")), _n72, len(rp_stories.list_stories())))
     check("建空对话也没碰原模板", _sp72.read_bytes() == _before72)
 
+    # 73. 设定里的 {主角} 占位符
+    check("占位符换成真名",
+          rp_stories.fill_names("{主角}推开门。", "沈砚") == "沈砚推开门。")
+    check("没给名字就原样",
+          rp_stories.fill_names("{主角}推开门。", "") == "{主角}推开门。")
+    check("裸的主角不动",
+          rp_stories.fill_names("这个故事的主角很安静。", "沈砚")
+          == "这个故事的主角很安静。")
+    check("混用时只换带花括号的",
+          rp_stories.fill_names("{主角}是主角。", "沈砚") == "沈砚是主角。")
+
+    _ph = client.post("/api/sessions", json={}).get_json()
+    client.put("/api/sessions/" + _ph["id"], json={
+        "world": "{主角}是守灯人，{主角}怕黑。",
+        "rules": "不要让{主角}轻易妥协。",
+        "characters": [{"name": "沈砚", "role": "守灯人。"}],
+    })
+    _phs = rp_storage.load_session(_ph["id"])
+    _sys = rp_prompts.build_system_prompt(_phs)
+    check("系统提示里世界观已替换", "沈砚是守灯人，沈砚怕黑。" in _sys)
+    check("系统提示里额外要求已替换", "不要让沈砚轻易妥协。" in _sys)
+    check("存下来的仍是占位符",
+          _phs["world"] == "{主角}是守灯人，{主角}怕黑。", _phs.get("world"))
+
+    client.put("/api/sessions/" + _ph["id"], json={
+        "characters": [{"name": "顾辞", "role": "守灯人。"}],
+    })
+    _phs2 = rp_storage.load_session(_ph["id"])
+    _sys2 = rp_prompts.build_system_prompt(_phs2)
+    check("改名后同一份设定自动跟上",
+          "顾辞是守灯人，顾辞怕黑。" in _sys2)
+    check("改名不动存下来的设定", _phs2["world"] == _phs["world"])
+    check("按位置找出被改掉的名字",
+          rp_api._renames([{"name": "沈砚"}], [{"name": "顾辞"}]) == {"沈砚": "顾辞"})
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")

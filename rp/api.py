@@ -39,7 +39,7 @@ from .prompts import (
 )
 from .stories import (
     apply_to, delete_story, list_stories, load_story, new_story, save_story,
-    update_from, promote_characters,
+    update_from, promote_characters, fill_names,
 )
 from .snapshots import list_snapshots, load_snapshot, snapshot
 from .storage import (
@@ -219,10 +219,11 @@ def api_list_sessions():
 
 def seed_opening(sess):
     """把设定里的开场白变成第一条消息；已经聊过就不动。"""
-    text = (sess.get("opening") or "").strip()
+    chars = ensure_characters(sess)
+    # 开场白里的 {主角} 换成真名；存的还是占位符，改名不用重写
+    text = fill_names((sess.get("opening") or "").strip(), chars[0]["name"])
     if sess.get("messages") or not text:
         return
-    chars = ensure_characters(sess)
     use_rp = mode_for(sess) == "rp"
     turn = parse_turn(text, chars[0]["name"] if use_rp else "",
                       [c["name"] for c in chars] if use_rp else None)
@@ -235,6 +236,49 @@ def seed_opening(sess):
     else:
         msg = {"role": "assistant", "content": "", "narrator": turn["narrator"]}
     sess["messages"] = [msg]
+
+
+def _rename_all(sess, mapping):
+    """改了角色名，状态块里记着旧名的地方一起换掉。
+
+    只改名字不动别的：不换的话模型看到“在场：沈砚”而角色表写着“顾辞”，当成两个人。
+    """
+    if not mapping:
+        return
+    st = sess.get("status") or {}
+    for key in ("present", "away"):
+        names = st.get(key)
+        if isinstance(names, list):
+            st[key] = [mapping.get(str(n).strip(), n) for n in names]
+    for key in ("location", "time", "relations", "goal"):
+        v = st.get(key)
+        if isinstance(v, str) and v:
+            for old, new in mapping.items():
+                v = v.replace(old, new)
+            st[key] = v
+    items = st.get("items")
+    if isinstance(items, dict):
+        for old, new in mapping.items():
+            if old in items and new not in items:
+                items[new] = items.pop(old)
+    sess["status"] = st
+    # 标题里写了旧名也跟着换，但只换自动生成的那种
+    title = sess.get("title") or ""
+    if title:
+        for old, new in mapping.items():
+            title = title.replace(old, new)
+        sess["title"] = title
+
+
+def _renames(old_chars, new_chars):
+    """按位置对比新旧角色表，找出被改掉的名字。"""
+    m = {}
+    for a, b in zip(old_chars or [], new_chars or []):
+        an = (a.get("name") or "").strip() if isinstance(a, dict) else ""
+        bn = (b.get("name") or "").strip() if isinstance(b, dict) else ""
+        if an and bn and an != bn:
+            m[an] = bn
+    return m
 
 
 def _bind_story(sess, story):
@@ -611,6 +655,7 @@ def api_update_session(sid):
             if patch:
                 sess["status"] = merge_status(sess.get("status"), patch)
         custom_chars = isinstance(data.get("characters"), list)
+        _old_chars = [dict(c) for c in (sess.get("characters") or []) if isinstance(c, dict)]
         if custom_chars:
             # 用户手工编辑/删除/新增的角色表优先，随后由 ensure_characters 归一化
             sess["characters"] = [
@@ -627,6 +672,7 @@ def api_update_session(sid):
             # 角色表是唯一来源：第一个角色就是「AI 角色」，兼容旧字段
             sess["ai_name"] = chars[0]["name"]
             sess["ai_role"] = chars[0]["role"]
+            _rename_all(sess, _renames(_old_chars, sess["characters"]))
             if sess.get("title") in ("", DEFAULT_TITLE, "新对话"):
                 sess["title"] = "与%s的故事" % chars[0]["name"]
         elif len(chars) == 1:
