@@ -593,6 +593,15 @@ function bindUI() {
   $('#btn-send').onclick = sendFromInput;
   $('#btn-settings').onclick = () => openSettings();
   $('#btn-clear').onclick = clearSession;
+  $('#btn-export').onclick = () => {
+    if (!state.session) return;
+    const name = (state.session.title || 'story').replace(/[\\/:*?"<>|]/g, '');
+    const a = document.createElement('a');
+    a.href = '/api/sessions/' + state.session.id + '/export.md';
+    a.download = name + '.md';
+    a.click();
+    toast('已导出 ' + name + '.md', 'ok');
+  };
   $('#btn-compress').onclick = () => compressSession($('#btn-compress'));
   $('#btn-theme').onclick = () => { toggleTheme(); syncThemeSeg(); };
   $('#btn-context').onclick = openContext;

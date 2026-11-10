@@ -7,6 +7,7 @@ import {
   scrollToBottom, syncAll, syncComposer, focusComposer, mdToHtml, escapeHtml, updateSub,
 } from './ui.js';
 import { loadSessions, refreshCurrentSession } from './sessions.js';
+import { api } from './api.js';
 
 const TICK_MS = 1000;          // 状态栏按整秒走
 const WAIT_MS = 240000;        // 单次等待上限 240 秒
@@ -58,6 +59,77 @@ export async function retryLast(text) {
   await sendMessage(text, { isRetry: pending });
 }
 
+/** 生成中把发送按钮换成「停止」：写歪了不该等它吐完 600 字。 */
+function showStopButton(onStop) {
+  const send = $('#btn-send');
+  const stop = $('#btn-stop');
+  if (send) send.classList.add('hidden');
+  if (!stop) return;
+  stop.classList.remove('hidden');
+  stop.onclick = () => {
+    stop.disabled = true;
+    stop.textContent = '停止中…';
+    onStop();
+  };
+  stop.disabled = false;
+  stop.textContent = '■ 停止';
+}
+
+function hideStopButton() {
+  const send = $('#btn-send');
+  const stop = $('#btn-stop');
+  if (stop) {
+    stop.classList.add('hidden');
+    stop.disabled = false;
+    stop.textContent = '■ 停止';
+  }
+  if (send) send.classList.remove('hidden');
+}
+
+/** 停下来的半段内容：留下来还是扔掉，用户自己定。 */
+function showDraftActions(turnBox, shown, speaker, isPlain, originalText) {
+  const bar = document.createElement('div');
+  bar.className = 'draft-bar';
+  const tip = document.createElement('span');
+  tip.className = 'draft-tip';
+  tip.textContent = '已停止 · 这段是草稿';
+  const keep = document.createElement('button');
+  keep.type = 'button';
+  keep.className = 'draft-keep';
+  keep.textContent = '保留并继续';
+  keep.onclick = async () => {
+    keep.disabled = true;
+    try {
+      await api('/api/sessions/' + state.session.id + '/commit_partial',
+        { method: 'POST', body: { content: shown, speaker: speaker || '' } });
+      bar.remove();
+      await refreshCurrentSession();
+      renderMessages();
+      updateSub();
+      toast('草稿已存下，可以接着写', 'ok');
+    } catch (e) {
+      keep.disabled = false;
+      toast('存不下草稿：' + e.message, 'error');
+    }
+  };
+  const drop = document.createElement('button');
+  drop.type = 'button';
+  drop.className = 'draft-drop';
+  drop.textContent = '丢弃重写';
+  drop.onclick = () => {
+    bar.remove();
+    if (turnBox) turnBox.remove();
+    const input = $('#input');
+    if (input && !input.value.trim()) {
+      input.value = originalText;
+      syncComposer();
+    }
+    toast('已丢弃，内容放回输入框，改完再发', 'ok');
+  };
+  bar.append(tip, keep, drop);
+  if (turnBox) turnBox.appendChild(bar);
+}
+
 async function sendMessage(text, { isRetry }) {
   const s = state.session;
   if (!s.ai_role && !s.world) {
@@ -84,6 +156,7 @@ async function sendMessage(text, { isRetry }) {
   scrollToBottom();
 
   state.busy = true;
+  state.stopped = false;
   syncAll();
   focusComposer({ force: true });
 
@@ -92,6 +165,7 @@ async function sendMessage(text, { isRetry }) {
   let longestAcc = '';
   let gotDone = false;
   let success = false;
+  let draftShown = false;
 
   // 一般模式整段都是叙述，直接进气泡，不再拆旁白块
   const isPlain = !!(state.conf && state.conf.mode === 'normal');
@@ -104,6 +178,12 @@ async function sendMessage(text, { isRetry }) {
   };
   const ticker = setInterval(repaint, TICK_MS);
   setAiStatus('正在生成…', 'warn');
+  const stopper = new AbortController();
+  state.abortStream = stopper;
+  showStopButton(async () => {
+    state.stopped = true;
+    stopper.abort(new DOMException('用户停止', 'AbortError'));
+  });
 
   try {
     await streamSSE(
@@ -159,24 +239,36 @@ async function sendMessage(text, { isRetry }) {
           }
         }
       },
-      { idleTimeout: WAIT_MS }
+      { idleTimeout: WAIT_MS, signal: stopper.signal }
     );
 
     if (!gotDone) throw new Error('连接提前中断，未收到完整回复');
     success = true;
 
   } catch (e) {
-    const msg = (e && e.message) ? e.message : String(e);
+    const stopped = state.stopped;
     const shown = longestAcc || acc;
     current = renderStreaming(turnBox, shown, speaker || aiLabel, 0, isPlain) || current;
-    if (current) {
-      current.bubble.innerHTML = (shown ? mdToHtml(shown) + '<br>' : '')
-        + '<span class="err">⚠ ' + escapeHtml(msg) + '</span>';
+    if (stopped) {
+      // 停下来的内容不当失败：留着当草稿，让用户决定要还是不要
+      setAiStatus('已停止', 'warn');
+      if (shown.trim()) {
+        draftShown = true;
+        showDraftActions(turnBox, shown, speaker, isPlain, text);
+      }
+    } else {
+      const msg = (e && e.message) ? e.message : String(e);
+      if (current) {
+        current.bubble.innerHTML = (shown ? mdToHtml(shown) + '<br>' : '')
+          + '<span class="err">⚠ ' + escapeHtml(msg) + '</span>';
+      }
+      setAiStatus('生成失败：' + msg, 'error');
+      toast('生成失败：' + msg, 'error');
     }
-    setAiStatus('生成失败：' + msg, 'error');
-    toast('生成失败：' + msg, 'error');
 
   } finally {
+    state.abortStream = null;
+    hideStopButton();
     clearInterval(ticker);
     if (current && current.bubble) current.bubble.classList.remove('typing');
     state.busy = false;
@@ -187,7 +279,8 @@ async function sendMessage(text, { isRetry }) {
     requestAnimationFrame(() => focusComposer());
     setTimeout(() => focusComposer(), 60);
 
-    if (!success) appendRetryHint(text);
+    // 停止也算没答上，只是把话说清楚，别让人以为是模型挂了
+    if (!success && !(draftShown)) appendRetryHint(text, state.stopped);
 
     (async () => {
       const before = (s.messages || []).length;

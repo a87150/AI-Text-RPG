@@ -605,6 +605,28 @@ body.story-view .composer { display: none !important; }
 .pick-item .pi-go { flex: none; color: var(--text-mute); font-size: .75rem; }
 /* 显式写了 display 的元素会盖掉 hidden 属性，得补一刀 */
 [hidden] { display: none !important; }
+/* 生成中把「发送」换成「停止」，位置和尺寸都和发送按钮一致，省得按钮跳 */
+#btn-stop {
+  flex: none; align-self: flex-end;
+  padding: 0 18px; height: 36px; border-radius: 9px; cursor: pointer;
+  border: 1px solid var(--danger); background: transparent; color: var(--danger);
+  font-size: .8125rem; font-weight: 500;
+}
+#btn-stop:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 12%, transparent); }
+#btn-stop:disabled { opacity: .55; cursor: default; }
+.draft-bar {
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border);
+}
+.draft-tip { flex: 1; font-size: .75rem; color: var(--text-mute); }
+.draft-bar button {
+  padding: 5px 12px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--border); background: transparent;
+  color: var(--text-dim); font-size: .75rem;
+}
+.draft-bar .draft-keep { border-color: var(--accent); color: var(--accent); }
+.draft-bar button:hover:not(:disabled) { filter: brightness(1.15); }
+.draft-bar button:disabled { opacity: .55; cursor: default; }
 .sub-sep { color: var(--border-strong); }
 .sub-key { font-weight: 500; color: var(--text-mute); }
 .prefs-sub {

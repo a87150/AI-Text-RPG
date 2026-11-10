@@ -499,7 +499,7 @@ export function syncHeader() {
   // 故事视图里没有"当前对话"，这些操作只对对话有意义
   const storyView = state.sideView === 'stories';
   const on = !!state.session && !storyView;
-  for (const id of ['btn-settings', 'btn-compress', 'btn-clear', 'btn-context']) {
+  for (const id of ['btn-settings', 'btn-compress', 'btn-clear', 'btn-context', 'btn-export']) {
     const el = $('#' + id);
     if (!el) continue;
     el.disabled = !on || state.busy;
@@ -898,12 +898,14 @@ function summaryNode(summary) {
 }
 
 /** 上一条是用户消息 → 说明 AI 没答上，给出重试入口。 */
-export function appendRetryHint(lastContent) {
+export function appendRetryHint(lastContent, stopped) {
   const box = $('#messages');
   if (!box) return null;
   const wrap = document.createElement('div');
   wrap.className = 'retry-hint';
-  wrap.innerHTML = '<span>⚠ AI 尚未回复（自动重试仍失败）。</span>'
+  wrap.innerHTML = (stopped
+    ? '<span>你停止了这一轮，内容没有存下来。</span>'
+    : '<span>⚠ AI 尚未回复（自动重试仍失败）。</span>')
     + '<button type="button">重试上一条</button>';
   wrap.querySelector('button').onclick = () => {
     wrap.remove();

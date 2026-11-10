@@ -1,0 +1,17 @@
+feat(chat): stop mid-stream with draft keep/rewrite, plus Markdown export
+
+流式停止：
+- 生成中「发送」换成「■ 停止」，走 AbortController；streamSSE 新增 signal 参数
+- 停下来的半段内容留在气泡里标成草稿，给两个出路：
+  「保留并继续」→ POST /api/sessions/<sid>/commit_partial 入库（带 partial: true）
+  「丢弃重写」→ 清空气泡，内容放回输入框，改完再发
+- 停止不再谎报「AI 尚未回复（自动重试仍失败）」，改成「你停止了这一轮」
+
+Markdown 导出：
+- GET /api/sessions/<sid>/export.md，顶栏「📤 导出」
+- 角色表 → 背景 → 正文（用户消息当引用块、旁白斜体、言行带名字）→ 结尾状态 → 事实账本 → 前情提要
+- 草稿单独标注「这条是停止后保留的草稿」
+- 和备份 zip 分工：这份是给人看的，zip 那份是给程序还原的
+
+回滚上一版的角色 scene 字段：present/away 已经穷尽「能不能出场」，再给每人一个 location
+只是装饰，不是约束——分线叙事靠 location + present 切换表达就够了。

@@ -52,11 +52,16 @@ export async function api(path, { method = 'GET', body } = {}) {
  * 以 SSE 方式读取流式接口。
  * onEvent 抛错会中断读取并把错误抛给调用方。
  */
-export async function streamSSE(url, body, onEvent, { idleTimeout = 240000 } = {}) {
+export async function streamSSE(url, body, onEvent, { idleTimeout = 240000, signal } = {}) {
   const ctrl = new AbortController();
   let idleTimer = 0;
   let reader = null;
 
+  // 外面点「停止」时一起掐断；用户主动停不算超时，抛的错也换个名字
+  if (signal) {
+    if (signal.aborted) ctrl.abort(signal.reason);
+    else signal.addEventListener('abort', () => ctrl.abort(signal.reason), { once: true });
+  }
   const resetIdle = () => {
     clearTimeout(idleTimer);
     idleTimer = setTimeout(() => {

@@ -1000,6 +1000,59 @@ def main():
     _css = (pathlib.Path(__file__).parent / "static" / "css" / "app.css").read_text(encoding="utf-8")
     check("hidden 属性不会被 display 盖掉", "[hidden] { display: none !important; }" in _css)
 
+    # 41. 流式停止（草稿入库）+ Markdown 导出
+    _sp = client.post("/api/sessions", json={}).get_json()
+    client.put("/api/sessions/%s" % _sp["id"], json={
+        "title": "导出检查", "mode": "rp", "user_name": "我",
+        "characters": [{"name": "沈砚", "role": "守灯人", "state": "靠在门边"}],
+        "world": "海边有座孤塔。"})
+    rp_storage.save_session(dict(rp_storage.load_session(_sp["id"]), messages=[
+        {"role": "user", "content": "我推门进去。"},
+        {"role": "assistant", "content": "你来了。", "speaker": "沈砚", "narrator": "门轴响了一声。"},
+    ], status={"location": "灯塔二层", "time": "深夜", "present": ["沈砚"]},
+        facts=[{"text": "钥匙在抽屉里"}], turn=2))
+
+    _r = client.post("/api/sessions/%s/commit_partial" % _sp["id"],
+                     json={"content": "他没抬头，只把灯芯挑亮了一点。", "speaker": "沈砚"})
+    check("草稿能入库", _r.status_code == 200, str(_r.status_code))
+    _msgs = _r.get_json()["messages"]
+    check("草稿带 partial 标记", _msgs[-1].get("partial") is True)
+    check("草稿带说话人", _msgs[-1].get("speaker") == "沈砚")
+    check("草稿进了历史", len(_msgs) == 3, str(len(_msgs)))
+    check("空草稿被拒",
+          client.post("/api/sessions/%s/commit_partial" % _sp["id"], json={"content": "   "}).status_code == 400)
+
+    _md = client.get("/api/sessions/%s/export.md" % _sp["id"])
+    check("导出返回 200", _md.status_code == 200)
+    check("导出是 markdown", "markdown" in _md.headers.get("Content-Type", ""),
+          _md.headers.get("Content-Type"))
+    check("导出带附件名", "filename*=UTF-8" in _md.headers.get("Content-Disposition", ""),
+          _md.headers.get("Content-Disposition"))
+    _text = _md.get_data(as_text=True)
+    check("导出有标题", _text.startswith("# 导出检查"), _text[:20])
+    check("用户消息渲染成引用", "> **我**" in _text)
+    check("旁白单独成行", "*门轴响了一声。*" in _text)
+    check("角色言行带名字", "**沈砚**：你来了。" in _text)
+    check("草稿有标注", "停止后保留的草稿" in _text)
+    check("附录有状态", "## 结尾时的状态" in _text and "灯塔二层" in _text)
+    check("附录有账本", "## 事实账本" in _text and "钥匙在抽屉里" in _text)
+    check("导出不存在的会话 404", client.get("/api/sessions/nope/export.md").status_code == 404)
+    client.delete("/api/sessions/%s" % _sp["id"])
+
+    # 前端结构：停止按钮换掉发送、草稿两条出路、导出入口
+    _h = (pathlib.Path(__file__).parent / "templates" / "index.html").read_text(encoding="utf-8")
+    check("有停止按钮", 'id="btn-stop"' in _h)
+    check("有导出按钮", 'id="btn-export"' in _h)
+    _c = (pathlib.Path(__file__).parent / "static" / "js" / "chat.js").read_text(encoding="utf-8")
+    check("生成中把发送换成停止", "showStopButton" in _c and "hideStopButton" in _c)
+    check("停止走 AbortController", "stopper.abort" in _c)
+    check("草稿能保留", "commit_partial" in _c and "draft-keep" in _c)
+    check("草稿能丢弃重写", "draft-drop" in _c)
+    check("停止时不谎报模型失败", "你停止了这一轮" in
+          (pathlib.Path(__file__).parent / "static" / "js" / "ui.js").read_text(encoding="utf-8"))
+    _api = (pathlib.Path(__file__).parent / "static" / "js" / "api.js").read_text(encoding="utf-8")
+    check("streamSSE 接受外部中止信号", "signal }" in _api or "signal)" in _api)
+
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")

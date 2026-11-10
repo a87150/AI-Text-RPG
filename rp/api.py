@@ -285,6 +285,99 @@ def api_delete_story(story_sid):
 
 
 # ============================== 备份 ==============================
+def session_to_markdown(sess):
+    """把一局对话排成可读的 Markdown：状态块当引用，账本当附录。
+
+    这是给人的版本，不是给程序还原用的——备份 zip 那份才是。
+    """
+    lines = ["# %s" % (sess.get("title") or "未命名故事"), ""]
+    meta = []
+    if sess.get("user_name"):
+        meta.append("我 = %s" % sess["user_name"])
+    chars = sess.get("characters") or []
+    if chars:
+        meta.append("角色 = %s" % "、".join(c.get("name") or "?" for c in chars))
+    if sess.get("turn"):
+        meta.append("%s 轮" % sess["turn"])
+    if meta:
+        lines += ["*%s*" % " · ".join(meta), ""]
+
+    if chars:
+        lines += ["## 角色", ""]
+        for c in chars:
+            head = "- **%s**" % (c.get("name") or "?")
+            if c.get("scene"):
+                head += "（%s）" % c["scene"]
+            lines.append(head)
+            if c.get("role"):
+                lines.append("  %s" % c["role"].replace("\n", " ").strip())
+            if c.get("state"):
+                lines.append("  状态：%s" % c["state"])
+        lines.append("")
+
+    if sess.get("world"):
+        lines += ["## 背景", "", sess["world"].strip(), ""]
+
+    lines += ["## 正文", ""]
+    for m in sess.get("messages") or []:
+        content = (m.get("content") or "").strip()
+        narrator = (m.get("narrator") or "").strip()
+        if m.get("role") == "user":
+            who = sess.get("user_name") or "我"
+            lines += ["> **%s**" % who, ">", "> " + content.replace("\n", "\n> "), ""]
+            continue
+        if narrator:
+            lines += ["*%s*" % narrator, ""]
+        if content:
+            who = (m.get("speaker") or "").strip()
+            if who:
+                lines += ["**%s**：%s" % (who, content), ""]
+            else:
+                lines += [content, ""]
+        if m.get("partial"):
+            lines += ["> （这条是停止后保留的草稿）", ""]
+
+    status = sess.get("status") or {}
+    if status:
+        lines += ["## 结尾时的状态", ""]
+        for key, label in (("location", "场景"), ("time", "时间"),
+                           ("present", "在场"), ("away", "离场"),
+                           ("goal", "目标"), ("items", "物品"), ("relations", "关系")):
+            value = status.get(key)
+            if not value:
+                continue
+            if isinstance(value, list):
+                value = "、".join(str(v) for v in value)
+            lines.append("- %s：%s" % (label, value))
+        lines.append("")
+
+    facts = sess.get("facts") or []
+    if facts:
+        lines += ["## 事实账本", ""]
+        for f in facts:
+            text = f.get("text") if isinstance(f, dict) else str(f)
+            if text:
+                lines.append("- %s" % text)
+        lines.append("")
+
+    if sess.get("summary"):
+        lines += ["## 前情提要", "", sess["summary"].strip(), ""]
+    return "\n".join(lines).rstrip() + "\n"
+
+
+@app.get("/api/sessions/<sid>/export.md")
+def api_export_markdown(sid):
+    sess = load_session(sid)
+    if not sess:
+        return jsonify({"error": "会话不存在"}), 404
+    text = session_to_markdown(sess)
+    name = "".join(ch for ch in (sess.get("title") or "story")
+                   if ch.strip() and ch not in '\\/:*?"<>|') or "story"
+    resp = app.response_class(text, mimetype="text/markdown; charset=utf-8")
+    resp.headers["Content-Disposition"] = "attachment; filename*=UTF-8''%s.md" % requests.utils.quote(name)
+    return resp
+
+
 @app.get("/api/backups")
 def api_backups():
     return jsonify({"items": backup.listing(), "conf": backup_conf(),
@@ -498,6 +591,34 @@ def api_branch(sid):
     cloned["context_chars"] = context_chars(cloned)
     cloned["context"] = context_info(cloned)
     return jsonify(cloned)
+
+
+@app.post("/api/sessions/<sid>/commit_partial")
+def api_commit_partial(sid):
+    """把用户中途停下来的半段内容当正式回复存下。
+
+    停止时后端那一轮已经被掐断，不会自己写盘，所以这里补一条；
+    之后用户接着写，上下文里就有这段。
+    """
+    sess = load_session(sid)
+    if not sess:
+        return jsonify({"error": "会话不存在"}), 404
+    data = request.get_json(silent=True) or {}
+    content = str(data.get("content") or "").strip()
+    if not content:
+        return jsonify({"error": "没有内容可存"}), 400
+    speaker = str(data.get("speaker") or "").strip()
+    msg = {"role": "assistant", "content": content, "partial": True}
+    if speaker:
+        msg["speaker"] = speaker
+    sess.setdefault("messages", []).append(msg)
+    msg["turn"] = sess.get("turn") or 0
+    sess["updated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+    save_session(sess)
+    out = dict(sess)
+    out["context_chars"] = context_chars(sess)
+    out["context"] = context_info(sess)
+    return jsonify(out)
 
 
 @app.put("/api/sessions/<sid>/message")
