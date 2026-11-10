@@ -2,6 +2,7 @@
 """常量、路径、Flask 实例与模型提供方配置。"""
 import json
 import os
+import re
 import threading
 import uuid
 
@@ -58,11 +59,9 @@ PROVIDERS = {
         "base_url": "https://api.openai.com/v1",
         "models": ["gpt-4o-mini", "gpt-4o"],
     },
-    "custom": {
-        "label": "自定义（OpenAI 兼容）", "kind": "cloud",
-        "base_url": "", "models": [],
-    },
 }
+# 自定义提供方存在 _provider_overrides 里，键是用户起的 id，带 label 才算数
+_PROVIDER_ID = re.compile(r"^[A-Za-z0-9_-]{1,24}$")
 # 写作参数：字数、上下文上限等，可在设置里改
 WRITING_DEFAULTS = {
     "narrator_min": 40,
@@ -215,8 +214,9 @@ def save_reasoning(value, persist=True):
 
 # 回复模式：normal = 系统旁白叙述；rp = 角色轮流按人设说话
 MODES = ("normal", "rp")
+MODE_DEFAULT = "normal"
 MODE_LABELS = {"normal": "一般模式", "rp": "角色扮演"}
-_mode = "normal"
+_mode = MODE_DEFAULT
 
 
 def mode_of():
@@ -228,6 +228,23 @@ def mode_for(sess):
     """对话自己的模式优先；老会话没有就跟随全局默认。"""
     value = (sess or {}).get("mode")
     return value if value in MODES else mode_of()
+
+
+def reset_settings():
+    """把写作参数、模式、档位、思考强度、创意程度恢复出厂。
+
+    不动模型选择和云端 Key —— 那是用户配的接入凭据，还原默认不该让人重填一遍。
+    """
+    global _writing
+    save_tier(TIER_DEFAULT, persist=False)
+    save_mode(MODE_DEFAULT, persist=False)
+    save_reasoning(REASONING_DEFAULT, persist=False)
+    save_creativity(CREATIVITY_DEFAULT, persist=False)
+    with _model_lock:
+        # save_tier 会把 context_limit 写进 _writing，所以放它后面整体覆盖
+        _writing = dict(WRITING_DEFAULTS)
+    persist_settings()
+    return writing()
 
 
 def save_mode(value, persist=True):
@@ -287,6 +304,14 @@ def current_target():
         return _model_state["provider"], _model_state["model"]
 
 
+def provider_ids():
+    """内置的在前，用户自己加的在后。"""
+    with _model_lock:
+        extra = [pid for pid, over in _provider_overrides.items()
+                 if pid not in PROVIDERS and (over or {}).get("label")]
+    return list(PROVIDERS) + extra
+
+
 def provider_public(pid):
     """对外的提供方信息：不下发 API Key，只告诉前端有没有配。"""
     base = PROVIDERS.get(pid) or {}
@@ -296,8 +321,9 @@ def provider_public(pid):
         models = base.get("models") or []
     return {
         "id": pid,
-        "label": base.get("label") or pid,
+        "label": over.get("label") or base.get("label") or pid,
         "kind": base.get("kind") or "cloud",
+        "custom": pid not in PROVIDERS,
         "base_url": over.get("base_url") or base.get("base_url") or "",
         "models": list(models),
         "has_key": bool((over.get("api_key") or "").strip()),
@@ -386,10 +412,10 @@ def load_settings():
     providers = data.get("providers")
     if isinstance(providers, dict):
         for pid, conf in providers.items():
-            if pid in PROVIDERS and isinstance(conf, dict):
+            if isinstance(conf, dict) and (pid in PROVIDERS or conf.get("label")):
                 _provider_overrides[pid] = {
                     k: v for k, v in conf.items()
-                    if k in ("base_url", "api_key", "models") and isinstance(v, (str, list))
+                    if k in ("base_url", "api_key", "models", "label") and isinstance(v, (str, list))
                 }
 
     # 旧版本的 writing 没有版本号：默认值在那一版是 6 个角色，按新版重置一次
@@ -423,10 +449,15 @@ def load_settings():
 def set_current_model(provider, model):
     provider = (provider or DEFAULT_PROVIDER).strip()
     model = (model or "").strip()
-    if provider not in PROVIDERS:
+    if provider not in provider_ids():
         raise ValueError("未知的提供方：%s" % provider)
     if not model:
         raise ValueError("模型名不能为空")
+    known = provider_public(provider)["models"]
+    if known and model not in known:
+        # 换提供方却带着上一个提供方的模型名，请求会打到错误的端点然后 404
+        raise ValueError("%s 里没有 %s，先把这个模型名加到该提供方下"
+                         % (provider_public(provider)["label"], model))
     with _model_lock:
         _model_state["provider"] = provider
         _model_state["model"] = model
@@ -435,11 +466,21 @@ def set_current_model(provider, model):
 
 
 def save_provider(pid, data):
-    if pid not in PROVIDERS:
-        raise ValueError("未知的提供方：%s" % pid)
+    if not pid:
+        raise ValueError("提供方 id 不能为空")
+    if pid not in PROVIDERS and not _PROVIDER_ID.match(pid):
+        raise ValueError("提供方 id 只能用字母数字和 - _：%s" % pid)
     over = dict(_provider_overrides.get(pid) or {})
-    if PROVIDERS[pid].get("kind") == "ollama":
-        over.pop("base_url", None)   # 本地地址固定，不接受覆盖
+    label = data.get("label")
+    if isinstance(label, str) and label.strip():
+        over["label"] = label.strip()
+    if pid not in PROVIDERS and not over.get("label"):
+        raise ValueError("自定义提供方要填个名字")
+    if PROVIDERS.get(pid, {}).get("kind") == "ollama":
+        # 本地地址固定、模型列表由 Ollama 自己报，都不接受手填。
+        # 手填一个云端模型名进来，选中后请求照样打到本地，只会吃 404。
+        over.pop("base_url", None)
+        over.pop("models", None)
     elif isinstance(data.get("base_url"), str):
         over["base_url"] = data["base_url"].strip()
     key = data.get("api_key")
@@ -448,13 +489,29 @@ def save_provider(pid, data):
     if data.get("clear_key"):
         over.pop("api_key", None)
     models = data.get("models")
-    if isinstance(models, str):
-        over["models"] = [m.strip() for m in models.split(",") if m.strip()]
-    elif isinstance(models, list):
-        over["models"] = [str(m).strip() for m in models if str(m).strip()]
+    if PROVIDERS.get(pid, {}).get("kind") != "ollama":
+        if isinstance(models, str):
+            over["models"] = [m.strip() for m in models.split(",") if m.strip()]
+        elif isinstance(models, list):
+            over["models"] = [str(m).strip() for m in models if str(m).strip()]
     _provider_overrides[pid] = over
     persist_settings()
     return provider_public(pid)
+
+
+def delete_provider(pid):
+    """只删自己加的；内置的删了没意义，下次启动又回来。"""
+    if pid in PROVIDERS:
+        raise ValueError("内置提供方不能删")
+    if pid not in _provider_overrides:
+        raise ValueError("这个提供方不存在")
+    with _model_lock:
+        _provider_overrides.pop(pid, None)
+        if _model_state["provider"] == pid:
+            _model_state["provider"] = DEFAULT_PROVIDER
+            _model_state["model"] = DEFAULT_MODEL
+    persist_settings()
+    return provider_ids()
 
 
 def list_local_models(timeout=8):

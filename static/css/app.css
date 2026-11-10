@@ -607,6 +607,22 @@ body.story-view .composer { display: none !important; }
   margin: 18px 0 8px; padding-top: 12px; border-top: 1px dashed var(--border);
   font-size: .8125rem; font-weight: 600; color: var(--text-dim);
 }
+/* 每节自己的保存行：顺手给一行反馈，省得人点完不知道存没存 */
+.prefs-actions {
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--border);
+}
+.prefs-note { flex: 1; font-size: .75rem; color: var(--text-mute); }
+.prefs-note.ok { color: var(--ok); }
+.prefs-note.bad { color: var(--danger); }
+.prefs-save {
+  padding: 6px 14px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--border-strong, var(--border));
+  background: transparent; color: var(--text-dim);
+  font-size: .7813rem; font-weight: 500;
+}
+.prefs-save:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.prefs-save:disabled { opacity: .55; cursor: default; }
 .backup-actions { display: flex; align-items: center; gap: 10px; margin: 12px 0 10px; }
 #btn-backup-now {
   padding: 7px 16px; border-radius: 9px; cursor: pointer;

@@ -23,7 +23,8 @@ from .config import (
     provider_usable, reasoning_effort, save_backup_conf, save_mode,
     save_provider, save_reasoning, save_tier, save_writing, set_current_model,
     CREATIVITY_LABELS, CREATIVITY_LEVELS, CREATIVITY_TEMP,
-    creativity, creativity_temp, save_creativity,
+    MODE_DEFAULT, creativity, creativity_temp, delete_provider, provider_ids,
+    reset_settings, save_creativity,
     tier, tier_context, tier_limits, writing,
 )
 from .context import (
@@ -98,22 +99,28 @@ def api_writing():
                     "creativity": creativity()})
 
 
+@app.post("/api/writing/reset")
+def api_writing_reset():
+    return jsonify({"writing": reset_settings(), "mode": mode_of(),
+                    "reasoning_effort": reasoning_effort(), "tier": tier(),
+                    "creativity": creativity()})
+
+
 @app.get("/api/models")
 def api_models():
     """各提供方及其模型；Ollama 掉线不影响云端模型的选择。"""
     provider, model = current_target()
     providers = []
     error = ""
-    for pid in PROVIDERS:
+    for pid in provider_ids():
         info = provider_public(pid)
         if info["kind"] != "ollama" and not provider_usable(pid):
             continue      # 还没配置的云端不进入选择列表
         if info["kind"] == "ollama":
             try:
-                names = list_local_models()
-                if model not in names and provider == pid:
-                    names.insert(0, model)
-                info["models"] = names
+                # 只报 Ollama 真有的模型。以前会把当前选中的模型名硬插进来，
+                # 于是一个根本不存在的名字也能显示在本地列表里，选中就 404。
+                info["models"] = list_local_models()
             except (requests.exceptions.RequestException, ValueError) as exc:
                 error = "无法从 Ollama 获取本地模型：%s" % exc
         providers.append(info)
@@ -140,7 +147,7 @@ def api_set_model():
 
 @app.get("/api/providers")
 def api_providers():
-    return jsonify([provider_public(pid) for pid in PROVIDERS])
+    return jsonify([provider_public(pid) for pid in provider_ids()])
 
 
 @app.post("/api/providers/<pid>")
@@ -148,6 +155,14 @@ def api_save_provider(pid):
     data = request.get_json(silent=True) or {}
     try:
         return jsonify(save_provider(pid, data))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@app.delete("/api/providers/<pid>")
+def api_delete_provider(pid):
+    try:
+        return jsonify({"providers": delete_provider(pid), "items": provider_ids()})
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 

@@ -1,0 +1,22 @@
+feat(provider): custom providers, and stop ollama from carrying cloud model names
+
+为什么会「ollama 里多了个 deepseek 模型」——不是 Ollama 的事，是两处代码合起来造的：
+1. save_provider 只对 ollama 拦了 base_url，没拦 models，手填的名字照样存进去；
+2. /api/models 拿到本地列表后，发现当前选中的 model 不在里面，就 names.insert(0, model)
+   硬插一条。于是云端模型名混进本地列表，选中它 → 请求打到 127.0.0.1:11434 → 404。
+
+修：
+- save_provider 对 ollama 同时丢弃 models（本地列表由 Ollama 自己报）
+- /api/models 不再强插当前模型，只报真实存在的
+- set_current_model 校验 provider 与 model 是否配对，不配对直接报错，不再产生
+  「ollama 跑 deepseek-flash」这种组合
+- 前端 ollama 时模型名输入框置灰并给说明；之前只有 Key 置灰
+
+自定义提供方：
+- PROVIDERS 只留 ollama / deepseek / openai，任意的 customN 存进 overrides（带 label 才算数）
+- provider_ids() = 内置 + 自定义；/api/models、/api/providers 都走它
+- POST /api/providers/<pid> 支持新建（id 限字母数字-_，没名字拒绝）
+- DELETE /api/providers/<pid>，内置的拒绝；在用的被删会退回本地模型
+- 设置面板：下拉末尾「＋ 新增提供方…」，选中后出现起名输入；自定义提供方显示删除按钮
+- 顺带修：设置面板原来用 /api/models 的结果填下拉，而它会跳过没配好的云端，
+  导致 openai 这种从未配过 Key 的永远选不到、也就永远配不上。改用 /api/providers 全量。

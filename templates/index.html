@@ -202,6 +202,10 @@
                 </div>
               </div>
               <div class="hint" id="mode-hint"></div>
+        <div class="prefs-actions">
+          <span class="prefs-note" data-note="mode"></span>
+          <button type="button" class="prefs-save" data-save="mode">保存模式</button>
+        </div>
       </div>
     </details>
     <details class="prefs-sec" data-sec="look">
@@ -273,14 +277,26 @@
           </div>
         </div>
 
+        <div class="prefs-actions">
+          <span class="prefs-note" data-note="model"></span>
+          <button type="button" class="prefs-save" data-save="model">保存模型设置</button>
+        </div>
+
         <h4 class="prefs-sub">云端模型（可选）</h4>
               <div class="hint">
-                  填 OpenAI 兼容接口即可：DeepSeek 用 <code>https://api.deepseek.com/v1</code>，模型名 <code>deepseek-chat</code> 或 <code>deepseek-reasoner</code>。
+                  任何 OpenAI 兼容接口都能接：选一个内置的，或者点「＋ 新增」自己起一个（硅基流动、OpenRouter、中转站都行）。
                   Key 只保存在本机 <code>data/settings.json</code>，页面不回显。不配置也能只用本地模型。
                 </div>
                 <div class="field">
                   <label for="p-provider">提供方</label>
-                  <select id="p-provider"></select>
+                  <div class="model-row">
+                    <select id="p-provider"></select>
+                    <button class="ghost" id="p-del" type="button" title="删除这个自定义提供方">删除</button>
+                  </div>
+                </div>
+                <div class="field" id="p-label-field" hidden>
+                  <label for="p-label">给它起个名字</label>
+                  <input id="p-label" placeholder="硅基流动 / OpenRouter / 我的中转">
                 </div>
                 <div class="field">
                   <label for="p-base">接口地址（Base URL）</label>
@@ -293,6 +309,7 @@
                 <div class="field">
                   <label for="p-models">模型名（逗号分隔）</label>
                   <input id="p-models" placeholder="deepseek-chat, deepseek-reasoner">
+                  <div class="hint" id="p-models-hint"></div>
                 </div>
                 <div class="modal-actions">
                   <button id="p-clear-key" type="button">清除已存 Key</button>
@@ -306,7 +323,7 @@
     <details class="prefs-sec" data-sec="writing">
       <summary>写作</summary>
       <div class="prefs-body">
-        <div class="hint">字数直接影响生成量与耗时；改完点下面的「保存」。</div>
+        <div class="hint">字数直接影响生成量与耗时；改完点这一节底部的「保存写作参数」。</div>
               <div class="grid2">
                 <div class="field"><label for="w-narrator-min">旁白最少字数</label><input id="w-narrator-min" type="number" min="10" max="300"></div>
                 <div class="field"><label for="w-narrator-max">旁白最多字数</label><input id="w-narrator-max" type="number" min="20" max="600"></div>
@@ -320,6 +337,10 @@
                 <div class="field"><label for="w-keep">压缩后保留最近消息数</label><input id="w-keep" type="number" min="4" max="60"></div>
               </div>
               <div class="field"><label for="w-chars">同时在场角色上限</label><input id="w-chars" type="number" min="1" max="8"></div>
+        <div class="prefs-actions">
+          <span class="prefs-note" data-note="writing"></span>
+          <button type="button" class="prefs-save" data-save="writing">保存写作参数</button>
+        </div>
       </div>
     </details>
     <details class="prefs-sec" data-sec="backup">
@@ -344,9 +365,9 @@
     </details>
 
     <div class="modal-actions">
+      <button id="prefs-reset" type="button" class="ghost" title="模式、档位、思考强度、创意程度、写作字数恢复默认">还原默认</button>
       <span class="spacer"></span>
       <button id="prefs-close" type="button">关闭</button>
-      <button id="prefs-save" type="button" class="primary">保存</button>
     </div>
   </div>
 </div>

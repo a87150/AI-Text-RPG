@@ -863,6 +863,103 @@ def main():
           client.post("/api/writing", json={"creativity": "insane"}).get_json()["creativity"]
           == "standard")
 
+    # 38. 设置分节保存 + 还原默认
+    client.post("/api/writing", json={"narrator_min": 77, "narrator_max": 88,
+                                      "creativity": "wild", "reasoning_effort": "high",
+                                      "tier": "advanced", "mode": "rp"})
+    _before = client.get("/api/config").get_json()
+    check("还原前是改过的值", _before["writing"]["narrator_min"] == 77, str(_before["writing"]["narrator_min"]))
+
+    _reset = client.post("/api/writing/reset").get_json()
+    check("还原默认返回默认写作参数", _reset["writing"]["narrator_min"] == rp_config.WRITING_DEFAULTS["narrator_min"],
+          str(_reset["writing"]["narrator_min"]))
+    check("还原默认把模式换回默认", _reset["mode"] == rp_config.MODE_DEFAULT, _reset["mode"])
+    check("还原默认把档位换回默认", _reset["tier"] == rp_config.TIER_DEFAULT, _reset["tier"])
+    check("还原默认把思考强度换回默认", _reset["reasoning_effort"] == rp_config.REASONING_DEFAULT,
+          _reset["reasoning_effort"])
+    check("还原默认把创意程度换回默认", _reset["creativity"] == rp_config.CREATIVITY_DEFAULT,
+          _reset["creativity"])
+    _after = client.get("/api/config").get_json()
+    check("还原默认后上下文跟着档位", _after["writing"]["context_limit"] == rp_config.TIER_LIMITS["basic"]["context"],
+          str(_after["writing"]["context_limit"]))
+    check("还原默认不动模型选择",
+          _after["model"] == _before["model"] and _after["provider"] == _before["provider"],
+          _after["model"])
+
+    # 弹窗结构：底部不再有统一保存，三节各有自己的保存按钮
+    import re as _re
+    _html = (pathlib.Path(__file__).parent / "templates" / "index.html").read_text(encoding="utf-8")
+    check("底部统一保存按钮已删除", 'id="prefs-save"' not in _html)
+    check("底部换成还原默认", 'id="prefs-reset"' in _html)
+    check("三节各有保存按钮", _html.count('class="prefs-save"') == 3,
+          str(_html.count('class="prefs-save"')))
+    check("三节保存按钮分别标注", all('data-save="%s"' % k in _html for k in ("mode", "model", "writing")))
+    check("外观节没有多余保存按钮", 'data-save="look"' not in _html)
+
+    # 遮罩关闭必须同时看按下点，否则从弹窗里拖到遮罩上松手会整窗消失
+    _main = (pathlib.Path(__file__).parent / "static" / "js" / "main.js").read_text(encoding="utf-8")
+    check("遮罩关闭收成一个函数", "function bindBackdropClose" in _main)
+    check("三个弹窗都走同一条路径", _main.count("bindBackdropClose(") == 4,
+          str(_main.count("bindBackdropClose(")))
+    check("按下点也参与判定", "e.target === el && onBackdrop && !moved" in _main)
+    check("拖动超过阈值不算点击", "> 8" in _main.split("function bindBackdropClose")[1][:600])
+
+    # 39. 提供方：内置不可删、可自建、ollama 不吃手填模型名、错配会被挡
+    check("内置提供方只有三个", list(rp_config.PROVIDERS) == ["ollama", "deepseek", "openai"])
+    check("内置的不带 custom 标记", rp_config.provider_public("deepseek")["custom"] is False)
+
+    _ok = client.post("/api/providers/custom1", json={
+        "label": "中转站", "base_url": "https://relay.example/v1",
+        "api_key": "sk-test", "models": "a/b, c/d"})
+    check("能新建自定义提供方", _ok.status_code == 200, _ok.get_data(as_text=True)[:120])
+    _made = _ok.get_json()
+    check("自定义带 custom 标记", _made["custom"] is True)
+    check("自定义进得了提供方列表", "custom1" in rp_config.provider_ids(), str(rp_config.provider_ids()))
+    check("自定义算可用", rp_config.provider_usable("custom1"))
+    check("自定义端点拼对", rp_config.provider_endpoint("custom1") == "https://relay.example/v1/chat/completions",
+          rp_config.provider_endpoint("custom1"))
+    check("自定义下模型能选中", rp_config.set_current_model("custom1", "a/b") == ("custom1", "a/b"))
+
+    _noname = client.post("/api/providers/custom9", json={"base_url": "https://x/v1"})
+    check("没有名字的新提供方被拒", _noname.status_code == 400, str(_noname.status_code))
+
+    check("内置提供方不能删", client.delete("/api/providers/deepseek").status_code == 400)
+    check("自定义能删", client.delete("/api/providers/custom1").status_code == 200)
+    check("删完就消失", "custom1" not in rp_config.provider_ids())
+    check("删掉在用的提供方会退回本地",
+          rp_config.current_target()[0] == rp_config.DEFAULT_PROVIDER, str(rp_config.current_target()))
+
+    # ollama 的模型名不接受手填：填了会把云端模型名混进本地列表，选中就 404
+    rp_config.save_provider("ollama", {"models": "deepseek-flash", "base_url": "http://evil/v1"})
+    _local = rp_config.provider_public("ollama")
+    check("本地模型名手填被丢弃", _local["models"] == [], str(_local["models"]))
+    check("本地地址不接受覆盖", "evil" not in _local["base_url"], _local["base_url"])
+
+    # provider 与 model 错配要被挡住，否则请求会打到错误端点然后 404
+    client.post("/api/providers/custom2", json={"label": "X", "base_url": "https://x/v1",
+                                                "api_key": "k", "models": "only-this"})
+    _bad = client.post("/api/model", json={"provider": "custom2", "model": "别的模型"})
+    check("错配的模型名被拒", _bad.status_code == 400, str(_bad.status_code))
+    check("配对的模型名能设", client.post("/api/model", json={"provider": "custom2", "model": "only-this"}).status_code == 200)
+    client.post("/api/model", json={"provider": "ollama", "model": "dmtx/qwen3.5-9b-abliterated:latest"})
+    client.delete("/api/providers/custom2")
+
+    # 重启后自定义提供方还在
+    rp_config.save_provider("custom3", {"label": "留存检查", "base_url": "https://keep/v1",
+                                        "api_key": "k2", "models": "m1"})
+    rp_config.load_settings()
+    check("重新加载后自定义提供方还在", "custom3" in rp_config.provider_ids())
+    check("名字也读回来了", rp_config.provider_public("custom3")["label"] == "留存检查")
+    client.delete("/api/providers/custom3")
+
+    # 界面结构
+    _html2 = (pathlib.Path(__file__).parent / "templates" / "index.html").read_text(encoding="utf-8")
+    check("有起名输入框", 'id="p-label"' in _html2)
+    check("有删除按钮", 'id="p-del"' in _html2)
+    _main2 = (pathlib.Path(__file__).parent / "static" / "js" / "main.js").read_text(encoding="utf-8")
+    check("下拉里有新增项", "新增提供方" in _main2)
+    check("设置面板用全量提供方列表", "state.allProviders || state.providers" in _main2)
+
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")

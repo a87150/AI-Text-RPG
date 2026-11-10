@@ -28,7 +28,8 @@ let clearingKey = false;
 const MODEL_SEP = '::';
 
 function providerById(id) {
-  return state.providers.find((p) => p.id === id) || null;
+  const all = state.allProviders || state.providers;
+  return all.find((p) => p.id === id) || state.providers.find((p) => p.id === id) || null;
 }
 
 function buildModelOptions(select) {
@@ -89,6 +90,14 @@ async function loadModels(notify = true) {
   try {
     const data = await api('/api/models');
     state.providers = data.providers || [];
+    // /api/models 会跳过还没配好的云端提供方，但设置面板得能把它们列出来，
+    // 否则 openai 这种没配 Key 的永远选不到，也就永远配不上。
+    try {
+      const all = await api('/api/providers');
+      state.allProviders = Array.isArray(all) ? all : state.providers;
+    } catch (e) {
+      state.allProviders = state.providers;
+    }
     state.current = data.current || null;
     state.model = state.current ? state.current.model : '';
     fillModelSelect();
@@ -173,31 +182,55 @@ function setProviderStatus(text, kind = '') {
   el.className = kind;
 }
 
+const NEW_PROVIDER = '__new__';
+
 function fillProviderForm() {
   const pid = $('#p-provider').value;
   const info = providerById(pid);
-  $('#p-base').value = info ? info.base_url : '';
+  const isNew = pid === NEW_PROVIDER;
+  const local = !!info && info.kind === 'ollama';
+
+  $('#p-label-field').hidden = !isNew && !(info && info.custom);
+  $('#p-label').value = isNew ? '' : ((info && info.custom && info.label) || '');
+  $('#p-base').value = isNew || !info ? '' : info.base_url;
+  $('#p-base').disabled = local;
   $('#p-key').value = '';
-  $('#p-key').disabled = !!info && info.kind === 'ollama';
-  $('#p-key').placeholder = !info ? 'sk-…'
-    : (info.kind === 'ollama' ? '本地模型不需要 Key'
+  $('#p-key').disabled = local;
+  $('#p-key').placeholder = isNew || !info ? 'sk-…'
+    : (local ? '本地模型不需要 Key'
       : (info.has_key ? '已保存，留空表示不修改' : 'sk-…'));
-  $('#p-models').value = info ? (info.models || []).join(', ') : '';
-  setProviderStatus(info && info.kind === 'ollama'
-    ? '本地 Ollama：模型列表自动读取，无需配置。'
-    : '');
+  // 本地模型列表由 Ollama 自己报，手填一个云端模型名只会 404
+  $('#p-models').value = isNew || !info || local ? '' : (info.models || []).join(', ');
+  $('#p-models').disabled = local;
+  $('#p-models-hint').textContent = local ? '本地模型自动读取，不能手填。' : '';
+  const del = $('#p-del');
+  if (del) del.hidden = !(info && info.custom);
+  setProviderStatus(local ? '本地 Ollama：模型列表自动读取，无需配置。' : '');
+}
+
+function nextCustomId() {
+  const used = new Set(state.providers.map((p) => p.id));
+  for (let i = 1; i < 100; i += 1) {
+    const id = 'custom' + i;
+    if (!used.has(id)) return id;
+  }
+  return 'custom' + Date.now();
 }
 
 function fillProviderSelect() {
   const select = $('#p-provider');
   if (!select) return;
   select.innerHTML = '';
-  for (const p of state.providers) {
+  for (const p of (state.allProviders || state.providers)) {
     const opt = document.createElement('option');
     opt.value = p.id;
     opt.textContent = p.label;
     select.appendChild(opt);
   }
+  const add = document.createElement('option');
+  add.value = NEW_PROVIDER;
+  add.textContent = '＋ 新增提供方…';
+  select.appendChild(add);
   const preferred = state.current && providerById(state.current.provider)
     ? state.current.provider
     : (state.providers.some((p) => p.id === 'deepseek') ? 'deepseek' : '');
@@ -315,7 +348,40 @@ function syncTierSeg() {
   }
 }
 
-async function saveWriting() {
+const SAVE_LABELS = { mode: '模式', model: '模型设置', writing: '写作参数' };
+
+/** 分节保存共用一条路径：表单里的值本来就是一份，分开提交只会多出两条出错分支。 */
+async function saveSection(btn) {
+  const sec = (btn && btn.dataset.save) || 'writing';
+  const label = SAVE_LABELS[sec] || '设置';
+  const note = document.querySelector('.prefs-note[data-note="' + sec + '"]');
+  if (btn) { btn.disabled = true; btn.textContent = '保存中…'; }
+  const ok = await saveWriting(true);
+  if (btn) { btn.disabled = false; btn.textContent = '保存' + label; }
+  if (note) {
+    note.textContent = ok ? label + '已保存' : '保存失败，检查刚才的数字有没有填错';
+    note.className = 'prefs-note ' + (ok ? 'ok' : 'bad');
+  }
+}
+
+async function resetAll() {
+  if (!confirm('把模式、档位、思考强度、创意程度、写作字数都恢复默认？\n模型选择和云端 Key 不动。')) return;
+  try {
+    await api('/api/writing/reset', { method: 'POST' });
+    state.conf = await api('/api/config');
+    applyFont('md');
+    fillWritingForm();
+    syncModeSeg();
+    syncTierSeg();
+    syncReasoningSeg();
+    syncCreativitySeg();
+    toast('已恢复默认', 'ok');
+  } catch (e) {
+    toast('恢复默认失败：' + e.message, 'error');
+  }
+}
+
+async function saveWriting(quiet = false) {
   // 空着的项不提交：后端收到 0 会把参数压到下限
   const body = {};
   for (const [id, key] of [
@@ -345,10 +411,38 @@ async function saveWriting() {
     fillWritingForm();
     syncModeSeg();
     syncTierSeg();
-    toast('设置已保存', 'ok');
+    syncReasoningSeg();
+    syncCreativitySeg();
+    if (!quiet) toast('设置已保存', 'ok');
+    return true;
   } catch (e) {
-    toast('保存失败：' + e.message, 'error');
+    if (!quiet) toast('保存失败：' + e.message, 'error');
+    return false;
   }
+}
+
+/**
+ * 点遮罩关闭。不能只看 e.target：从弹窗里按下再滑到遮罩上松手，click 会派发给
+ * 两者的共同祖先（也就是遮罩），拖动选字、滑一下就整窗消失。得按下和松开都
+ * 在遮罩上、且没移动超过一点，才算真的点了遮罩。
+ */
+function bindBackdropClose(modalId, close) {
+  const el = document.getElementById(modalId);
+  if (!el) return;
+  let onBackdrop = false;
+  let downX = 0;
+  let downY = 0;
+  el.addEventListener('pointerdown', (e) => {
+    onBackdrop = e.target === el;
+    downX = e.clientX;
+    downY = e.clientY;
+  });
+  el.addEventListener('click', (e) => {
+    const moved = Math.hypot(e.clientX - downX, e.clientY - downY) > 8;
+    const hit = e.target === el && onBackdrop && !moved;
+    onBackdrop = false;
+    if (hit) close();
+  });
 }
 
 function openPrefs() {
@@ -367,8 +461,10 @@ function closePrefs() {
 }
 
 async function saveProviderForm() {
-  const pid = $('#p-provider').value;
+  let pid = $('#p-provider').value;
   if (!pid) return;
+  const isNew = pid === NEW_PROVIDER;
+  if (isNew) pid = nextCustomId();
   const btn = $('#p-save');
   btn.disabled = true;
   setProviderStatus('保存中…');
@@ -377,19 +473,39 @@ async function saveProviderForm() {
       base_url: ($('#p-base').value || '').trim(),
       models: ($('#p-models').value || '').trim(),
     };
+    if (isNew || (providerById(pid) || {}).custom) body.label = ($('#p-label').value || '').trim();
+    if (isNew && !body.label) throw new Error('先给它起个名字');
     const key = ($('#p-key').value || '').trim();
     if (key) body.api_key = key;
     if (clearingKey) body.clear_key = true;
     await api('/api/providers/' + pid, { method: 'POST', body });
     await loadModels(false);
+    fillProviderSelect();
+    $('#p-provider').value = pid;
     fillProviderForm();
     setProviderStatus('✅ 已保存', 'ok');
-    toast('云端模型设置已保存', 'ok');
+    toast(isNew ? '新提供方已加上' : '云端模型设置已保存', 'ok');
   } catch (e) {
     setProviderStatus('❌ ' + e.message, 'error');
   } finally {
     clearingKey = false;
     btn.disabled = false;
+  }
+}
+
+async function removeProvider() {
+  const pid = $('#p-provider').value;
+  const info = providerById(pid);
+  if (!info || !info.custom) return;
+  if (!confirm('删掉提供方「' + info.label + '」？它的地址和 Key 都会一起清掉。')) return;
+  try {
+    await api('/api/providers/' + pid, { method: 'DELETE' });
+    await loadModels(false);
+    fillProviderSelect();
+    fillProviderForm();
+    toast('已删除 ' + info.label, 'ok');
+  } catch (e) {
+    setProviderStatus('❌ ' + e.message, 'error');
   }
 }
 
@@ -484,7 +600,10 @@ function bindUI() {
   $('#btn-refresh-models').onclick = () => loadModels(true);
   $('#btn-prefs').onclick = openPrefs;
   $('#prefs-close').onclick = closePrefs;
-  $('#prefs-save').onclick = saveWriting;
+  $('#prefs-reset').onclick = resetAll;
+  for (const btn of document.querySelectorAll('#prefs-modal .prefs-save')) {
+    btn.onclick = () => saveSection(btn);
+  }
   $('#tier-seg').onclick = (e) => {
     const btn = e.target.closest('button[data-tier]');
     if (!btn) return;
@@ -576,6 +695,7 @@ function bindUI() {
 
   $('#p-provider').onchange = fillProviderForm;
   $('#p-save').onclick = saveProviderForm;
+  $('#p-del').onclick = removeProvider;
   $('#p-clear-key').onclick = clearProviderKey;
 
   // 点按钮时不让它抢走输入框焦点 —— 这是「发完消息要重新点输入框」的根源
@@ -590,15 +710,9 @@ function bindUI() {
     sendFromInput();
   });
 
-  $('#settings-modal').addEventListener('click', (e) => {
-    if (e.target.id === 'settings-modal') closeSettings();
-  });
-  $('#prefs-modal').addEventListener('click', (e) => {
-    if (e.target.id === 'prefs-modal') closePrefs();
-  });
-  $('#ctx-modal').addEventListener('click', (e) => {
-    if (e.target.id === 'ctx-modal') closeContext();
-  });
+  bindBackdropClose('settings-modal', closeSettings);
+  bindBackdropClose('prefs-modal', closePrefs);
+  bindBackdropClose('ctx-modal', closeContext);
 
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape' || !modalOpen()) return;
