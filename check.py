@@ -18,6 +18,7 @@ os.environ["LT_DATA_DIR"] = TMP_DIR
 os.environ["LT_BACKUP_DIR"] = os.path.join(TMP_DIR, "backups")
 
 import lt  # noqa: E402  必须在设置数据目录之后导入
+import threading  # noqa: E402
 import rp.api as rp_api  # noqa: E402
 import rp.characters as rp_characters  # noqa: E402
 import rp.config as rp_config  # noqa: E402
@@ -1582,6 +1583,47 @@ def main():
     check("操作条有 continue 动作", "'continue'" in _ui70)
     _mo70 = (pathlib.Path(__file__).parent / "static" / "js" / "msgops.js").read_text(encoding="utf-8")
     check("continue 动作真的被接住", "act === 'continue'" in _mo70)
+
+    # 71. 续写拼接、分叉不动原会话、并发写
+    _j71 = rp_api._join_text
+    check("续写：句号尾不重复",
+          _j71("他走了。", "他走了。雨还在下。") == "他走了。雨还在下。",
+          _j71("他走了。", "他走了。雨还在下。"))
+    check("续写：逗号尾不重复",
+          _j71("他停下，", "他停下，又控不住了。") == "他停下，又控不住了。")
+    check("续写：省略号尾不重复",
+          _j71("他张了张嘴……", "……什么也没说。") == "他张了张嘴……什么也没说。")
+    check("续写：不重复时原样拼",
+          _j71("他走了。", "雨还在下。") == "他走了。雨还在下。")
+    check("续写：空尾不动", _j71("他走了。", "") == "他走了。")
+    check("续写：前面空就直接用后面", _j71("", "雨。") == "雨。")
+
+    # 分叉不能动原会话的字节
+    _b71 = client.post("/api/sessions", json={}).get_json()
+    client.post("/api/sessions/%s/commit_partial" % _b71["id"],
+                json={"content": "第一段。"})
+    _path71 = rp_storage.session_path(_b71["id"])
+    _before71 = pathlib.Path(_path71).read_bytes()
+    _copy71 = client.post("/api/sessions/%s/branch" % _b71["id"], json={"index": 0})
+    check("分叉返回 200", _copy71.status_code == 200, _copy71.status_code)
+    check("分叉后原会话字节不变",
+          pathlib.Path(_path71).read_bytes() == _before71)
+    check("分叉出来的是新 id",
+          (_copy71.get_json() or {}).get("id") not in (None, _b71["id"]))
+
+    # 两个线程同时持旧版本写：只能成一个
+    _c71 = client.post("/api/sessions", json={}).get_json()
+    _stamp71 = rp_storage.load_session(_c71["id"])["updated_at"]
+    _codes = []
+    def _race():
+        r = client.put("/api/sessions/%s" % _c71["id"],
+                       json={"world": "同时写", "updated_at": _stamp71})
+        _codes.append(r.status_code)
+    _ts = [threading.Thread(target=_race) for _ in range(2)]
+    [_t.start() for _t in _ts]
+    [_t.join() for _t in _ts]
+    check("并发写只成一个，另一个被拦",
+          sorted(_codes) == [200, 409], _codes)
 
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
