@@ -558,23 +558,36 @@ export function updateSub() {
   }
   put('· ' + ((s.context ? s.context.messages : (s.messages || []).length) || 0) + ' 条');
 
-  // 场景和时间本来就记在状态块里，摆到顶栏省得每次点开看
-  const sep = document.createElement('span');
-  sep.className = 'sub-sep';
-  sep.textContent = ' | ';
-  const extra = [];
-  if (status.location) extra.push(['场景', status.location]);
-  if (status.time) extra.push(['时间', status.time]);
-  if (!extra.length) return;
-  el.appendChild(sep);
-  extra.forEach(([k, v], i) => {
-    if (i) put(' · ');
+  // 当前状态单独占一行：地点、时间、关系、目标、物品都记在状态块里，
+  // 挤在同一行会把上面的在场名单顶散
+  const flat = (v) => (Array.isArray(v) ? v.filter(Boolean).join('、') : String(v || '').trim());
+  const facts = [];
+  for (const [key, label] of [['location', '地点'], ['time', '时间'],
+    ['relations', '关系'], ['goal', '目标'], ['items', '物品']]) {
+    const value = flat(status[key]);
+    if (value) facts.push([label, value]);
+  }
+  if (!facts.length) return;
+  const line = document.createElement('div');
+  line.className = 'sub-state';
+  const icon = document.createElement('span');
+  icon.className = 'sub-icon';
+  icon.textContent = '🧭';
+  line.appendChild(icon);
+  facts.forEach(([k, v], i) => {
+    if (i) {
+      const dot = document.createElement('span');
+      dot.className = 'sub-sep';
+      dot.textContent = ' · ';
+      line.appendChild(dot);
+    }
     const key = document.createElement('b');
     key.className = 'sub-key';
     key.textContent = k + ' ';
-    el.appendChild(key);
-    put(v);
+    line.appendChild(key);
+    line.appendChild(document.createTextNode(v));
   });
+  el.appendChild(line);
 }
 
 /** 点顶栏的角色名，看这个角色此刻是什么状态。 */

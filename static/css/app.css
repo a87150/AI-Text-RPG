@@ -663,6 +663,12 @@ body.story-view .composer { display: none !important; }
 .draft-bar button:hover:not(:disabled) { filter: brightness(1.15); }
 .draft-bar button:disabled { opacity: .55; cursor: default; }
 .sub-sep { color: var(--border-strong); }
+/* 当前状态另起一行，长的话自己折，不挤在场名单 */
+.sub-state {
+  display: block; margin-top: 3px; line-height: 1.55;
+  max-width: min(100%, 92ch);
+}
+.sub-state .sub-icon { margin-right: 4px; opacity: .85; }
 .sub-key { font-weight: 500; color: var(--text-mute); }
 .prefs-sub {
   margin: 18px 0 8px; padding-top: 12px; border-top: 1px dashed var(--border);
