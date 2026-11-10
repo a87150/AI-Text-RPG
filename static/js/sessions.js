@@ -1,7 +1,7 @@
 /** 侧栏故事列表与故事级操作（打开 / 删除 / 清空 / 压缩 / 同步）。 */
 import { api } from './api.js';
 import { state } from './state.js';
-import { $, toast, renderMessages, syncAll, focusComposer, syncHeader, closeNav } from './ui.js';
+import { $, toast, renderMessages, syncAll, focusComposer, syncHeader, closeNav, loadDraft } from './ui.js';
 // 循环引用（settings 也用 sessions 的函数）：函数声明会被提升，运行期调用没问题
 import { openSettings } from './settings.js';
 
@@ -362,6 +362,7 @@ export async function openSession(id) {
     closeNav();
     renderSessionList();
     if (state.sideView === 'stories') renderStoryList();
+    $('#input').value = loadDraft(state.session.id);
     renderMessages();
     syncAll();
     focusComposer({ force: true });

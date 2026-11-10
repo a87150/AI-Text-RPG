@@ -107,6 +107,46 @@ def api_writing_reset():
                     "creativity": creativity()})
 
 
+@app.get("/api/search")
+def api_search():
+    """全文搜索：几千条消息直接扫 json 就够快，不需要索引。"""
+    query = (request.args.get("q") or "").strip()
+    limit = min(int(request.args.get("limit") or 80), 200)
+    if len(query) < 2:
+        return jsonify({"hits": [], "query": query})
+    needle = query.lower()
+    hits = []
+    for item in list_sessions():
+        sess = load_session(item["id"])
+        if not sess:
+            continue
+        for index, msg in enumerate(sess.get("messages") or []):
+            bits = [msg.get("content") or "", msg.get("narrator") or ""]
+            for line in msg.get("lines") or []:
+                bits.append((line.get("text") or ""))
+            for text in bits:
+                if not text or needle not in text.lower():
+                    continue
+                at = text.lower().index(needle)
+                start = max(0, at - 40)
+                snippet = text[start:start + 160].replace(chr(10), " ")
+                hits.append({
+                    "session_id": item["id"],
+                    "title": item["title"],
+                    "index": index,
+                    "role": msg.get("role") or "",
+                    "speaker": msg.get("speaker") or "",
+                    "snippet": ("…" if start else "") + snippet,
+                    "total": len(sess.get("messages") or []),
+                })
+                break
+            if len(hits) >= limit:
+                break
+        if len(hits) >= limit:
+            break
+    return jsonify({"hits": hits, "query": query})
+
+
 @app.get("/api/models")
 def api_models():
     """各提供方及其模型；Ollama 掉线不影响云端模型的选择。"""

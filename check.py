@@ -9,6 +9,7 @@ import re
 import pathlib
 import shutil
 import tempfile
+import urllib.parse
 import zipfile
 
 TMP_DIR = tempfile.mkdtemp(prefix="lt-check-")
@@ -1483,6 +1484,26 @@ def main():
     # 档位里的每个键也得有人用，别留死配置
     for _k in ("context", "history_msgs", "role_chars", "facts", "anchor_every", "attempts"):
         check("档位键 %s 有人用" % _k, _src66.count('["%s"]' % _k) >= 1)
+
+    # 67. 全文搜索 / 草稿 / 浮标 / 冲突提示
+    _s67 = rp_storage.new_session(title="搜索测试")
+    _s67["messages"] = [{"role": "user", "content": "我把青瓷瓶放回架子上了"},
+                        {"role": "assistant", "narrator": "青瓷瓶在架子上晃了一下"}]
+    rp_storage.save_session(_s67)
+    _hit = client.get("/api/search?q=" + urllib.parse.quote("青瓷瓶")).get_json()
+    check("全文搜索能命中正文", bool(_hit["hits"]), str(_hit)[:80])
+    check("搜索带出轮次和片段",
+          _hit["hits"] and _hit["hits"][0]["index"] == 0 and "青瓷瓶" in _hit["hits"][0]["snippet"])
+    check("少于两个字不搜", client.get("/api/search?q=a").get_json()["hits"] == [])
+    _ui67 = (pathlib.Path(__file__).parent / "static" / "js" / "ui.js").read_text(encoding="utf-8")
+    check("草稿按会话 id 存本地", "rp-draft:" in _ui67 and "saveDraftSoon" in _ui67)
+    check("草稿写入是 debounce 的", "clearTimeout(draftTimer)" in _ui67 and "}, 500)" in _ui67)
+    _html67 = (pathlib.Path(__file__).parent / "templates" / "index.html").read_text(encoding="utf-8")
+    check("有「新消息」浮标", 'id="jump-latest"' in _html67)
+    check("有冲突提示挂点", 'id="conflict-tip"' in _html67)
+    _chat67 = (pathlib.Path(__file__).parent / "static" / "js" / "chat.js").read_text(encoding="utf-8")
+    check("发送前查物品归属", "function itemConflict" in _chat67 and "conflictPassed" in _chat67)
+    check("单字物品不参与比对", "name.length < 2" in _chat67)
 
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:

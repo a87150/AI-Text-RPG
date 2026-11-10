@@ -43,6 +43,7 @@
           <select id="model-select" title="切换模型"></select>
           <button class="icon-btn" id="btn-refresh-models" type="button" title="刷新模型列表">⟳</button>
         </div>
+        <button id="btn-search" type="button" title="全文搜索：找某句话、某个名字出现在哪一轮">🔍</button>
         <button id="btn-context" type="button" disabled title="上下文用量、压缩情况与在场角色">📊</button>
         <button id="btn-settings" type="button" disabled>⚙ 设定</button>
         <button id="btn-compress" type="button" disabled>🗜 压缩</button>
@@ -65,7 +66,9 @@
     </section>
 
     <div class="messages" id="messages"></div>
+    <button type="button" class="jump-latest hidden" id="jump-latest">↓ 新消息</button>
 
+    <div class="conflict-tip hidden" id="conflict-tip"></div>
     <footer class="composer">
       <div class="composer-row">
         <textarea id="input" disabled placeholder="先新建或选择一个故事，才能开始对话"></textarea>
@@ -78,6 +81,17 @@
       </div>
     </footer>
   </main>
+</div>
+
+<div class="modal hidden" id="search-modal">
+  <div class="modal-box narrow">
+    <h2>全文搜索</h2>
+    <input id="search-input" type="text" placeholder="找一句话、一个名字、一件东西…" autocomplete="off">
+    <div class="search-hits" id="search-hits"></div>
+    <div class="modal-actions">
+      <button id="btn-search-close" type="button">关闭</button>
+    </div>
+  </div>
 </div>
 
 <div class="modal hidden" id="ctx-modal">

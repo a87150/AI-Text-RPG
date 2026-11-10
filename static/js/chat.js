@@ -23,6 +23,59 @@ function clearStatusSoon() {
   }, STATUS_KEEP_MS);
 }
 
+/**
+ * 发之前先跟物品账本对一下：输入里提到的东西如果记在别人名下，先问一句。
+ * 事中拦一下，比事后让模型把剧情圆回来便宜得多。
+ */
+function itemConflict(text) {
+  const sess = state.session;
+  if (!sess) return null;
+  const items = (sess.status && sess.status.items) || {};
+  const me = sess.user_name || '我';
+  for (const owner of Object.keys(items)) {
+    if (owner === me) continue;
+    const bag = items[owner];
+    const names = Array.isArray(bag) ? bag : String(bag || '').split(/[、,，;；]/);
+    for (const raw of names) {
+      const name = String(raw).trim();
+      // 单字（伞、刀）太容易撞上普通用词，只认两个字符以上的
+      if (name.length < 2 || !text.includes(name)) continue;
+      return { item: name, owner };
+    }
+  }
+  return null;
+}
+
+let conflictPassed = '';
+
+function hideConflict() {
+  const tip = $('#conflict-tip');
+  if (tip) { tip.classList.add('hidden'); tip.innerHTML = ''; }
+}
+
+function showConflict(hit, text) {
+  const tip = $('#conflict-tip');
+  if (!tip) return;
+  tip.innerHTML = '';
+  const msg = document.createElement('span');
+  msg.textContent = '⚠ 账本里「' + hit.item + '」记在' + hit.owner + '名下，这条消息说你手上有它。';
+  const fix = document.createElement('button');
+  fix.type = 'button';
+  fix.textContent = '仍然发送';
+  fix.onclick = () => {
+    conflictPassed = text;
+    hideConflict();
+    sendFromInput();
+  };
+  const cancel = document.createElement('button');
+  cancel.type = 'button';
+  cancel.className = 'ghost';
+  cancel.textContent = '改一下';
+  cancel.onclick = () => { hideConflict(); focusComposer({ force: true }); };
+  tip.append(msg, fix, cancel);
+  tip.classList.remove('hidden');
+}
+
 /** 输入框 → 校验 → 发送。 */
 export async function sendFromInput() {
   const input = $('#input');
@@ -42,6 +95,12 @@ export async function sendFromInput() {
     focusComposer({ force: true });
     return;
   }
+  if (conflictPassed !== text) {
+    const hit = itemConflict(text);
+    if (hit) { showConflict(hit, text); return; }
+  }
+  conflictPassed = '';
+  hideConflict();
   input.value = '';
   syncComposer();
   await sendMessage(text, { isRetry: false });
@@ -153,7 +212,7 @@ async function sendMessage(text, { isRetry }) {
   if (box) box.appendChild(turnBox);
   let speaker = '';
   let current = renderStreaming(turnBox, '', aiLabel, 0);
-  scrollToBottom();
+  scrollToBottom(true);
 
   state.busy = true;
   state.stopped = false;
@@ -197,7 +256,7 @@ async function sendMessage(text, { isRetry }) {
         } else if (ev.type === 'delta') {
           acc += ev.content || '';
           repaint();
-          scrollToBottom();
+          scrollToBottom(true);
 
         } else if (ev.type === 'retry') {
           if (acc.length > longestAcc.length) longestAcc = acc;

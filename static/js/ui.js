@@ -35,9 +35,31 @@ export function toast(msg, kind = '') {
   toastTimer = setTimeout(() => { el.className = kind ? kind : ''; }, 3200);
 }
 
-export function scrollToBottom() {
+/** 只差这一点就认为用户还贴在底部，愿意跟着新消息走。 */
+const STICK_PX = 80;
+
+function nearBottom(box) {
+  return box.scrollHeight - box.scrollTop - box.clientHeight < STICK_PX;
+}
+
+function showJump(show) {
+  const btn = $('#jump-latest');
+  if (btn) btn.classList.toggle('hidden', !show);
+}
+
+/**
+ * force=true：刚发完消息、刚切会话这种必须看到底部的情况。
+ * 否则只在用户本来就贴底时才跟随，往上翻就出「新消息」浮标，别把人拽走。
+ */
+export function scrollToBottom(force = false) {
   const box = $('#messages');
-  if (box) box.scrollTop = box.scrollHeight;
+  if (!box) return;
+  if (!force && !nearBottom(box)) {
+    showJump(true);
+    return;
+  }
+  box.scrollTop = box.scrollHeight;
+  showJump(false);
 }
 
 /* ------------------------------ 主题 ------------------------------ */
@@ -85,6 +107,34 @@ export function initFont() {
   let saved = '';
   try { saved = localStorage.getItem(FONT_KEY) || ''; } catch (e) { /* ignore */ }
   applyFont(saved || 'md', false);
+}
+
+/* ------------------------------ 输入草稿 ------------------------------ */
+// 切会话、刷新、分叉之后输入框被重建成空的，写了一半的话就没了。
+// 按会话 id 存本地，输入时 debounce 500ms 写，进会话时读回来。
+const DRAFT_PREFIX = 'rp-draft:';
+let draftTimer = 0;
+
+export function saveDraftSoon() {
+  const el = $('#input');
+  const sid = state.session && state.session.id;
+  if (!el || !sid) return;
+  clearTimeout(draftTimer);
+  const text = el.value;
+  draftTimer = setTimeout(() => {
+    try {
+      if (text.trim()) localStorage.setItem(DRAFT_PREFIX + sid, text);
+      else localStorage.removeItem(DRAFT_PREFIX + sid);
+    } catch (e) { /* 隐私模式存不下就算了 */ }
+  }, 500);
+}
+
+export function loadDraft(sid) {
+  try {
+    return (sid && localStorage.getItem(DRAFT_PREFIX + sid)) || '';
+  } catch (e) {
+    return '';
+  }
 }
 
 /* ------------------------------ 焦点 ------------------------------ */
@@ -1059,7 +1109,7 @@ export function appendRetryHint(lastContent, stopped) {
     document.dispatchEvent(new CustomEvent('rp:retry-last', { detail: { text: lastContent } }));
   };
   box.appendChild(wrap);
-  scrollToBottom();
+  scrollToBottom(true);
   return wrap;
 }
 
@@ -1110,7 +1160,7 @@ export function renderMessages() {
     if (state.session && state.session.busy) appendBusyHint();
     else appendRetryHint(last.content || '');
   }
-  scrollToBottom();
+  scrollToBottom(true);
 }
 
 /** 刷新打断的是浏览器这头的流，后端照旧在生成，盯着会话等它落盘。 */
@@ -1130,7 +1180,7 @@ export function appendBusyHint() {
   wrap.className = 'retry-hint busy';
   wrap.innerHTML = '<span>✍ AI 正在写这一轮（页面刷新不会打断它，写完会自动出现）。</span>';
   box.appendChild(wrap);
-  scrollToBottom();
+  scrollToBottom(true);
   const sid = state.session && state.session.id;
   if (!sid) return wrap;
   busyTimer = setInterval(async () => {

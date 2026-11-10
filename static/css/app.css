@@ -952,3 +952,48 @@ body.story-view .composer { display: none !important; }
   .story-pane .modal-actions { padding: 10px 0 4px; }
   .story-pane .modal-actions button { flex: 1 1 auto; }
 }
+
+/* 用户往上翻的时候别硬拽回底部，给个浮标点一下才回去 */
+.jump-latest {
+  position: fixed; right: 28px; bottom: 104px; z-index: 40;
+  padding: 6px 14px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--border-strong); background: var(--bg-elev);
+  color: var(--text); font-size: .75rem; font-family: inherit;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .28);
+}
+.jump-latest:hover { border-color: var(--accent); color: var(--text); }
+.jump-latest.hidden { display: none; }
+
+/* 发送前拦一下：账本说东西不在你手上 */
+.conflict-tip {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin: 0 20px 8px; padding: 9px 12px; border-radius: 10px;
+  border: 1px solid #8a5a12; background: rgba(180, 120, 20, .12);
+  color: var(--text); font-size: .7813rem;
+}
+.conflict-tip.hidden { display: none; }
+.conflict-tip button {
+  padding: 4px 11px; border-radius: 7px; cursor: pointer; font-size: .75rem;
+  border: 1px solid var(--border-strong); background: transparent; color: var(--text);
+}
+.conflict-tip button.ghost { color: var(--text-dim); }
+.conflict-tip button:hover { border-color: var(--accent); }
+
+/* 全文搜索 */
+.search-hits {
+  max-height: 52vh; overflow-y: auto; margin: 10px 0;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.search-hit {
+  text-align: left; padding: 8px 10px; border-radius: 9px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--bg-input); color: var(--text);
+  font-family: inherit; font-size: .7813rem;
+}
+.search-hit:hover { border-color: var(--accent); }
+.search-hit-head { color: var(--text-dim); font-size: .7188rem; margin-bottom: 3px; }
+.search-hit-body { line-height: 1.5; }
+.search-flash { animation: searchFlash 1.6s ease-out; }
+@keyframes searchFlash {
+  0% { background: rgba(120, 160, 255, .35); }
+  100% { background: transparent; }
+}

@@ -4,7 +4,8 @@ import { state } from './state.js';
 import {
   $, toast, initTheme, toggleTheme, applyFont, initFont, renderMessages, syncAll,
   syncComposer, focusComposer, setConnectionBanner, modalOpen, renderContextDetail,
-  closeNav, toggleCharPop, closeCharPop,
+  saveDraftSoon, loadDraft,
+  closeNav, toggleCharPop, closeCharPop, scrollToBottom,
 } from './ui.js';
 import {
   loadSessions, createSession, clearSession, compressSession, switchSideView,
@@ -15,6 +16,7 @@ import {
 import { refreshBackups, runBackup, saveBackupConf } from './backup.js';
 import { sendFromInput, bindRetryEvents } from './chat.js';
 import { bindMessageActions } from './msgops.js';
+import { bindSearch } from './search.js';
 import {
   openSettings, closeSettings, saveSettings, enhance, regenOpening,
   newRunFromSettings, setDraftMode, addLoreEntry, popIdea, closeIdea, startEnhance,
@@ -714,7 +716,8 @@ function bindUI() {
     btn.addEventListener('mousedown', (e) => e.preventDefault());
   }
 
-  $('#input').addEventListener('input', syncComposer);
+  $('#jump-latest').onclick = () => scrollToBottom(true);
+$('#input').addEventListener('input', () => { syncComposer(); saveDraftSoon(); });
   $('#input').addEventListener('keydown', (e) => {
     if (e.key !== 'Enter' || e.shiftKey || e.isComposing) return;
     e.preventDefault();
@@ -745,6 +748,7 @@ async function boot() {
   initFont();
   bindRetryEvents();
   bindMessageActions();
+  bindSearch();
   bindUI();
   await refreshBackendStatus();
   await loadSessions();
