@@ -4,7 +4,7 @@ import threading
 import time
 
 from .characters import role_labels
-from .config import MAX_ENHANCE_ATTEMPTS, app, writing
+from .config import MAX_ENHANCE_ATTEMPTS, app, tier_limits, writing
 from .llm import model_text
 from .prompts import build_context_debug, build_summary_prompt
 from .snapshots import snapshot
@@ -21,7 +21,9 @@ def context_chars(sess):
             total += len(c.get("name") or "") + len(c.get("role") or "")
             total += len(c.get("state") or "")
             total += sum(len(h) for h in (c.get("history") or []) if isinstance(h, str))
-    for m in sess.get("messages") or []:
+    # 已经写进摘要的那些不再计：它们不再发给模型，算进去会让阈值永远撞线
+    start = int(sess.get("compressed_upto") or 0)
+    for m in (sess.get("messages") or [])[start:]:
         total += len(m.get("content") or "") + len(m.get("narrator") or "")
     return total
 
@@ -56,21 +58,35 @@ def compress_session(sid, force=False, max_attempts=2):
         sess = load_session(sid)
         if not sess:
             return False
-        messages = list(sess.get("messages") or [])
-        keep = writing()["keep_recent"]
+        all_msgs = list(sess.get("messages") or [])
+        start = int(sess.get("compressed_upto") or 0)
+        start = min(max(start, 0), len(all_msgs))
+        messages = all_msgs[start:]      # 只管还没摘要过的那一截
+        # 压缩后留下的条数不能少于历史能带的条数，否则压了个寂寞：
+        # 比如标准档能带 40 条历史，只留 16 条，下次照样得带全部
+        keep = max(writing()["keep_recent"], tier_limits()["history_msgs"] or 0)
         limit = writing()["context_limit"]
         if len(messages) <= keep + 2:
             return False
-        if not force and context_chars(sess) <= limit:
+        # 两个闸门，撞哪个都得压：
+        # 只看字符数的话，短消息几十条就能把历史顶出去，而总字符还没到上限，
+        # 于是压缩不触发、早期消息被 build_messages 悄悄截掉，连摘要都没有
+        hist_cap = tier_limits()["history_msgs"]
+        too_many = bool(hist_cap) and len(messages) > hist_cap
+        if not force and context_chars(sess) <= limit and not too_many:
             return False
         snapshot(sess, "compress")     # 压缩不可逆，先留退路
+        # 切点对齐到一条用户发言，否则留下的大半是半截对话，
+        # build_messages 还得再把开头那条 assistant 丢掉
         split = len(messages) - keep
+        while split < len(messages) and messages[split].get("role") != "user":
+            split += 1
         old = messages[:split]
         if len(old) < 2:
             return False
         prev_summary = sess.get("summary") or ""
         user_name, ai_name = role_labels(sess)
-        snapshot_len = len(messages)
+        snapshot_len = len(all_msgs)
 
     text = "\n".join(
         ("【旁白】%s\n" % m["narrator"] if m.get("narrator") else "")
@@ -107,6 +123,7 @@ def compress_session(sid, force=False, max_attempts=2):
         if len(current) != snapshot_len:
             app.logger.info("压缩放弃：期间会话内容变化")
             return False
+        new_start = start + split
         prev = sess.get("compress") or {}
         sess["compress"] = {
             "times": int(prev.get("times") or 0) + 1,
@@ -115,15 +132,27 @@ def compress_session(sid, force=False, max_attempts=2):
             "updated_at": time.time(),
         }
         sess["summary"] = summary
-        sess["messages"] = current[snapshot_len - keep:]
+        # 只把游标往前推，消息本身一条不删：界面要能一直回看，
+        # 存档、导出、重写也都还是完整的
+        sess["compressed_upto"] = new_start
         save_session(sess)
         return True
 
 
+_compress_fail_at = {}       # sid -> 上次失败时间
+_COMPRESS_RETRY_SECS = 300  # 失败了先歇五分钟，别每轮都白调一次模型
+
+
 def background_compress(sid):
+    last = _compress_fail_at.get(sid)
+    if last and time.time() - last < _COMPRESS_RETRY_SECS:
+        return
+
     def worker():
         try:
             compress_session(sid)
+            _compress_fail_at.pop(sid, None)
         except Exception as exc:
+            _compress_fail_at[sid] = time.time()
             app.logger.warning("后台压缩异常：%s", exc)
     threading.Thread(target=worker, daemon=True).start()

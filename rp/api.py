@@ -543,6 +543,12 @@ def _rewind_to(sess, index):
             break
     sess["messages"] = msgs[:index]
     sess["turn"] = mark
+    # 游标把剩下的消息也盖住了就退回去，保证重写点前面还留着一截原文：
+    # 只剩摘要的话，模型接不上刚才的语气和细节
+    _cur = int(sess.get("compressed_upto") or 0)
+    _buff = writing()["keep_recent"]
+    if _cur > index - _buff:
+        sess["compressed_upto"] = max(0, index - _buff)
     facts = sess.get("facts")
     if isinstance(facts, list):
         # 账本的 turn 记在 advance_turn 之前，比消息的 turn 小 1，所以用严格小于

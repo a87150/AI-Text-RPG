@@ -1145,6 +1145,77 @@ def main():
     _uijs = (pathlib.Path(__file__).parent / "static" / "js" / "ui.js").read_text(encoding="utf-8")
     check("消息能渲染已编辑标", "edited-tag" in _uijs and "m.edited" in _uijs)
 
+    # 46. 压缩要有两个闸门：字符超限、或者条数超了历史能带的量
+    rp_config.save_tier("basic", persist=False)
+    _calls = []
+    _orig_model_text = rp_context.model_text
+    rp_context.model_text = lambda m, **kw: (_calls.append(1), "提要：两人在灯塔里过了一夜。")[1]
+    try:
+        _cs = rp_storage.new_session()
+        _cs["mode"] = "normal"
+        _cmsgs = []
+        for _i in range(10):
+            _cmsgs.append({"role": "user", "content": "第%d句：" % _i + "我往里走了一步。" * 6,
+                           "turn": _i})
+            _cmsgs.append({"role": "assistant", "content": "",
+                           "narrator": "第%d段：" % _i + "灯影在墙上晃。" * 6, "turn": _i + 1})
+        _cs["messages"] = _cmsgs
+        _cs["turn"] = 10
+        rp_storage.save_session(_cs)
+        _chars = rp_context.context_chars(_cs)
+        check("短消息几十条时字符远没到上限", _chars < rp_config.writing()["context_limit"],
+              str(_chars))
+        check("条数超了历史能带的量", len(_cmsgs) > rp_config.tier_limits()["history_msgs"])
+        _ok = rp_context.compress_session(_cs["id"])
+        check("条数超限也触发压缩", _ok is True)
+        check("压缩确实调了一次模型", len(_calls) == 1, str(len(_calls)))
+        _after = rp_storage.load_session(_cs["id"])
+        check("压缩一条消息都不删", len(_after["messages"]) == len(_cmsgs),
+              "%d vs %d" % (len(_after["messages"]), len(_cmsgs)))
+        check("压缩只推游标", int(_after.get("compressed_upto") or 0) > 0,
+              str(_after.get("compressed_upto")))
+        _histafter = [m for m in rp_prompts.build_messages(_after, None) if m["role"] != "system"]
+        check("游标之后的历史条数够带满",
+              len(_histafter) >= rp_config.tier_limits()["history_msgs"] - 1,
+              "%d" % len(_histafter))
+        check("压缩后留下摘要", bool((_after.get("summary") or "").strip()))
+        check("游标落在用户发言上",
+              _after["messages"][int(_after["compressed_upto"])].get("role") == "user",
+              _after["messages"][int(_after["compressed_upto"])].get("role"))
+        check("压缩后字符变少", rp_context.context_chars(_after) < _chars)
+        check("刚压完不会重复压", rp_context.compress_session(_cs["id"]) is False)
+        check("没有白调第二次模型", len(_calls) == 1, str(len(_calls)))
+        # 摘要要进 system 提示，否则等于没留
+        _built = rp_prompts.build_messages(_after, None)
+        check("摘要进了上下文", "两人在灯塔里过了一夜" in _built[0]["content"])
+        _p = rp_storage.session_path(_cs["id"])
+        if _p:
+            os.remove(_p)
+    finally:
+        rp_context.model_text = _orig_model_text
+
+    # 47. 压缩失败不能每轮都重试，得有退避
+    _ctxsrc = (pathlib.Path(__file__).parent / "rp" / "context.py").read_text(encoding="utf-8")
+    check("压缩失败有退避", "_COMPRESS_RETRY_SECS" in _ctxsrc and "_compress_fail_at" in _ctxsrc)
+    check("压缩切点对齐用户发言", 'messages[split].get("role") != "user"' in _ctxsrc)
+
+    # 48. 重写砍进摘要范围时，游标要退，保证重写点前面还留着原文
+    _rs2 = client.post("/api/sessions", json={}).get_json()
+    _sv = rp_storage.load_session(_rs2["id"])
+    _sv["messages"] = [{"role": "user" if i % 2 == 0 else "assistant",
+                        "content": "m%d" % i, "turn": i} for i in range(20)]
+    _sv["turn"] = 20
+    _sv["compressed_upto"] = 12
+    _sv["summary"] = "更早的提要"
+    rp_storage.save_session(_sv)
+    _rb = client.post("/api/sessions/%s/rewind" % _rs2["id"], json={"index": 6}).get_json()
+    check("重写砍进摘要范围时游标退回", int(_rb.get("compressed_upto") or 0) == 0,
+          str(_rb.get("compressed_upto")))
+    _rb2 = client.post("/api/sessions/%s/rewind" % _rs2["id"], json={"index": 18}).get_json()
+    check("重写点在摘要范围外时游标不动", int(_rb2.get("compressed_upto") or 0) == 0,
+          str(_rb2.get("compressed_upto")))
+    client.delete("/api/sessions/%s" % _rs2["id"])
+
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")

@@ -367,7 +367,12 @@ def build_messages(sess, speaker=None):
         if anchor:
             # 贴在最近几轮之前，而不是只留在最顶上被稀释
             messages.insert(max(1, len(messages) - 3), {"role": "system", "content": anchor})
+    # 压缩不删消息，只是把游标推到摘要覆盖到的位置；
+    # 消息本身留着给界面回看、导出和重写用
     history = sess.get("messages") or []
+    _start = int(sess.get("compressed_upto") or 0)
+    if _start:
+        history = history[_start:]
     cap = tier_limits()["history_msgs"]
     if cap and len(history) > cap:
         history = history[-cap:]
