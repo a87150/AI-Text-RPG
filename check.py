@@ -210,8 +210,9 @@ def main():
           kept["characters"][0]["state"] == "伤了一条腿", kept["characters"][0])
 
     # 第二回合必须换人说话
-    speaker2 = lt.next_speaker(after_turn)
-    check("第二回合轮到另一个角色", speaker2 == "周惠兰", speaker2)
+    # 圆桌式后不再由代码指定单一发言人
+    check("不再按轮次指定发言人", lt.next_speaker(after_turn) == "",
+          lt.next_speaker(after_turn))
     check("角色数不超过上限", len(after_turn["characters"]) <= rp_config.writing()["max_characters"])
 
     # 8. 模式切换：一般模式由系统叙述，不分配发言人
@@ -229,7 +230,7 @@ def main():
           rp_characters.next_speaker(plain_sess))
     turn = rp_characters.parse_turn("雨还在下。\n【沈砚】他把伞收起来。", "")
     check("一般模式整段算叙述",
-          bool(turn["narrator"]) and not turn["line"], turn)
+          turn["narrator"].startswith("雨还在下") and not turn["lines"], turn)
 
     MODE["kind"] = "final"
     plain_resp = client.post("/api/chat", json={"session_id": plain_sid, "message": "我推门进去。"})
@@ -246,8 +247,8 @@ def main():
           "叙述者" in rules_plain and "你这一轮演的就是" not in rules_plain,
           rules_plain[:80])
     rules_rp = rp_prompts.build_rules("林晚", "rp", "沈砚")
-    check("角色扮演提示词要求轮流发言",
-          "只有一位角色说话" in rules_rp or "只写【" in rules_rp, rules_rp[:80])
+    check("角色扮演提示词要求在场角色各自发言",
+          "各写一段" in rules_rp and "旁白" in rules_rp, rules_rp[:90])
     rp_config.save_mode("rp", persist=False)
 
     # 9. 模式固定在会话上；故事能复用开多局
@@ -264,8 +265,7 @@ def main():
         "mode": "rp",
     }).get_json()
     check("模式改为扮演后固定在这个对话",
-          saved["mode"] == "rp" and rp_characters.next_speaker(saved) == "沈砚",
-          saved.get("mode"))
+          saved["mode"] == "rp", saved.get("mode"))
     check("第一个角色就是 AI 角色",
           saved["ai_name"] == "沈砚" and saved["ai_role"] == "守灯人",
           (saved.get("ai_name"), saved.get("ai_role")))
@@ -660,7 +660,7 @@ def main():
     check("没标过就全员在场",
           len(rp_characters.scene_split(scene_chars, {})[0]) == 3)
     scene_sess = {"turn": 3, "mode": "rp", "characters": scene_chars, "status": scene_status}
-    check("只让在场的人说话", rp_characters.next_speaker(scene_sess) == "沈砚")
+    check("圆桌式不再指定单一发言人", rp_characters.next_speaker(scene_sess) == "")   # 在场分组见下面两条
     block = rp_prompts.build_character_block(scene_chars, "沈砚", scene_status)
     check("离场角色写进提示但标注不要出现",
           "周掌柜" in block and "不在这一场" in block, block[-80:])
@@ -1255,8 +1255,10 @@ def main():
     _uijs3 = (pathlib.Path(__file__).parent / "static" / "js" / "ui.js").read_text(encoding="utf-8")
     check("顶栏画当前状态", "sub-state" in _uijs3 and "🧭" in _uijs3)
     for _f, _lab in (("location", "地点"), ("time", "时间"), ("relations", "关系"),
-                     ("goal", "目标"), ("items", "物品")):
+                     ("goal", "目标")):
         check("顶栏带%s" % _lab, "['%s', '%s']" % (_f, _lab) in _uijs3)
+    # 物品归人，不再挤在状态行里
+    check("顶栏不带物品", "['items', '物品']" not in _uijs3)
     check("数组型字段会拼成顿号", "Array.isArray(v)" in _uijs3)
 
     # 52. 四个字数设置合起来决定一轮的总量
@@ -1395,6 +1397,44 @@ def main():
     check("选择框能选不要新角色", "不要新角色" in _uijs2)
     check("主角单独成格，不再混进在场名单", "put('主角：')" in _uijs2)
     check("主角也有自己的状态弹层", "if (!c && name === me)" in _uijs2)
+
+    # 62. 圆桌式：一轮旁白 + 在场角色各自发言
+    _round = ("夜深了，客厅只剩一盏灯。" + chr(10) + chr(10)
+              + "【玉芬】她回过头：「你还没睡。」" + chr(10) + chr(10)
+              + "【小雅】她把膝盖抱得更紧了。")
+    _r6 = rp_characters.parse_turn(_round, "", ["玉芬", "小雅"])
+    check("旁白和发言分开",
+          _r6["narrator"].startswith("夜深") and len(_r6["lines"]) == 2, str(_r6["lines"]))
+    check("每个在场角色各一条", [x["speaker"] for x in _r6["lines"]] == ["玉芬", "小雅"],
+          str(_r6["lines"]))
+    check("认不出的名字不吞内容", "路人" not in _r6["narrator"])
+
+    _r7 = rp_characters.parse_turn("开头。" + chr(10) + "【路人甲】他说了一句。", "", ["玉芬"])
+    check("临时路人也能露脸", len(_r7["lines"]) == 1 and _r7["narrator"] == "开头。", str(_r7))
+    check("rp 不再按轮次指定发言人", rp_characters.next_speaker({"mode": "rp", "turn": 3,
+          "characters": [{"name": "A", "role": "", "state": "", "history": []}]}) == "")
+    _rules_rp = rp_prompts.build_rules("林晚", "rp", "玉芬")
+    check("规则要求先旁白再逐人发言",
+          "旁白" in _rules_rp and "各写一段" in _rules_rp, _rules_rp[:90])
+
+    # 63. 角色卡统一一条「状况」；物品只在他自己的弹层里
+    _ui63 = (pathlib.Path(__file__).parent / "static" / "js" / "ui.js").read_text(encoding="utf-8")
+    check("人物只留一条状况", "['近况'" not in _ui63)
+    check("所有角色都有状况行", "rows.push(['状况'" in _ui63)
+    check("状况不再和近况重复", "t !== c.state" in _ui63)
+    check("顶栏那行不再列物品", "['items', '物品']" not in _ui63)
+    check("物品进角色弹层", "status.items[name]" in _ui63)
+
+    # 64. 备份份数可调，上限 30
+    check("备份份数有默认", rp_config.BACKUP_DEFAULTS.get("keep") == 30)
+    check("备份份数有上界", rp_config.BACKUP_BOUNDS.get("keep") == (1, 30))
+    _bk = rp_config.save_backup_conf({"keep": 99})
+    check("超过 30 会被压回 30", _bk["keep"] == 30, str(_bk))
+    rp_config.save_backup_conf({"keep": 30})
+    _bjs = (pathlib.Path(__file__).parent / "static" / "js" / "backup.js").read_text(encoding="utf-8")
+    check("界面上能填份数", "#backup-keep" in _bjs)
+    _h64 = (pathlib.Path(__file__).parent / "templates" / "index.html").read_text(encoding="utf-8")
+    check("输入框上限是 30", 'id="backup-keep" min="1" max="30"' in _h64)
 
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:

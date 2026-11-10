@@ -54,9 +54,12 @@ def ensure_characters(sess):
 
 
 def next_speaker(sess):
-    """轮流发言：由代码决定，模型只负责内容。一般模式没有发言人。"""
-    if mode_for(sess) == "normal":
-        return ""
+    """以前按人轮，一个回合只让一位角色说话。
+
+    现在 rp 模式改成「旁白 + 在场角色各自发言」，不再有单一发言人，
+    这里恒返回空，只留给旧代码和开场逻辑调用。
+    """
+    return ""
     chars = ensure_characters(sess)
     on, _off = scene_split(chars, sess.get("status"))
     pool = on or chars              # 全离场（状态写坏）时退回全体，总得有人说话
@@ -403,78 +406,55 @@ def active_facts(sess, limit=FACTS_KEEP):
     return live[-limit:]
 
 
+def is_character_slot(tag):
+    """【名字】这种两到四个汉字的短标签，才可能是角色段。"""
+    text = str(tag or "").strip()
+    return bool(text) and len(text) <= 8 and not re.search(r"[，,。；;：:！？!?\s0-9]", text)
+
+
 def _sync_new_character(result):
     """new_characters 是准的，new_character 留第一个给旧调用方。"""
     if result["new_characters"]:
         result["new_character"] = result["new_characters"][0]
 
 
-def parse_turn(text, speaker):
-    """拆出旁白与指定角色的台词。
+def parse_turn(text, speaker="", names=None):
+    """拆出旁白和每个角色的发言。
 
-    只认【本回合发言人】那一段：模型额外写给其它角色的台词一律丢弃，
-    保证一轮只有一个人说话，不会出现角色互相刷屏。
+    names 给了就按「一轮多人发言」处理：所有【名字】段落各收一条到 lines。
+    names 没给（一般模式）时退回老行为——不认识的标签原样留在正文里。
+    speaker 只是兼容旧调用，现在不再靠它筛人。
     """
+    names = [str(n).strip() for n in (names or []) if str(n).strip()]
     text = strip_thinking(text or "").strip()
     text, status = extract_status(text)
     facts = list((status or {}).pop(FACT_KEY, []) or [])
-    result = {"narrator": "", "speaker": speaker, "line": "",
+    result = {"narrator": "", "speaker": speaker, "line": "", "lines": [],
               "new_character": None, "new_characters": [],
               "updates": [], "status": status,
               "facts": facts}
     if not text:
         return result
 
-    if not speaker:
-        # 一般模式：整段都是叙述者的话，不拆角色。但【新角色】【变化】仍要认，
-        # 否则用户说「加个角色」永远没反应，那行 JSON 还会原样漏进正文。
-        marks = list(SEG_RE.finditer(text))
-        if not marks:
-            result["narrator"] = text
-            return result
-        keep = []
-        head = text[:marks[0].start()].strip()
-        if head:
-            keep.append(head)       # 第一个【】之前还有正文，别吞
-        for i, m in enumerate(marks):
-            end = marks[i + 1].start() if i + 1 < len(marks) else len(text)
-            tag = m.group(1).strip()
-            body = text[m.end():end].strip()
-            if not body:
-                continue
-            obj = None
-            if tag in ("新角色", "新增角色", "角色"):
-                objs = [o for o in extract_json_all(body) if (o.get("name") or "").strip()]
-                if objs:
-                    result["new_characters"].extend(objs)
-                    continue
-            elif tag in ("变化", "状态", "设定变化"):
-                ups = [o for o in extract_json_all(body)
-                       if (o.get("name") or "").strip() and (o.get("change") or "").strip()]
-                if ups:
-                    result["updates"].extend(ups)
-                    continue
-            # 认不出来的标签、或格式写坏的，原样留在正文里，不吞内容
-            keep.append(m.group(0) + body)
-        result["narrator"] = "\n\n".join(keep).strip()
-        _sync_new_character(result)
-        return result
-
     marks = list(SEG_RE.finditer(text))
     if not marks:
-        result["line"] = text
+        # 模型没分段：rp 模式整段算这个人的台词，一般模式算旁白
+        if speaker or names:
+            result["line"] = text
+        else:
+            result["narrator"] = text
         return result
 
-    segments = []
+    # 【旁白】之前的正文就是这一轮的旁白
     head = text[:marks[0].start()].strip()
-    if head:
-        segments.append(("旁白", head))     # 第一个【】之前的内容按旁白算
+    known = set(names)
+    if speaker:
+        known.add(speaker)
+    narrator_parts = [head] if head else []
     for i, m in enumerate(marks):
         end = marks[i + 1].start() if i + 1 < len(marks) else len(text)
-        segments.append((m.group(1).strip(), text[m.end():end].strip()))
-
-    narrator_parts, speaker_parts = [], []
-    for tag, body in segments:
+        tag = m.group(1).strip()
+        body = text[m.end():end].strip()
         if not body:
             continue
         if tag in ("旁白", "叙述", "系统"):
@@ -486,16 +466,15 @@ def parse_turn(text, speaker):
             result["updates"].extend(
                 o for o in extract_json_all(body)
                 if (o.get("name") or "").strip() and (o.get("change") or "").strip())
-        elif tag == speaker:
-            speaker_parts.append(body)
-        # 其它角色的段落：丢弃
+        elif tag in known or (names and is_character_slot(tag)):
+            result["lines"].append({"speaker": tag, "text": body})
+        else:
+            # 认不出的人名（模型临时起意写的路人）也别丢，当旁白接着写
+            narrator_parts.append("%s%s" % (m.group(0), body))
 
-    line = "\n\n".join(speaker_parts).strip()
-    if not line:
-        # 模型没给指定角色台词时，用旁白兜底，避免整轮空白
-        line = "\n\n".join(narrator_parts).strip()
-        narrator_parts = []
-    result["narrator"] = "\n\n".join(narrator_parts).strip()
-    result["line"] = line
+    result["narrator"] = "\n\n".join(p for p in narrator_parts if p).strip()
+    result["line"] = result["lines"][0]["text"] if result["lines"] else result["narrator"]
+    if result["lines"]:
+        result["speaker"] = result["speaker"] or result["lines"][0]["speaker"]
     _sync_new_character(result)
     return result

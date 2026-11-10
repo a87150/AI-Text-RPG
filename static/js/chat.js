@@ -218,13 +218,14 @@ async function sendMessage(text, { isRetry }) {
           const turn = ev.turn || (acc ? (isPlain
             ? { narrator: acc, speaker: '', line: '' }
             : { narrator: '', speaker: speaker || aiLabel, line: longestAcc || acc }) : null);
-          if (turn && (turn.line || turn.narrator)) {
-            // 完成后重排：先画外音，再角色言行
+          if (turn && (turn.line || turn.narrator || (turn.lines || []).length)) {
+            // 完成后重排：先画外音，再按发言顺序排角色气泡
             current = renderTurn(turnBox, turn) || current;
             if (!s.messages) s.messages = [];
             const msg = { role: 'assistant', content: turn.line || '' };
             if (turn.narrator) msg.narrator = turn.narrator;
             if (turn.speaker) msg.speaker = turn.speaker;
+            if ((turn.lines || []).length) msg.lines = turn.lines;
             s.messages.push(msg);
           }
           if (ev.characters) s.characters = ev.characters;

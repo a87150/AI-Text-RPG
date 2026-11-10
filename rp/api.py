@@ -180,7 +180,8 @@ def seed_opening(sess):
         return
     chars = ensure_characters(sess)
     use_rp = mode_for(sess) == "rp"
-    turn = parse_turn(text, chars[0]["name"] if use_rp else "")
+    turn = parse_turn(text, chars[0]["name"] if use_rp else "",
+                      [c["name"] for c in chars] if use_rp else None)
     if not (turn["line"] or turn["narrator"]):
         return
     if use_rp:
@@ -867,9 +868,10 @@ def api_opening(sid):
         return jsonify({"error": "当前对话已有内容，请先「清空」再重新生成开场"}), 400
 
     use_rp = mode_for(sess) == "rp"
+    chars = ensure_characters(sess)
     first_speaker = next_speaker(sess)
-    ask = ("请写出这场角色扮演的开场：先来一小段旁白，再让【%s】登场说第一段话。"
-           % first_speaker) if use_rp else (
+    ask = ("请写出这场角色扮演的开场：先来一小段旁白，再让在场角色各自说一句。"
+           ) if use_rp else (
            "请写出这段故事的开场：用旁白口吻交代场景与气氛，"
            "让在场角色自然出现并做出反应，200~300 字。")
     messages = [
@@ -885,7 +887,7 @@ def api_opening(sid):
             if not text:
                 return
 
-            turn = parse_turn(text, first_speaker)
+            turn = parse_turn(text, first_speaker, [c["name"] for c in chars] if use_rp else None)
             body = turn["line"] if use_rp else turn["narrator"]
             if not body:
                 yield sse({"type": "error", "message": "开场没有可用内容，请重试。"})
@@ -949,6 +951,8 @@ def _commit_turn(s2, turn, use_rp):
         msg = {"role": "assistant", "content": turn["line"], "speaker": turn["speaker"]}
         if turn["narrator"]:
             msg["narrator"] = turn["narrator"]
+        if turn.get("lines"):
+            msg["lines"] = turn["lines"]      # 一轮里每人一段，前端按这个排
     else:
         # 系统叙述：正文放 narrator，前端渲染成旁白块
         msg = {"role": "assistant", "content": "", "narrator": turn["narrator"]}
@@ -1021,7 +1025,8 @@ def api_chat():
                 msgs.append({"role": "user", "content": text})
             if sess.get("title") in ("", DEFAULT_TITLE, "新对话"):
                 sess["title"] = text[:16]
-            speaker = next_speaker(sess)      # 发言权由代码分配，模型只能写这一位
+            speaker = next_speaker(sess)      # 现在恒为空：一轮里在场角色各自发言
+            cast = [c["name"] for c in ensure_characters(sess)]
             save_session(sess)
             messages = build_messages(sess, speaker)
     except LookupError as exc:
@@ -1049,10 +1054,10 @@ def api_chat():
             if answer is None:
                 return
 
-            turn = parse_turn(answer, speaker)
-            if use_rp and not turn["line"]:
+            turn = parse_turn(answer, speaker, cast if use_rp else None)
+            if use_rp and not (turn["lines"] or turn["narrator"]):
                 yield sse({"type": "error",
-                           "message": "模型没有给出【%s】的台词，请重试。" % speaker})
+                           "message": "模型这一轮没写出内容（旁白和角色发言都空），请重试。"})
                 return
             if not use_rp and not turn["narrator"]:
                 yield sse({"type": "error", "message": "模型没有给出内容，请重试。"})

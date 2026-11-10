@@ -576,8 +576,9 @@ export function updateSub() {
     return String(v || '').trim();
   };
   const facts = [];
+  // 物品不在这一行：谁的归谁，去角色弹层里看
   for (const [key, label] of [['location', '地点'], ['time', '时间'],
-    ['relations', '关系'], ['goal', '目标'], ['items', '物品']]) {
+    ['relations', '关系'], ['goal', '目标']]) {
     const value = flat(status[key]);
     if (value) facts.push([label, value]);
   }
@@ -670,11 +671,15 @@ export function toggleCharPop(name, anchor) {
     carried = status.items.trim() + '（公共）';
   }
   if (carried) rows.push(['物品', carried]);
-  if (c.state) rows.push(['状态', c.state]);
-  if (c.history && c.history.length) {
-    rows.push(['近况', c.history.slice(-3).join('；')]);
+  // 状况统一一条：state 是最近这次变化，history 是之前几次，接起来读，不重复
+  const beats = [];
+  for (const line of (c.history || [])) {
+    const t = String(line || '').trim();
+    if (t && t !== c.state && !beats.includes(t)) beats.push(t);
   }
-  if (!rows.length) rows.push(['状态', '还没有记录，聊几轮之后这里会有内容']);
+  const state = String(c.state || '').trim();
+  const tail = beats.length ? '（此前：' + beats.slice(-2).join('；') + '）' : '';
+  rows.push(['状况', (state || '还没有记录，聊几轮之后这里会有内容') + tail]);
   if (name === me) rows.unshift(['身份', '你这一局演的就是 TA']);
 
   pop.textContent = '';
@@ -771,28 +776,43 @@ export function splitSegments(text) {
     marks.push({ tag: m[1].trim(), start: m.index, bodyStart: m.index + m[0].length });
   }
   if (!marks.length) return [{ tag: '', body: src.trim() }];
-  return marks.map((mk, i) => ({
+  // 第一个【】之前那段是旁白，之前整段被丢掉了：流式时开头一直空着，收尾才补上
+  const out = [];
+  const head = src.slice(0, marks[0].start).trim();
+  if (head) out.push({ tag: '', body: head });
+  marks.forEach((mk, i) => out.push({
     tag: mk.tag,
     body: src.slice(mk.bodyStart, i + 1 < marks.length ? marks[i + 1].start : src.length).trim(),
   }));
+  return out;
 }
 
-/** 只保留旁白和本轮发言人的台词：别人抢话的段落、新角色/变化指令都不显示。 */
+const META_TAGS = ['新角色', '新增角色', '角色', '变化', '状态', '设定变化'];
+const NARR_TAGS = ['旁白', '叙述', '系统'];
+
+/**
+ * 拆出旁白与每个角色的发言。
+ * 圆桌之后一轮里会有好几个人说话，所以这里返回列表而不是单条台词；
+ * 【新角色】【变化】这些是给后端看的，不渲染。
+ */
 export function pickTurn(text, speaker) {
-  const out = { narrator: '', line: '' };
+  const out = { narrator: '', line: '', lines: [] };
   const narrators = [];
-  const lines = [];
   for (const seg of splitSegments(text)) {
-    if (seg.tag === '旁白' || seg.tag === '叙述' || seg.tag === '系统') {
-      if (seg.body) narrators.push(seg.body);
-    } else if (seg.tag === speaker) {
-      if (seg.body) lines.push(seg.body);
-    } else if (!seg.tag && seg.body) {
-      (speaker ? lines : narrators).push(seg.body);
+    const body = seg.body || '';
+    if (!body) continue;
+    if (NARR_TAGS.includes(seg.tag)) narrators.push(body);
+    else if (META_TAGS.includes(seg.tag)) continue;
+    else if (!seg.tag) {
+      // 没有标签的段落：rp 模式下第一段算旁白，其余接在后面继续当旁白
+      narrators.push(body);
+    } else {
+      out.lines.push({ speaker: seg.tag, text: body });
     }
   }
   out.narrator = narrators.join('\n\n');
-  out.line = lines.join('\n\n');
+  // 兼容只认 line 的老调用
+  out.line = out.lines.length ? out.lines[0].text : '';
   return out;
 }
 
@@ -822,22 +842,41 @@ export function narratorNode(text, tag = '') {
   return el;
 }
 
-/** 一个 AI 回合 = 旁白 + 一个角色气泡 */
-export function buildTurn(narrator, speaker, line) {
+/** 一个 AI 回合 = 旁白 + 若干角色气泡 */
+export function buildTurn(narrator, speaker, line, lines) {
   const el = document.createElement('div');
   el.className = 'turn';
   if (narrator) el.appendChild(narratorNode(narrator));
+  const many = (lines || []).filter((x) => x && x.text);
+  if (many.length) {
+    let last = null;
+    for (const item of many) {
+      last = buildMessage('assistant', item.text, item.speaker || 'AI');
+      el.appendChild(last.el);
+    }
+    return { el, msg: last };
+  }
   const msg = buildMessage('assistant', line, speaker);
   el.appendChild(msg.el);
   return { el, msg };
 }
 
-/** 落盘后的最终内容，按服务端解析结果重绘（丢弃抢话段落）。 */
+/** 落盘后的最终内容，按服务端解析结果重绘。 */
 export function renderTurn(container, turn) {
   if (!container) return null;
   container.innerHTML = '';
   const storyTag = turn.speaker ? '' : storyName();
   if (turn.narrator) container.appendChild(narratorNode(turn.narrator, storyTag));
+  const lines = (turn.lines || []).filter((x) => x && x.text);
+  if (lines.length) {
+    // 圆桌式：旁白之后一人一个气泡，按发言顺序排
+    let last = null;
+    for (const item of lines) {
+      last = buildMessage('assistant', item.text, item.speaker || 'AI');
+      container.appendChild(last.el);
+    }
+    return last;
+  }
   if (!turn.line) return null;          // 一般模式只有叙述，没有角色气泡
   const msg = buildMessage('assistant', turn.line, turn.speaker || 'AI');
   container.appendChild(msg.el);
@@ -867,24 +906,25 @@ export function renderStreaming(container, text, speaker, seconds = 0, plain = f
   }
   if (picked.narrator) container.appendChild(narratorNode(picked.narrator));
 
-  const el = document.createElement('div');
-  el.className = 'msg assistant';
-  el.style.setProperty('--char-hue', hueOf(speaker || ''));
-
-  const bubble = document.createElement('div');
-  bubble.className = 'bubble typing';
-  const shown = picked.line;
-  const body = document.createElement('span');
-  if (shown) body.innerHTML = mdToHtml(shown);
-  else body.innerHTML = '<span class="dots">⋯</span>';
+  // 圆桌式：边流边按【名字】切气泡，收尾时结构不变，不会整块换样子
+  let last = null;
+  for (const item of picked.lines) {
+    last = buildMessage('assistant', item.text, item.speaker);
+    last.el.classList.add('typing');
+    last.bubble.classList.add('typing');
+    container.appendChild(last.el);
+  }
+  if (!last) {
+    // 还没念到任何人的名字：先给一个空的气泡占位
+    last = buildMessage('assistant', '', speaker || '');
+    last.bubble.innerHTML = '<span class="dots">⋯</span>';
+    container.appendChild(last.el);
+  }
   const tick = document.createElement('span');
   tick.className = 'tick';
   tick.textContent = seconds + 's';
-  bubble.append(body, tick);
-
-  el.appendChild(bubble);
-  container.appendChild(el);
-  return { el, bubble };
+  last.bubble.appendChild(tick);
+  return { el: last.el, bubble: last.bubble };
 }
 
 /** 名字 → 稳定的色相，让每个角色有自己的颜色。 */
@@ -953,11 +993,10 @@ function emptyNode(text) {
 }
 
 const STATUS_LABELS = [
-  ['location', '地点'], ['time', '时间'], ['relations', '关系'],
-  ['goal', '目标'], ['items', '物品'],
+  ['location', '地点'], ['time', '时间'], ['relations', '关系'], ['goal', '目标'],
 ];
 
-/** 每轮结束时模型给的状态：位置 / 时间 / 关系 / 目标 / 物品。 */
+/** 每轮结束时模型给的状态：位置 / 时间 / 关系 / 目标。物品归人，去角色弹层看。 */
 export function statusNode(status) {
   if (!status) return null;
   const rows = STATUS_LABELS.filter(([key]) => status[key]);

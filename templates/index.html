@@ -363,7 +363,9 @@
           </label>
           <span>每隔</span>
           <input type="number" id="backup-hours" min="1" max="720" value="24">
-          <span>小时</span>
+          <span>小时，保留</span>
+          <input type="number" id="backup-keep" min="1" max="30" value="30">
+          <span>份（最多 30）</span>
           <button type="button" class="ghost" id="btn-backup-save">保存</button>
         </div>
         <div class="backup-list" id="backup-list"></div>

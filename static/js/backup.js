@@ -26,6 +26,8 @@ export async function refreshBackups() {
     const conf = data.conf || {};
     $('#backup-enabled').checked = !!conf.enabled;
     $('#backup-hours').value = conf.every_hours || 24;
+    const keepEl = $('#backup-keep');
+    if (keepEl) keepEl.value = conf.keep || 30;
     const items = data.items || [];
     box.innerHTML = '';
     if (!items.length) {
@@ -34,7 +36,8 @@ export async function refreshBackups() {
     }
     const head = document.createElement('div');
     head.className = 'backup-hint';
-    head.textContent = '共 ' + items.length + ' 份，只保留最近 30 份。存在 ' + (data.dir || 'backups/');
+    head.textContent = '共 ' + items.length + ' 份，只保留最近 '
+      + (conf.keep || 30) + ' 份。存在 ' + (data.dir || 'backups/');
     box.appendChild(head);
     for (const item of items) {
       const row = document.createElement('div');
@@ -118,15 +121,18 @@ export async function runBackup() {
 export async function saveBackupConf() {
   const enabled = $('#backup-enabled').checked;
   const every = parseInt($('#backup-hours').value, 10) || 24;
+  const keepEl = $('#backup-keep');
+  const keep = parseInt(keepEl ? keepEl.value : '30', 10) || 30;
   try {
     const conf = await api('/api/backup-config', {
       method: 'PUT',
-      body: { enabled, every_hours: every },
+      body: { enabled, every_hours: every, keep },
     });
     $('#backup-hours').value = conf.every_hours;
-    setMsg(conf.enabled
+    if (keepEl) keepEl.value = conf.keep;
+    setMsg((conf.enabled
       ? '已开启：每 ' + conf.every_hours + ' 小时自动备份一次'
-      : '已关闭定时备份', 'ok');
+      : '已关闭定时备份') + '，最多保留 ' + conf.keep + ' 份', 'ok');
   } catch (e) {
     setMsg('保存失败：' + e.message, 'error');
   }

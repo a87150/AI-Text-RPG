@@ -11,6 +11,7 @@ import threading
 import time
 import zipfile
 
+from . import config
 from .config import BASE_DIR, DATA_DIR, app
 
 BACKUP_DIR = os.path.join(BASE_DIR, "backups")
@@ -123,8 +124,11 @@ def delete(name):
         return False
 
 
-def prune(keep=KEEP_MAX):
-    for item in listing()[keep:]:
+def prune(keep=None):
+    # 用户可能把份数调过，没显式传就读设置里的值
+    if keep is None:
+        keep = config.backup_conf().get("keep") or KEEP_MAX
+    for item in listing()[int(keep):]:
         delete(item["name"])
 
 

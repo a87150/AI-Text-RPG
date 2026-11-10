@@ -100,8 +100,8 @@ TIER_LIMITS = {
 }
 TIER_CONTEXT = {k: v["context"] for k, v in TIER_LIMITS.items()}
 
-BACKUP_DEFAULTS = {"enabled": False, "every_hours": 24}
-BACKUP_BOUNDS = {"every_hours": (1, 720)}
+BACKUP_DEFAULTS = {"enabled": False, "every_hours": 24, "keep": 30}
+BACKUP_BOUNDS = {"every_hours": (1, 720), "keep": (1, 30)}
 _backup = dict(BACKUP_DEFAULTS)
 
 # 模型能力档位：决定状态行用多重的格式，能力越差给的结构要越简单
@@ -208,6 +208,13 @@ def save_backup_conf(data):
                 hours = _backup["every_hours"]
             lo, hi = BACKUP_BOUNDS["every_hours"]
             _backup["every_hours"] = max(lo, min(hi, hours))
+        if "keep" in data:
+            try:
+                keep = int(data["keep"])
+            except (TypeError, ValueError):
+                keep = _backup["keep"]
+            lo, hi = BACKUP_BOUNDS["keep"]
+            _backup["keep"] = max(lo, min(hi, keep))
     persist_settings()
     return backup_conf()
 
@@ -222,7 +229,7 @@ def save_reasoning(value, persist=True):
         persist_settings()
     return value
 
-# 回复模式：normal = 系统旁白叙述；rp = 角色轮流按人设说话
+# 回复模式：normal = 系统旁白叙述；rp = 每轮先旁白、再由在场角色各自发言
 MODES = ("normal", "rp")
 MODE_DEFAULT = "normal"
 MODE_LABELS = {"normal": "一般模式", "rp": "角色扮演"}
@@ -449,6 +456,13 @@ def load_settings():
                 hours = _backup["every_hours"]
             lo, hi = BACKUP_BOUNDS["every_hours"]
             _backup["every_hours"] = max(lo, min(hi, hours))
+        if "keep" in backup_saved:
+            try:
+                keep = int(backup_saved["keep"])
+            except (TypeError, ValueError):
+                keep = _backup["keep"]
+            lo, hi = BACKUP_BOUNDS["keep"]
+            _backup["keep"] = max(lo, min(hi, keep))
 
     # 云端 Key 被清掉后，不能把当前模型留在一个已不可用的提供方上
     if not provider_usable(_model_state["provider"]):
