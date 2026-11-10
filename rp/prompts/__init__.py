@@ -12,7 +12,7 @@ from string import Template
 from ..characters import ensure_characters, guess_name, role_labels, scene_split
 from ..config import creativity, mode_for, tier, tier_limits, writing
 from ..llm import strip_status_leaks, strip_thinking
-from ..stories import fill_names
+from ..stories import PLACEHOLDER, fill_names
 
 _DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -543,6 +543,10 @@ def build_field_prompt(field, name="", user_name="", ai_name="", user_role="",
             task += "\n这个角色还没有名字：第一行写「名字：XXX」，第二行起再写设定。"
     else:
         task = FIELD_TASKS.get(field) or FIELD_TASKS["world"]
+    if field != "character" and (ai_name or "").strip():
+        # 生成设定时主角只给占位符，不给真名；给了它就会照着写死
+        ai_role = (ai_role or "").replace(ai_name.strip(), PLACEHOLDER)
+        ai_name = PLACEHOLDER
     return render(
         "field.md",
         task=task,

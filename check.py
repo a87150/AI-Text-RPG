@@ -1702,6 +1702,14 @@ def main():
     check("改名不动存下来的设定", _phs2["world"] == _phs["world"])
     check("按位置找出被改掉的名字",
           rp_api._renames([{"name": "甲"}], [{"name": "顾辞"}]) == {"甲": "顾辞"})
+    # 74. 生成设定时主角给占位符
+    _fp = rp_prompts.build_field_prompt("world", ai_name="丙",
+                                          ai_role="丙是守夜的人。", world="旧城。")
+    check("生成设定时主角换成占位符", "{主角}" in _fp)
+    check("生成设定时不给真名", "丙是守夜的人" not in _fp)
+    check("生成提示词里有占位符规则", "8. 主角一律写成 {主角}" in _fp)
+    _fpc = rp_prompts.build_field_prompt("character", name="丙", ai_name="丙", ai_role="x")
+    check("单张角色卡保留真名", "丙" in _fpc)
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")
