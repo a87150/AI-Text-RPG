@@ -304,6 +304,51 @@ def build_context_debug(sess, speaker=None):
     }
 
 
+# 动作类动词：用来判断用户是"点了个头"还是"推门、拔刀、转身就跑"
+_ACTIONS = ("推", "拉", "拔", "抓", "握", "踏", "跨", "转身", "抬手", "低头",
+            "后退", "靠近", "踢", "挥", "扔", "抢", "抱", "按", "坐", "站",
+            "走", "跑", "跑向", "扑", "抵", "撑", "捏", "扯", "掀", "探")
+
+
+def input_density(sess):
+    """用户这一轮写了多细。固定字数在长段动作后必然失衡，得让目标跟着走。
+
+    返回 (档位, 目标区间)。区间是写作设置里那个范围的倍数换算，不是另写一套数字。
+    """
+    w = writing()
+    last = ""
+    for m in reversed(sess.get("messages") or []):
+        if m.get("role") == "user":
+            last = str(m.get("content") or "")
+            break
+    n = len(last.strip())
+    acts = sum(last.count(v) for v in _ACTIONS)
+    quotes = last.count("「") + last.count("“") + last.count("\"") // 2
+
+    lo, hi = w["narrator_min"] + w["line_min"], w["narrator_max"] + w["line_max"]
+    if n < 15 and acts == 0:
+        return "thin", (int(hi * 0.9), int(hi * 1.6))
+    if n > 120 or acts >= 4:
+        return "thick", (int(lo * 1.1), int(lo * 2.2))
+    return "normal", (int(lo * 1.2), int(hi * 1.1))
+
+
+DENSITY_HINT = {
+    "thin": "（我这一句很短。别跟着变短：用环境、对手的反应和细节把这个场景撑起来。）",
+    "thick": "（我这段写得细。只写角色的反应和场景的变化，不要复述我刚写过的动作。）",
+    "normal": "",
+}
+
+
+def timeline_hint(sess):
+    """时间只被记录、没人用它，模型就会在原地打转或者凭空跳档。"""
+    time = ((sess.get("status") or {}).get("time") or "").strip()
+    if not time:
+        return ""
+    return ("（上一轮结束时是「%s」。本轮时间要从那里自然往下走；"
+            "跨度大就在正文里交代清过了多久、天色怎么变的。）" % time)
+
+
 def build_messages(sess, speaker=None):
     """历史消息还原成「旁白 + 角色」的形式，让模型明白谁说过什么。"""
     messages = [{"role": "system", "content": build_system_prompt(sess, speaker)}]
@@ -344,7 +389,10 @@ def build_messages(sess, speaker=None):
                 messages.append({"role": "assistant", "content": head + "【%s】%s" % (name, content)})
             else:
                 messages.append({"role": "assistant", "content": head + content})
-    tail = TAIL_HINT.get(tier(), "") + CREATIVE_HINT.get(creativity(), "")
+    level, (tlo, thi) = input_density(sess)
+    pace = "（这一轮写 %d~%d 字。）" % (tlo, thi) if level != "normal" else ""
+    tail = (TAIL_HINT.get(tier(), "") + CREATIVE_HINT.get(creativity(), "")
+            + pace + DENSITY_HINT[level] + timeline_hint(sess))
     if tail:
         # 格式要求写在 system 里离生成点太远，小模型容易忘；补在最后一条 user 尾巴上
         for item in reversed(messages):

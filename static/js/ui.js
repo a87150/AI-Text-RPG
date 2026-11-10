@@ -557,6 +557,24 @@ export function updateSub() {
     }
   }
   put('· ' + ((s.context ? s.context.messages : (s.messages || []).length) || 0) + ' 条');
+
+  // 场景和时间本来就记在状态块里，摆到顶栏省得每次点开看
+  const sep = document.createElement('span');
+  sep.className = 'sub-sep';
+  sep.textContent = ' | ';
+  const extra = [];
+  if (status.location) extra.push(['场景', status.location]);
+  if (status.time) extra.push(['时间', status.time]);
+  if (!extra.length) return;
+  el.appendChild(sep);
+  extra.forEach(([k, v], i) => {
+    if (i) put(' · ');
+    const key = document.createElement('b');
+    key.className = 'sub-key';
+    key.textContent = k + ' ';
+    el.appendChild(key);
+    put(v);
+  });
 }
 
 /** 点顶栏的角色名，看这个角色此刻是什么状态。 */
@@ -573,14 +591,14 @@ export function toggleCharPop(name, anchor) {
 
   const status = s.status || {};
   const rows = [];
-  if (c.role) rows.push(['设定', c.role]);
-  if (c.state) rows.push(['此刻', c.state]);
+  // 长设定不适合塞弹层，看状态就够；场地信息挪到底下两行单独显示
+  if (c.state) rows.push(['状态', c.state]);
   if (c.history && c.history.length) {
     rows.push(['近况', c.history.slice(-3).join('；')]);
   }
-  const scene = [status.time, status.location].filter(Boolean).join(' · ');
-  if (scene) rows.push(['场景', scene + '（全场共用）']);
   if (!rows.length) rows.push(['状态', '还没有记录，聊几轮之后这里会有内容']);
+  if (status.location) rows.push(['现在的场景', status.location]);
+  if (status.time) rows.push(['时间', status.time]);
 
   pop.textContent = '';
   pop.dataset.for = name;
@@ -937,6 +955,49 @@ export function renderMessages() {
   });
 
   const last = msgs[msgs.length - 1];
-  if (last && last.role === 'user') appendRetryHint(last.content || '');
+  if (last && last.role === 'user') {
+    // 后端还在跑的时候刷新页面，磁盘上最后一条当然是用户消息。
+    // 这时候不能判成"没答上"，得等它写完自己回来。
+    if (state.session && state.session.busy) appendBusyHint();
+    else appendRetryHint(last.content || '');
+  }
   scrollToBottom();
+}
+
+/** 刷新打断的是浏览器这头的流，后端照旧在生成，盯着会话等它落盘。 */
+let busyTimer = null;
+
+export function stopBusyWatch() {
+  if (busyTimer) {
+    clearInterval(busyTimer);
+    busyTimer = null;
+  }
+}
+
+export function appendBusyHint() {
+  const box = $('#messages');
+  if (!box || busyTimer) return null;
+  const wrap = document.createElement('div');
+  wrap.className = 'retry-hint busy';
+  wrap.innerHTML = '<span>✍ AI 正在写这一轮（页面刷新不会打断它，写完会自动出现）。</span>';
+  box.appendChild(wrap);
+  scrollToBottom();
+  const sid = state.session && state.session.id;
+  if (!sid) return wrap;
+  busyTimer = setInterval(async () => {
+    try {
+      const sess = await api('/api/sessions/' + sid);
+      if (!sess.busy) {
+        stopBusyWatch();
+        if (state.session && state.session.id === sid) {
+          state.session = sess;
+          renderMessages();
+          syncAll();
+        }
+      }
+    } catch (e) {
+      stopBusyWatch();
+    }
+  }, 2500);
+  return wrap;
 }

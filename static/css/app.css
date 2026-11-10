@@ -603,6 +603,10 @@ body.story-view .composer { display: none !important; }
 }
 .pick-item span { font-size: .6875rem; color: var(--text-mute); }
 .pick-item .pi-go { flex: none; color: var(--text-mute); font-size: .75rem; }
+/* 显式写了 display 的元素会盖掉 hidden 属性，得补一刀 */
+[hidden] { display: none !important; }
+.sub-sep { color: var(--border-strong); }
+.sub-key { font-weight: 500; color: var(--text-mute); }
 .prefs-sub {
   margin: 18px 0 8px; padding-top: 12px; border-top: 1px dashed var(--border);
   font-size: .8125rem; font-weight: 600; color: var(--text-dim);

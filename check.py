@@ -960,6 +960,46 @@ def main():
     check("下拉里有新增项", "新增提供方" in _main2)
     check("设置面板用全量提供方列表", "state.allProviders || state.providers" in _main2)
 
+    # 40. 回合平衡（跟着用户输入密度走）+ 时间线注入
+    def _sess(text, time=""):
+        st = {"time": time} if time else {}
+        return {"turn": 3, "mode": "rp", "user_name": "我",
+                "characters": [{"name": "沈砚", "role": "守灯人"}],
+                "status": st, "messages": [{"role": "user", "content": text}]}
+
+    check("极短输入判成 thin", rp_prompts.input_density(_sess("我点头。"))[0] == "thin")
+    check("长段动作判成 thick",
+          rp_prompts.input_density(_sess("我推开门，抬手挡了一下灯，转身把包扔在椅子上，走过去拉开窗帘。"))[0] == "thick")
+    check("中等输入判成 normal",
+          rp_prompts.input_density(_sess("我把外套挂在门边，问他今晚还走不走。"))[0] == "normal")
+    _thin = rp_prompts.input_density(_sess("我点头。"))[1]
+    _thick = rp_prompts.input_density(_sess("我推开门，抬手挡了一下灯，转身把包扔在椅子上，走过去拉开窗帘。"))[1]
+    check("极短时目标字数抬高", _thin[1] > _thick[1], "%s vs %s" % (_thin, _thick))
+    check("长段时目标字数收紧", _thick[0] >= rp_config.writing()["narrator_min"] + rp_config.writing()["line_min"],
+          str(_thick))
+
+    def _tail_of(sess):
+        return rp_prompts.build_messages(sess, "沈砚")[-1]["content"]
+
+    check("极短时要求撑起场景", "别跟着变短" in _tail_of(_sess("我点头。")))
+    check("长段时要求不复述", "不要复述我刚写过的动作" in _tail_of(_sess("我推开门，抬手挡了一下灯，转身把包扔在椅子上，走过去拉开窗帘。")))
+    check("中等时不多加节奏要求", "别跟着变短" not in _tail_of(_sess("我把外套挂在门边，问他今晚还走不走。")))
+
+    check("没有时间就不提时间", "上一轮结束时是" not in _tail_of(_sess("我点头。")))
+    check("有时间就把上一轮的时间写进去", "上一轮结束时是「深夜」" in _tail_of(_sess("我点头。", "深夜")))
+    check("要求时间自然推进", "自然往下走" in _tail_of(_sess("我点头。", "深夜")))
+    check("提醒补过渡", "交代清过了多久" in _tail_of(_sess("我点头。", "深夜")))
+
+    # 刷新页面不该把还在生成的会话判成"没答上"
+    _ui = (pathlib.Path(__file__).parent / "static" / "js" / "ui.js").read_text(encoding="utf-8")
+    check("刷新后会先看后端忙不忙", "state.session.busy" in _ui)
+    check("忙的时候显示正在写", "AI 正在写这一轮" in _ui)
+    check("会盯着会话等它写完", "setInterval" in _ui and "sess.busy" in _ui)
+    check("角色弹层用状态不用设定", "['设定', c.role]" not in _ui)
+    check("顶栏带场景和时间", "status.location" in _ui and "sub-key" in _ui)
+    _css = (pathlib.Path(__file__).parent / "static" / "css" / "app.css").read_text(encoding="utf-8")
+    check("hidden 属性不会被 display 盖掉", "[hidden] { display: none !important; }" in _css)
+
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")
