@@ -7,6 +7,7 @@ import json
 import os
 import time
 
+from . import metrics
 from .config import DATA_DIR
 
 SNAP_DIR = os.path.join(DATA_DIR, "snapshots")
@@ -32,6 +33,7 @@ def snapshot(sess, reason="manual"):
     path = _dir((sess or {}).get("id"))
     if not path:
         return None
+    metrics.note("snapshot.create", sid=sess.get("id"), reason=reason)
     stamp = time.strftime("%Y%m%d-%H%M%S", time.localtime())
     tag = "".join(ch for ch in str(reason) if ch.isalnum()) or "manual"
     name = "%s-%s.json" % (stamp, tag)

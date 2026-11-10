@@ -15,6 +15,7 @@ from .characters import (
     looks_like_name, upsert_character,
 )
 from . import backup
+from . import metrics
 from .config import (
     DEFAULT_MODEL, DEFAULT_PROVIDER, MAX_CHAT_ATTEMPTS, MAX_ENHANCE_ATTEMPTS,
     MAX_OPENING_ATTEMPTS, MIN_CHAT_CHARS, MODES, PROVIDERS,
@@ -570,6 +571,8 @@ def api_update_session(sid):
         if expect is not None and sess.get("updated_at") is not None:
             try:
                 if abs(float(sess["updated_at"]) - float(expect)) > 1e-6:
+                    metrics.note("session.stale", sid=sid, expected=expect,
+                                 actual=sess["updated_at"], path="update_session")
                     return jsonify({"error": "这个对话在别处更新过，请重新打开再改",
                                     "conflict": True}), 409
             except (TypeError, ValueError):
@@ -749,7 +752,8 @@ def api_commit_partial(sid):
     msgs.append(msg)
     try:
         save_session(sess, expect=data.get("updated_at"))
-    except StaleSession:
+    except StaleSession as exc:
+        metrics.note("session.stale", sid=sid, expected=exc.expected, actual=exc.actual, path="commit_partial")
         return jsonify({"error": "这个对话在别处更新过，已重新读取",
                         "conflict": True}), 409
     out = dict(sess)
@@ -1054,6 +1058,8 @@ def _stream_model(messages, speaker, temperature, max_attempts, use_rp):
         validate=lambda t: None if (not use_rp or "【" in t)
         else "缺少【旁白】/【角色名】格式",
     ):
+        if ev["type"] == "delta":
+            metrics.first_token()      # 用户感知的等待到此结束
         if ev["type"] == "final":
             return ev["text"], ev["attempts"]
         if ev["type"] == "error":
@@ -1220,6 +1226,11 @@ def api_chat():
         temperature = creativity_temp()
     temperature = max(0.0, min(1.5, temperature))
 
+    _prompt_chars = sum(len(m.get("content") or "") for m in messages)
+    _system_chars = sum(len(m.get("content") or "") for m in messages
+                        if m.get("role") == "system")
+    metrics.begin(sid, _prompt_chars, _system_chars, len(messages))
+
     cancelled = {"flag": False}      # 客户端断开时置位，写盘前必须看一眼
 
     def generate():
@@ -1233,6 +1244,9 @@ def api_chat():
                 return
 
             turn = parse_turn(answer, speaker, cast if use_rp else None)
+            if not turn.get("status") and ("[[" in answer or "【地点" in answer):
+                metrics.note("status.parse_fail", sid=sid, mode="rp" if use_rp else "normal",
+                             raw=answer[-300:])
             if use_rp and not (turn["lines"] or turn["narrator"]):
                 yield sse({"type": "error",
                            "message": "模型这一轮没写出内容（旁白和角色发言都空），请重试。"})
@@ -1242,6 +1256,7 @@ def api_chat():
                 return
 
             if cancelled["flag"]:
+                metrics.note("stream.cancel", sid=sid, stage="before_commit")
                 return                # 用户已经点了停止，不要把没要的东西写进去
             with get_session_lock(sid):
                 if cancelled["flag"]:
@@ -1276,7 +1291,9 @@ def api_chat():
             release_busy(sid)
 
         if cancelled["flag"]:
+            metrics.end(sid, ok=False, cancelled=True)
             return
+        metrics.end(sid, ok=True, attempts=attempts_used)
         background_compress(sid)
 
     return Response(

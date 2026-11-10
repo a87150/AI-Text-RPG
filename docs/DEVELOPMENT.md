@@ -66,6 +66,25 @@ os.environ["LT_BACKUP_DIR"] = os.path.join(TMP_DIR, "backups")
 
 **物品与状态分开存**。`state` 是「此刻」，`facts` 是「发生过且不能反悔」，`items` 是「东西在谁手上」。三种东西的更新时机和合并规则都不同，别互相替代。
 
+## 事件日志
+
+`rp/metrics.py` 往 `logs/YYYY-MM-DD.log` 追加一行一个 JSON。出事时 grep 事件名：
+
+    grep status.parse_fail logs/*.log      # 模型写了状态块但没解出来，带原文末尾 300 字
+    grep session.stale logs/*.log          # 两个标签页撞车，带两边的 updated_at
+    grep ledger.redundant logs/*.log       # 能从物品格推出来的事实有几条
+    grep chat.first_token logs/*.log       # 首字耗时，看 prefill 走到哪了
+
+全部事件：chat.request / chat.first_token / chat.done / stream.cancel /
+session.stale / status.parse_fail / ledger.merge / ledger.redundant / snapshot.create。
+
+写日志失败一律吞掉，不会因为磁盘满或权限把对话弄挂。日志不进版本库。
+
+直接读最近一次的指标：`python -c "import rp.metrics as m; print(m.snapshot())"`。
+
+**首字耗时才是真正的瓶颈**，不是写盘。写盘是 0～1ms，首字实测 2.3s。
+以后判断“该不该动数据层”看写盘，判断“该不该动上下文策略”看首字。
+
 ## 调试
 
 **看某次请求实际发了什么**：设置里有调试入口可以看拼好的 system 提示和历史（`build_context_debug`）。上下文面板（顶栏 📊）显示当前占用、压缩情况、在场角色。

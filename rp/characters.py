@@ -3,6 +3,7 @@
 import re
 from difflib import SequenceMatcher
 
+from . import metrics
 from .config import mode_for, writing
 from .llm import (extract_json, extract_json_all, loose_status_json,
                   strip_status_leaks, strip_thinking)
@@ -399,6 +400,27 @@ def merge_facts(sess, new_facts, turn=None):
         fresh.append(entry)
     if len(book) > FACTS_MAX:
         del book[:len(book) - FACTS_MAX]
+    _active = sum(1 for x in book if isinstance(x, dict) and x.get("state") == "active")
+    metrics.note("ledger.merge", added=len(fresh), total=len(book), active=_active,
+                 superseded=len(fresh) and sum(1 for x in book if x.get("state") == "resolved"))
+    # 观测：新事实里有没有其实能从物品格推出来的（物品名 + 持有人）。
+    # 不删不改，只数数；跑一段时间看这个数高不高，再决定要不要做过滤。
+    _items = (sess.get("status") or {}).get("items")
+    if isinstance(_items, dict):
+        _dup = 0
+        for entry2 in fresh:
+            t2 = entry2.get("fact") or ""
+            for owner, owned in _items.items():
+                for thing in str(owned or "").replace("，", "、").split("、"):
+                    thing = thing.strip()
+                    if len(thing) >= 2 and thing in t2 and str(owner) in t2:
+                        _dup += 1
+                        break
+                else:
+                    continue
+                break
+        if _dup:
+            metrics.note("ledger.redundant", count=_dup, sample=fresh[0].get("fact"))
     return fresh
 
 

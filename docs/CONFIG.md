@@ -76,6 +76,7 @@ Ollama 是内置提供方，不需要存 Key；模型列表来自 `GET /api/mode
 | `PORT` | 监听端口，默认 5000 |
 | `LT_DATA_DIR` | 数据目录，默认 `data/`；`check.py` 用它指到临时目录 |
 | `LT_BACKUP_DIR` | 备份目录，默认 `backups/`；`check.py` 同样指到临时目录 |
+| `LT_LOG_DIR` | 事件日志目录，默认 `logs/`；已进 .gitignore |
 
 ## 前端本地存储
 

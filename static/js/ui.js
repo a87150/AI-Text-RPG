@@ -445,6 +445,13 @@ export function renderContextDetail() {
     ['写盘耗时', c.io ? (Math.round(c.io.save_ms || 0) + ' ms') : '—'],
     ['读盘耗时', c.io ? (Math.round(c.io.load_ms || 0) + ' ms') : '—'],
     ['会话文件', c.io && c.io.bytes ? fmtNumber(Math.round(c.io.bytes / 1024)) + ' KB' : '—'],
+    // prefill 才是真正的瓶颈：上一轮发给模型多少字、第一个字等了多久
+    ['上轮 prompt', c.stream && c.stream.prompt_chars
+      ? fmtNumber(c.stream.prompt_chars) + ' 字（系统 ' + fmtNumber(c.stream.system_chars || 0) + '）' : '—'],
+    ['首字等待', c.stream && c.stream.first_token_ms
+      ? fmtNumber(c.stream.first_token_ms) + ' ms' : '—'],
+    ['上轮总耗时', c.stream && c.stream.total_ms
+      ? fmtNumber(c.stream.total_ms) + ' ms' : '—'],
   ];
   for (const [k, v] of items) {
     const row = document.createElement('div');

@@ -7,3 +7,4 @@ backups/
 __pycache__/
 *.py[cod]
 .venv/
+logs/
