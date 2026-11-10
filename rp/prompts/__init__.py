@@ -211,9 +211,11 @@ def build_system_prompt(sess, speaker=None):
         parts.append("【此刻的处境】\n" + scene)
     book = active_facts(sess)
     if book:
+        # 不带"第几轮"：模型本来就不知道现在是第几轮，给个数字它反而会当成
+        # "已经过了这么多轮"，跟手上只有几轮的历史对不上，时间感就散了
         lines = ["【这些已经发生，不能当成没发生、也不能反悔】"]
         for f in book:
-            lines.append("· 第 %s 轮：%s" % (f.get("turn") or "?", f.get("fact") or ""))
+            lines.append("· %s" % (f.get("fact") or ""))
         parts.append("\n".join(lines))
     parts.append("【写法】\n" + build_rules(user_name, mode, names))
     if sess.get("rules"):
@@ -374,10 +376,15 @@ def build_messages(sess, speaker=None):
             history = history[1:]
     for m in history:
         content = m.get("content") or ""
-        if not content:
+        narrator = m.get("narrator") or ""
+        # 一般模式的回复正文全在 narrator 里，content 是空的。
+        # 早先这里只看 content，等于把 AI 写过的每一段都丢了——模型看不到
+        # 自己上一轮说了什么，每轮都从头起笔，用多好的模型都救不回来。
+        if not content and not narrator:
             continue
         if m.get("role") == "user":
-            messages.append({"role": "user", "content": content})
+            if content:
+                messages.append({"role": "user", "content": content})
         elif m.get("role") == "assistant":
             narrator = m.get("narrator") or ""
             if not content and narrator:      # 一般模式：整段叙述都记在 narrator 里

@@ -528,6 +528,29 @@ def api_update_session(sid):
         return jsonify(sess)
 
 
+def _rewind_to(sess, index):
+    """把会话退回到 index 之前，轮次和账本一起退。
+
+    只删消息不退轮次是个隐蔽的污染源：重写几次之后 turn 会飘到几十，
+    而上下文里只剩几轮内容。模型看到的账本写着「第 28 轮：xxx」，
+    实际它手上的历史只有八轮，时间感就散了；锚定和快照的频率也跟着错。
+    """
+    msgs = sess.get("messages") or []
+    mark = 0
+    for m in reversed(msgs[:index]):
+        if isinstance(m.get("turn"), int):
+            mark = m["turn"]
+            break
+    sess["messages"] = msgs[:index]
+    sess["turn"] = mark
+    facts = sess.get("facts")
+    if isinstance(facts, list):
+        # 账本的 turn 记在 advance_turn 之前，比消息的 turn 小 1，所以用严格小于
+        sess["facts"] = [f for f in facts
+                         if not isinstance(f, dict) or int(f.get("turn") or 0) < max(mark, 1)]
+    return sess
+
+
 @app.post("/api/sessions/<sid>/rewind")
 def api_rewind(sid):
     """删掉 index 起的消息，用来重写。ponytail: 前情提要不动，压缩是单向的。"""
@@ -543,7 +566,7 @@ def api_rewind(sid):
         msgs = sess.get("messages") or []
         if index < 0 or index > len(msgs):
             return jsonify({"error": "索引超出范围"}), 400
-        sess["messages"] = msgs[:index]
+        _rewind_to(sess, index)
         save_session(sess)
         sess["context_chars"] = context_chars(sess)
         sess["context"] = context_info(sess)
@@ -569,22 +592,9 @@ def api_branch(sid):
     cloned = json.loads(json.dumps(src))
     cloned["id"] = uuid.uuid4().hex[:12]
     cloned["title"] = ((src.get("title") or DEFAULT_TITLE) + "（分支）")[:40]
-    cloned["messages"] = msgs[:index + 1]
-
-    # 深拷贝会把"此刻"的状态和账本一起带过去，分叉点之前没发生过的事就成了剧透。
-    # 轮次退回到分叉点，账本按轮次过滤；老数据没有 turn 字段就保持原样。
-    mark = None
-    for m in reversed(cloned["messages"]):
-        if isinstance(m.get("turn"), int):
-            mark = m["turn"]
-            break
-    if mark is not None:
-        cloned["turn"] = mark
-        # facts 的 turn 记在本轮开始前，比消息的 turn 小 1，所以用严格小于
-        cloned["facts"] = [
-            f for f in (src.get("facts") or [])
-            if isinstance(f, dict) and int(f.get("turn") or 0) < mark
-        ]
+    # 深拷贝会把「此刻」的状态和账本一起带过去，分叉点之后的事就成了剧透。
+    # 和「从这里重写」共用同一套回滚，免得两处规则漂移
+    _rewind_to(cloned, index + 1)
     cloned["created_at"] = now
     cloned["updated_at"] = now
     save_session(cloned)

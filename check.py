@@ -714,7 +714,8 @@ def main():
           "节选" in rp_prompts.build_character_block(
               [{"name": "沈砚", "role": "守灯人，话少。" * 40}], "沈砚"))
     body = rp_prompts.build_system_prompt(_fat_sess(), "沈砚")
-    check("初级只注入 6 条账本", body.count("· 第") == 6, str(body.count("· 第")))
+    check("初级只注入 6 条账本",
+          body.count("· 事实") == 6, str(body.count("· 事实")))
     check("初级第 8 轮就重插人设",
           any("人设锚定" in m["content"] for m in msgs))
 
@@ -723,7 +724,8 @@ def main():
     hist2 = [m for m in msgs2 if m["role"] != "system"]
     check("高级不砍历史", len(hist2) == 40, str(len(hist2)))
     body2 = rp_prompts.build_system_prompt(_fat_sess(), "沈砚")
-    check("高级注入 20 条账本", body2.count("· 第") == 20, str(body2.count("· 第")))
+    check("高级注入 20 条账本",
+          body2.count("· 事实") == 20, str(body2.count("· 事实")))
     check("高级不截人设",
           rp_prompts.clip("守灯人，话少。" * 30, rp_config.tier_limits()["role_chars"]).__len__() > 150)
     check("高级第 8 轮不重插",
@@ -1052,6 +1054,69 @@ def main():
           (pathlib.Path(__file__).parent / "static" / "js" / "ui.js").read_text(encoding="utf-8"))
     _api = (pathlib.Path(__file__).parent / "static" / "js" / "api.js").read_text(encoding="utf-8")
     check("streamSSE 接受外部中止信号", "signal }" in _api or "signal)" in _api)
+
+    # 42. 一般模式必须把 AI 自己写的旁白喂回上下文（否则每轮都从头起笔）
+    _nm = {
+        "title": "一般模式", "mode": "normal", "user_name": "我",
+        "characters": [{"name": "沈砚", "role": "守灯人"}],
+        "status": {"present": ["沈砚"], "location": "灯塔"},
+        "turn": 3,
+        "messages": [
+            {"role": "user", "content": "我推门进去。"},
+            {"role": "assistant", "content": "", "narrator": "门轴响了一声，屋里只有一盏灯。"},
+            {"role": "user", "content": "我问他为什么不开灯。"},
+            {"role": "assistant", "content": "", "narrator": "他没回答，只是把灯芯挑亮了些。"},
+        ],
+    }
+    _bm = rp_prompts.build_messages(_nm, None)
+    _asst = [m for m in _bm if m["role"] == "assistant"]
+    check("一般模式不丢 AI 历史", len(_asst) == 2, "assistant 条数 %d" % len(_asst))
+    check("旁白按 assistant 原样回放",
+          any("门轴响了一声" in m["content"] for m in _asst))
+    check("两次旁白都在",
+          any("灯芯挑亮" in m["content"] for m in _asst))
+    _pairs = [(a["role"], b["role"]) for a, b in zip(_bm, _bm[1:])]
+    check("没有连续两条 user 挨着", ("user", "user") not in _pairs)
+
+    # 43. 从这里重写要连轮次和账本一起退，否则 turn 会飘到几十轮
+    _rw = client.post("/api/sessions", json={}).get_json()
+    _rs = rp_storage.load_session(_rw["id"])
+    _rs["messages"] = [
+        {"role": "user", "content": "一", "turn": 0},
+        {"role": "assistant", "content": "回一", "speaker": "甲", "turn": 1},
+        {"role": "user", "content": "二", "turn": 1},
+        {"role": "assistant", "content": "回二", "speaker": "甲", "turn": 2},
+        {"role": "user", "content": "三", "turn": 2},
+        {"role": "assistant", "content": "回三", "speaker": "甲", "turn": 9},
+        {"role": "user", "content": "四", "turn": 9},
+    ]
+    _rs["turn"] = 9
+    _rs["facts"] = [
+        {"turn": 0, "fact": "第一件事", "state": "active"},
+        {"turn": 5, "fact": "后来的事", "state": "active"},
+    ]
+    rp_storage.save_session(_rs)
+    _back = client.post("/api/sessions/%s/rewind" % _rw["id"], json={"index": 2}).get_json()
+    check("重写把轮次退回去", _back["turn"] == 1, str(_back["turn"]))
+    check("重写把消息截断", len(_back["messages"]) == 2, str(len(_back["messages"])))
+    check("重写退掉分叉点之后的账本",
+          [f["fact"] for f in _back["facts"]] == ["第一件事"],
+          str([f["fact"] for f in _back["facts"]]))
+    check("重写不删分叉点之前的事", len(_back["facts"]) >= 1)
+    _br = client.post("/api/sessions/%s/branch" % _rw["id"], json={"index": 1}).get_json()
+    check("分叉同样退回轮次", _br["turn"] == 1, str(_br["turn"]))
+    check("分叉同样过滤账本", [f["fact"] for f in _br["facts"]] == ["第一件事"],
+          str([f["fact"] for f in _br["facts"]]))
+    client.delete("/api/sessions/%s" % _rw["id"])
+    client.delete("/api/sessions/%s" % _br["id"])
+
+    # 44. 账本注入不再写"第几轮"：模型不知道轮次，写个虚高的数字只会让它时间感错乱
+    _fs = {"title": "账本", "mode": "rp", "user_name": "我", "turn": 3,
+           "facts": [{"turn": 28, "fact": "钥匙在抽屉里", "state": "active"}]}
+    _fm = rp_prompts.build_messages(_fs, None)
+    _ftext = chr(10).join(m["content"] for m in _fm)
+    check("账本注入不带轮次", "第 28 轮" not in _ftext)
+    check("账本事实本身还在", "钥匙在抽屉里" in _ftext)
 
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:

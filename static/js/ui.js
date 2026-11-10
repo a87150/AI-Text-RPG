@@ -597,7 +597,7 @@ export function toggleCharPop(name, anchor) {
     rows.push(['近况', c.history.slice(-3).join('；')]);
   }
   if (!rows.length) rows.push(['状态', '还没有记录，聊几轮之后这里会有内容']);
-  if (status.location) rows.push(['现在的场景', status.location]);
+  // 场景是全场共用的，塞进每个角色的卡片里既没信息量也容易误读成"他在这儿"
   if (status.time) rows.push(['时间', status.time]);
 
   pop.textContent = '';
