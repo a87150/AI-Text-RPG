@@ -14,7 +14,8 @@ import zipfile
 from . import config
 from .config import BASE_DIR, DATA_DIR, app
 
-BACKUP_DIR = os.path.join(BASE_DIR, "backups")
+# 允许指到别处：跑检查时产物别混进用户真实的备份列表
+BACKUP_DIR = os.environ.get("LT_BACKUP_DIR") or os.path.join(BASE_DIR, "backups")
 KEEP_MAX = 30          # ponytail: 只按份数裁剪，磁盘不够时再加大小上限
 _EXTRA = (".json",)
 _log_lock = threading.Lock()
@@ -96,6 +97,8 @@ def listing():
         if not fn.endswith(".zip"):
             continue
         full = os.path.join(BACKUP_DIR, fn)
+        if not os.path.isfile(full):     # 归档子目录里的不算
+            continue
         try:
             stat = os.stat(full)
         except OSError:
@@ -216,9 +219,9 @@ def due(conf, latest_at, now=None):
     """现在该不该自动备份：开了、且距上一份超过间隔。"""
     if not isinstance(conf, dict) or not conf.get("enabled"):
         return False
-    hours = max(1, int(conf.get("every_hours") or 24))
+    minutes = max(1, int(conf.get("every_minutes") or 1440))
     now = time.time() if now is None else now
-    return (now - float(latest_at or 0)) >= hours * 3600
+    return (now - float(latest_at or 0)) >= minutes * 60
 
 
 def auto_loop(stop_event, conf_reader):

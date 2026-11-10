@@ -352,7 +352,7 @@
     <details class="prefs-sec" data-sec="backup">
       <summary>备份</summary>
       <div class="prefs-body">
-        <div class="hint">把 data/ 整个打包成 zip 存到 backups/。包里的 API Key 会被抹掉，所以可以放心挪走。只保留最近 30 份。</div>
+        <div class="hint">把 data/ 整个打包成 zip 存到 backups/。包里的 API Key 会被抹掉，所以可以放心挪走。</div>
         <div class="backup-actions">
           <button type="button" id="btn-backup-now">立即备份</button>
           <span class="backup-msg" id="backup-msg"></span>
@@ -361,11 +361,16 @@
           <label class="backup-toggle">
             <input type="checkbox" id="backup-enabled"> 定时自动备份
           </label>
-          <span>每隔</span>
-          <input type="number" id="backup-hours" min="1" max="720" value="24">
-          <span>小时，保留</span>
-          <input type="number" id="backup-keep" min="1" max="30" value="30">
-          <span>份（最多 30）</span>
+          <label class="bk-field">
+            <span>每</span>
+            <input type="number" id="backup-minutes" min="5" max="20160" step="5" value="1440">
+            <span>分钟备份一次</span>
+          </label>
+          <label class="bk-field">
+            <span>最多留</span>
+            <input type="number" id="backup-keep" min="1" max="30" value="30">
+            <span>份</span>
+          </label>
           <button type="button" class="ghost" id="btn-backup-save">保存</button>
         </div>
         <div class="backup-list" id="backup-list"></div>

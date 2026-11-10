@@ -25,7 +25,7 @@ export async function refreshBackups() {
     const data = await api('/api/backups');
     const conf = data.conf || {};
     $('#backup-enabled').checked = !!conf.enabled;
-    $('#backup-hours').value = conf.every_hours || 24;
+    $('#backup-minutes').value = conf.every_minutes || 1440;
     const keepEl = $('#backup-keep');
     if (keepEl) keepEl.value = conf.keep || 30;
     const items = data.items || [];
@@ -120,19 +120,19 @@ export async function runBackup() {
 
 export async function saveBackupConf() {
   const enabled = $('#backup-enabled').checked;
-  const every = parseInt($('#backup-hours').value, 10) || 24;
+  const every = parseInt($('#backup-minutes').value, 10) || 1440;
   const keepEl = $('#backup-keep');
   const keep = parseInt(keepEl ? keepEl.value : '30', 10) || 30;
   try {
     const conf = await api('/api/backup-config', {
       method: 'PUT',
-      body: { enabled, every_hours: every, keep },
+      body: { enabled, every_minutes: every, keep },
     });
-    $('#backup-hours').value = conf.every_hours;
+    $('#backup-minutes').value = conf.every_minutes;
     if (keepEl) keepEl.value = conf.keep;
     setMsg((conf.enabled
-      ? '已开启：每 ' + conf.every_hours + ' 小时自动备份一次'
-      : '已关闭定时备份') + '，最多保留 ' + conf.keep + ' 份', 'ok');
+      ? '已开启：每 ' + conf.every_minutes + ' 分钟自动备份一次'
+      : '已关闭定时备份') + '，最多留 ' + conf.keep + ' 份', 'ok');
   } catch (e) {
     setMsg('保存失败：' + e.message, 'error');
   }

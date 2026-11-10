@@ -86,7 +86,7 @@ WRITING_BOUNDS = {
 }
 _writing = dict(WRITING_DEFAULTS)
 
-# 自动备份：默认关，开了以后每隔 every_hours 小时打一个包
+# 自动备份：默认关，开了以后每隔 every_minutes 分钟打一个包
 # 档位对应的注入策略。小模型的真实限制不只是窗口小，还有注意力散：
 # 长历史会稀释近因，设定给多了会串味，账本读多了会开始抄。
 # 0 表示不限（history_msgs）或不截断（role_chars）。
@@ -100,9 +100,10 @@ TIER_LIMITS = {
 }
 TIER_CONTEXT = {k: v["context"] for k, v in TIER_LIMITS.items()}
 
-BACKUP_DEFAULTS = {"enabled": False, "every_hours": 24, "keep": 30}
-BACKUP_BOUNDS = {"every_hours": (1, 720), "keep": (1, 30)}
+BACKUP_DEFAULTS = {"enabled": False, "every_minutes": 1440, "keep": 30}
+BACKUP_BOUNDS = {"every_minutes": (5, 20160), "keep": (1, 30)}   # 5 分钟 ~ 14 天
 _backup = dict(BACKUP_DEFAULTS)
+_loaded = False        # load_settings 跑过没有：没跑过就不敢覆盖磁盘配置
 
 # 模型能力档位：决定状态行用多重的格式，能力越差给的结构要越简单
 TIERS = ("basic", "standard", "advanced")
@@ -201,13 +202,13 @@ def save_backup_conf(data):
     with _model_lock:
         if "enabled" in data:
             _backup["enabled"] = bool(data["enabled"])
-        if "every_hours" in data:
+        if "every_minutes" in data:
             try:
-                hours = int(data["every_hours"])
+                minutes = int(data["every_minutes"])
             except (TypeError, ValueError):
-                hours = _backup["every_hours"]
-            lo, hi = BACKUP_BOUNDS["every_hours"]
-            _backup["every_hours"] = max(lo, min(hi, hours))
+                minutes = _backup["every_minutes"]
+            lo, hi = BACKUP_BOUNDS["every_minutes"]
+            _backup["every_minutes"] = max(lo, min(hi, minutes))
         if "keep" in data:
             try:
                 keep = int(data["keep"])
@@ -373,17 +374,30 @@ def provider_headers(pid):
     return {"Authorization": "Bearer " + key}
 
 
+def _read_disk_settings():
+    try:
+        with open(SETTINGS_PATH, encoding="utf-8") as f:
+            data = json.load(f) or {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
 def persist_settings():
+    # 没跑过 load_settings 的进程（命令行小脚本、单元检查）内存里全是默认值，
+    # 直接写盘会把用户真实的自定义提供方、api_key、写作参数一起抹掉。
+    # 这种进程只写它真正改过的那一项，其余沿磁盘原值。
+    prev = {} if _loaded else _read_disk_settings()
     payload = {
-        "provider": _model_state["provider"],
-        "model": _model_state["model"],
-        "providers": _provider_overrides,
-        "writing": _writing,
+        "provider": _model_state["provider"] if _loaded else (prev.get("provider") or DEFAULT_PROVIDER),
+        "model": _model_state["model"] if _loaded else (prev.get("model") or ""),
+        "providers": _provider_overrides or (prev.get("providers") or {}),
+        "writing": prev.get("writing") or _writing,
         "writing_version": 1,
-        "mode": _mode,
-        "reasoning": _reasoning,
-        "creativity": _creativity,
-        "tier": _tier,
+        "mode": prev.get("mode") or _mode,
+        "reasoning": prev.get("reasoning") or _reasoning,
+        "creativity": prev.get("creativity") or _creativity,
+        "tier": prev.get("tier") or _tier,
         "backup": _backup,
     }
     tmp = "%s.%s.tmp" % (SETTINGS_PATH, uuid.uuid4().hex[:8])
@@ -402,6 +416,8 @@ def persist_settings():
 
 
 def load_settings():
+    global _loaded
+    _loaded = True
     try:
         with open(SETTINGS_PATH, encoding="utf-8") as f:
             data = json.load(f) or {}
@@ -449,13 +465,17 @@ def load_settings():
     if isinstance(backup_saved, dict):
         if "enabled" in backup_saved:
             _backup["enabled"] = bool(backup_saved["enabled"])
-        if "every_hours" in backup_saved:
+        # 旧版本存的是小时，读到就换算成分钟
+        if "every_minutes" in backup_saved or "every_hours" in backup_saved:
             try:
-                hours = int(backup_saved["every_hours"])
+                if "every_minutes" in backup_saved:
+                    minutes = int(backup_saved["every_minutes"])
+                else:
+                    minutes = int(backup_saved["every_hours"]) * 60
             except (TypeError, ValueError):
-                hours = _backup["every_hours"]
-            lo, hi = BACKUP_BOUNDS["every_hours"]
-            _backup["every_hours"] = max(lo, min(hi, hours))
+                minutes = _backup["every_minutes"]
+            lo, hi = BACKUP_BOUNDS["every_minutes"]
+            _backup["every_minutes"] = max(lo, min(hi, minutes))
         if "keep" in backup_saved:
             try:
                 keep = int(backup_saved["keep"])

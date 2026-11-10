@@ -12,6 +12,8 @@ import zipfile
 
 TMP_DIR = tempfile.mkdtemp(prefix="lt-check-")
 os.environ["LT_DATA_DIR"] = TMP_DIR
+# 备份也别落在项目里：以前每次跑检查都往真实 backups/ 塞一对包
+os.environ["LT_BACKUP_DIR"] = os.path.join(TMP_DIR, "backups")
 
 import lt  # noqa: E402  必须在设置数据目录之后导入
 import rp.api as rp_api  # noqa: E402
@@ -575,17 +577,19 @@ def main():
           not any(x["name"] == made["name"] for x in rp_backup.listing()))
 
     # 25. 定时备份配置：开了能存，越界值夹回范围
-    saved = rp_config.save_backup_conf({"enabled": True, "every_hours": 6})
-    check("定时备份能开启", saved["enabled"] is True and saved["every_hours"] == 6, str(saved))
+    saved = rp_config.save_backup_conf({"enabled": True, "every_minutes": 90})
+    check("定时备份能开启", saved["enabled"] is True and saved["every_minutes"] == 90, str(saved))
     check("间隔超出范围会被夹住",
-          rp_config.save_backup_conf({"every_hours": 99999})["every_hours"] <= 720)
-    rp_config.save_backup_conf({"enabled": False, "every_hours": 24})
+          rp_config.save_backup_conf({"every_minutes": 999999})["every_minutes"] <= 20160)
+    check("短于 5 分钟会被抬回来",
+          rp_config.save_backup_conf({"every_minutes": 1})["every_minutes"] >= 5)
+    rp_config.save_backup_conf({"enabled": False, "every_minutes": 1440})
     now = 1_700_000_000
-    check("关着就不该跑", rp_backup.due({"enabled": False, "every_hours": 1}, 0, now) is False)
+    check("关着就不该跑", rp_backup.due({"enabled": False, "every_minutes": 60}, 0, now) is False)
     check("开着且到期才跑",
-          rp_backup.due({"enabled": True, "every_hours": 2}, now - 3 * 3600, now) is True)
+          rp_backup.due({"enabled": True, "every_minutes": 120}, now - 3 * 3600, now) is True)
     check("没到期不重复跑",
-          rp_backup.due({"enabled": True, "every_hours": 2}, now - 3600, now) is False)
+          rp_backup.due({"enabled": True, "every_minutes": 120}, now - 3600, now) is False)
 
     # 26. 状态行三种写法都要接住，正文里不许留残渣
     NL = chr(10)
