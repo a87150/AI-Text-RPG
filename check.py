@@ -1332,8 +1332,8 @@ def main():
     check("旁白不用灰字", "--text-dim" not in _narr_css and "color: var(--text)" in _narr_css, _narr_css[:120])
     check("旁白不用小字号", "font-size: var(--msg-fs)" in _narr_css and "msg-fs) - 1px" not in _narr_css)
     check("旁白留一道左边线做区分", "border-left: 2px solid" in _narr_css)
-    check("不再有系统徽章样式", ".narr-tag" not in _css3)
-    check("不再生成系统徽章", "narr-tag" not in _ui4)
+    check("旁白标签的样式还在", ".narr-tag" in _css3)
+    check("标签内容来自故事名", "storyName()" in _ui4 and "label.textContent = tag" in _ui4)
     check("一般模式的流式也画成旁白块",
           "if (plain) {" in _ui4 and "const el = narratorNode(text || '')" in _ui4)
     check("流式和落盘共用同一套旁白结构",
@@ -1362,6 +1362,39 @@ def main():
     check("界面写的是角色上限不是同时在场",
           "角色上限" in _html4 and "同时在场角色上限" not in _html4)
     check("输入框 max 跟着改成 10", 'id="w-chars" type="number" min="1" max="10"' in _html4)
+
+    # 58. 物品绑定角色 + 主角也在场上
+    _src1, _st1 = rp_characters._take_mark_line("[[物品：玉芬=纱裙、皮鞭；谭谈=手机]]")
+    check("物品能按人分开",
+          _st1.get("items") == {"玉芬": "纱裙、皮鞭", "谭谈": "手机"}, str(_st1))
+    _src2, _st2 = rp_characters._take_mark_line("[[物品：一把湿伞]]")
+    check("不写名字还是公共物品", _st2.get("items") == "一把湿伞", str(_st2))
+    _src3, _st3 = rp_characters._take_mark_line("[[物品：玉芬＝纱裙；公共的钥匙]]")
+    check("全角等号也认", (_st3.get("items") or {}).get("玉芬") == "纱裙", str(_st3))
+    _merged = rp_characters.merge_status({"items": {"玉芬": "纱裙", "谭谈": "手机"}},
+                                         {"items": {"玉芬": "纱裙碎了"}})
+    check("物品合并不冲掉别人",
+          _merged["items"] == {"玉芬": "纱裙碎了", "谭谈": "手机"}, str(_merged))
+
+    # 59. 角色满了要问用户，不能静默丢掉
+    _full = rp_storage.new_session()
+    _full["mode"] = "normal"
+    rp_config.save_writing({"max_characters": 2}, persist=False)
+    _full["characters"] = [{"name": "甲", "role": "", "state": "", "history": []},
+                           {"name": "乙", "role": "", "state": "", "history": []}]
+    _r = rp_characters.upsert_character(_full, {"name": "丙", "role": "新人"})
+    check("满了先不登记", _r is None)
+    check("但记下了待定角色", (_full.get("pending_character") or {}).get("name") == "丙",
+          str(_full.get("pending_character")))
+    rp_config.save_writing({"max_characters": 4}, persist=False)
+    _apijs = (pathlib.Path(__file__).parent / "rp" / "api.py").read_text(encoding="utf-8")
+    check("有让用户取舍的接口", "/character-pick" in _apijs)
+    _chjs = (pathlib.Path(__file__).parent / "static" / "js" / "chat.js").read_text(encoding="utf-8")
+    _uijs2 = (pathlib.Path(__file__).parent / "static" / "js" / "ui.js").read_text(encoding="utf-8")
+    check("前端会弹选择框", "askCharacterPick" in _chjs and "export function askCharacterPick" in _uijs2)
+    check("选择框能选不要新角色", "不要新角色" in _uijs2)
+    check("主角也出现在在场名单里", "concat(chars.map((c) => c.name)" in _uijs2)
+    check("主角也有自己的状态弹层", "if (!c && name === me)" in _uijs2)
 
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:

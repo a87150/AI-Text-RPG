@@ -693,6 +693,32 @@ def api_clear_session(sid):
                     "context": context_info(sess)})
 
 
+@app.post("/api/sessions/<sid>/character-pick")
+def api_character_pick(sid):
+    """角色满了以后用户的选择：drop 传名字就踢掉那个人换新的，传空就不要新角色。"""
+    data = request.get_json(silent=True) or {}
+    drop = str(data.get("drop") or "").strip()
+    with get_session_lock(sid):
+        sess = load_session(sid)
+        if not sess:
+            return jsonify({"error": "会话不存在"}), 404
+        pending = sess.get("pending_character") or {}
+        name = (pending.get("name") or "").strip()
+        if not name:
+            return jsonify({"error": "没有待定角色"}), 400
+        if drop:
+            sess["characters"] = [c for c in (sess.get("characters") or [])
+                                  if (c.get("name") or "") != drop]
+            sess.pop("pending_character", None)
+            upsert_character(sess, pending)
+        else:
+            sess.pop("pending_character", None)
+        save_session(sess)
+        chars = ensure_characters(sess)
+    return jsonify({"ok": True, "characters": chars,
+                    "dropped": drop or "", "added": name if drop else ""})
+
+
 @app.post("/api/sessions/<sid>/compress")
 def api_compress_session(sid):
     if not try_acquire_busy(sid):
@@ -1037,6 +1063,7 @@ def api_chat():
                 "turn": turn,
                 "status": (s2 or {}).get("status") or {},
                 "characters": characters,
+                "pending_character": (s2 or {}).get("pending_character"),
             })
         finally:
             release_busy(sid)

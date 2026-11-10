@@ -181,6 +181,13 @@ button.ghost.wide { width: 100%; }
   line-height: 1.8;
 }
 .narrator p:last-child { margin-bottom: 0; }
+/* 旁白顶上那个小标签：写的是故事名，不是「系统」。字小但不抢视线。 */
+.narrator .narr-tag {
+  display: inline-block; margin-bottom: 6px; padding: 1px 8px;
+  border-radius: 999px; border: 1px solid var(--border-strong);
+  font-size: .6875rem; font-style: normal; letter-spacing: .04em;
+  color: var(--text-mute);
+}
 
 /* 角色卡直接平铺，跟其他设定一样跟着页面滚，不要再套一层小滚动框 */
 .char-list {
@@ -538,6 +545,8 @@ body.story-view .composer { display: none !important; }
 }
 .char-chip:hover { border-color: var(--border-strong); background: var(--bg-hover); color: var(--text); }
 .char-chip.off { opacity: .5; text-decoration: line-through; }
+/* 主角的那个 chip 稍微实一点，一眼看出哪个是自己 */
+.char-chip.me { color: var(--text); border-color: var(--border-strong); background: var(--bg-elev); }
 
 .char-pop {
   position: fixed; z-index: 70; width: 300px; max-height: 50vh; overflow-y: auto;

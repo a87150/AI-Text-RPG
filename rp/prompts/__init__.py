@@ -178,8 +178,13 @@ def build_status_scene(sess):
     other = role_labels(sess)[0]
     for key, label in (("relations", "你和她（%s）之间" % other), ("items", "你身上带着"),
                        ("goal", "你这会儿想")):
-        if status.get(key):
-            bits.append("%s：%s。" % (label, status[key]))
+        value = status.get(key)
+        if not value:
+            continue
+        if isinstance(value, dict):
+            value = "、".join(v for v in value.values() if v)
+        if value:
+            bits.append("%s：%s。" % (label, value))
     return "".join(bits)
 
 

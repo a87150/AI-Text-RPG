@@ -3,7 +3,7 @@ import { streamSSE, StreamEventError } from './api.js';
 import { state } from './state.js';
 import {
   $, toast, buildMessage, buildTurn, renderTurn, renderStreaming,
-  setAiStatus, appendRetryHint, renderMessages, updateStatusCard,
+  setAiStatus, appendRetryHint, renderMessages, updateStatusCard, askCharacterPick,
   scrollToBottom, syncAll, syncComposer, focusComposer, mdToHtml, escapeHtml, updateSub,
 } from './ui.js';
 import { loadSessions, refreshCurrentSession } from './sessions.js';
@@ -228,6 +228,22 @@ async function sendMessage(text, { isRetry }) {
             s.messages.push(msg);
           }
           if (ev.characters) s.characters = ev.characters;
+          if (ev.pending_character && ev.pending_character.name) {
+            const pending = ev.pending_character;
+            askCharacterPick(pending, s.characters || []).then(async (drop) => {
+              try {
+                const r = await api('/api/sessions/' + s.id + '/character-pick', {
+                  method: 'POST', body: { drop },
+                });
+                s.characters = r.characters;
+                renderMessages();
+                syncAll();
+                toast(drop ? ('换掉了 ' + drop + '，' + r.added + ' 进来了') : '这次没登记新角色', 'ok');
+              } catch (e) {
+                toast('调整角色失败：' + e.message, 'error');
+              }
+            });
+          }
           if (ev.status) { s.status = ev.status; updateStatusCard(ev.status); }
           s.context_chars = ev.context_chars;
           if (ev.context) s.context = ev.context;

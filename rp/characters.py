@@ -84,6 +84,12 @@ def upsert_character(sess, data):
                 c["state"] = change[:120]
             return (name, False)
     if len(chars) >= writing()["max_characters"]:
+        # 满了不要静默丢掉：记下来让前端问用户是踢掉谁还是不要
+        sess["pending_character"] = {
+            "name": name,
+            "role": (data.get("role") or "").strip()[:400],
+            "state": (data.get("relation") or "").strip()[:120],
+        }
         return None
     chars.append({
         "name": name,
@@ -156,6 +162,8 @@ def _take_mark_line(text):
             got = split_facts(value)
             if got:
                 status[FACT_KEY] = got
+        elif key == "items":
+            status[key] = _parse_items(value)
         elif key in ("present", "away"):
             names = [n.strip() for n in NAME_SPLIT_RE.split(value) if n.strip()]
             if names:
@@ -163,6 +171,29 @@ def _take_mark_line(text):
         else:
             status[key] = value
     return src, status
+
+
+def _parse_items(value):
+    """物品可以绑到具体人身上：物品：玉芬=纱裙、皮鞭；谭谈=手机。
+
+    没写等号的当成公共物品整串留着，跟以前的写法兼容。
+    返回 dict（人名 -> 物品）或原来的字符串。
+    """
+    parts = [p.strip() for p in re.split(r"[；;]", value or "") if p.strip()]
+    grouped, loose = {}, []
+    for part in parts:
+        if "=" in part or "＝" in part:
+            name, own = (part.replace("＝", "=").split("=", 1) + [""])[:2]
+            name, own = name.strip(), own.strip()
+            if name and own:
+                grouped[name] = own
+                continue
+        loose.append(part)
+    if grouped:
+        if loose:
+            grouped[""] = "、".join(loose)
+        return grouped
+    return value
 
 
 def merge_status(old, new):
@@ -185,8 +216,15 @@ def merge_status(old, new):
     for key, value in new.items():
         if key in on_off:
             continue
-        if value:
-            out[key] = value
+        if not value:
+            continue
+        # 物品是按人分的字典：新的一轮可能只提到一个人，别把别人的东西冲掉
+        if key == "items" and isinstance(value, dict):
+            merged = dict(out.get("items") or {}) if isinstance(out.get("items"), dict) else {}
+            merged.update({k: v for k, v in value.items() if v})
+            out[key] = merged
+            continue
+        out[key] = value
     return out
 
 

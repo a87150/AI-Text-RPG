@@ -539,19 +539,22 @@ export function updateSub() {
   const status = s.status || {};
   const present = status.present || [];
   const away = status.away || [];
+  const me = s.user_name || '我';
   if (!chars.length) {
     put('AI = ' + (s.ai_name || 'AI'));
   } else {
     put('在场 ');
-    for (const c of chars) {
-      const left = away.includes(c.name)
-        || (present.length > 0 && !present.includes(c.name));
+    // 主角也是场上的人，一起列出来；他在 characters 里可能没有卡，chip 走另一条路
+    const names = [me].concat(chars.map((c) => c.name).filter((n) => n !== me));
+    for (const name of names) {
+      const left = away.includes(name)
+        || (present.length > 0 && !present.includes(name));
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'char-chip' + (left ? ' off' : '');
-      btn.dataset.name = c.name;
-      btn.title = '点开看这个角色的当前状态';
-      btn.textContent = c.name + (left ? '（离场）' : '');
+      btn.className = 'char-chip' + (left ? ' off' : '') + (name === me ? ' me' : '');
+      btn.dataset.name = name;
+      btn.title = name === me ? '点开看自己的当前状态' : '点开看这个角色的当前状态';
+      btn.textContent = name + (left ? '（离场）' : '');
       el.appendChild(btn);
       put(' ');
     }
@@ -560,7 +563,12 @@ export function updateSub() {
 
   // 当前状态单独占一行：地点、时间、关系、目标、物品都记在状态块里，
   // 挤在同一行会把上面的在场名单顶散
-  const flat = (v) => (Array.isArray(v) ? v.filter(Boolean).join('、') : String(v || '').trim());
+  const flat = (v) => {
+    if (Array.isArray(v)) return v.filter(Boolean).join('、');
+    if (v && typeof v === 'object') return Object.keys(v).filter((k) => k && v[k])
+      .map((k) => k + '：' + v[k]).join('；') || (v[''] || '');
+    return String(v || '').trim();
+  };
   const facts = [];
   for (const [key, label] of [['location', '地点'], ['time', '时间'],
     ['relations', '关系'], ['goal', '目标'], ['items', '物品']]) {
@@ -590,6 +598,46 @@ export function updateSub() {
   el.appendChild(line);
 }
 
+/** 角色满了：问用户是踢掉一个换新的，还是干脆不要这个新角色。 */
+export function askCharacterPick(pending, chars) {
+  return new Promise((resolve) => {
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    const box = document.createElement('div');
+    box.className = 'modal-box narrow';
+    const head = document.createElement('h2');
+    head.textContent = '角色满了';
+    const tip = document.createElement('p');
+    tip.className = 'hint';
+    tip.textContent = '要加「' + (pending.name || '新角色') + '」'
+      + (pending.role ? '（' + pending.role.slice(0, 30) + '）' : '')
+      + '，得先腾个位置。点一个人换掉，或者这次先不登记。';
+    const list = document.createElement('div');
+    list.className = 'pick-list';
+    for (const c of chars) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'pick-item';
+      b.textContent = c.name + (c.role ? ' · ' + c.role.slice(0, 24) : '');
+      b.onclick = () => { modal.remove(); resolve(c.name); };
+      list.appendChild(b);
+    }
+    const actions = document.createElement('div');
+    actions.className = 'modal-actions';
+    const skip = document.createElement('button');
+    skip.type = 'button';
+    skip.className = 'ghost';
+    skip.textContent = '不要新角色';
+    skip.onclick = () => { modal.remove(); resolve(''); };
+    const spacer = document.createElement('span');
+    spacer.className = 'spacer';
+    actions.append(skip, spacer);
+    box.append(head, tip, list, actions);
+    modal.appendChild(box);
+    document.body.appendChild(modal);
+  });
+}
+
 /** 点顶栏的角色名，看这个角色此刻是什么状态。 */
 export function toggleCharPop(name, anchor) {
   const pop = $('#char-pop');
@@ -599,17 +647,23 @@ export function toggleCharPop(name, anchor) {
     pop.classList.add('hidden');
     return;
   }
-  const c = (s.characters || []).find((x) => x.name === name);
+  const me = s.user_name || '我';
+  let c = (s.characters || []).find((x) => x.name === name);
+  // 主角不在角色表里，但他也有状态要看
+  if (!c && name === me) c = { name: me, role: '', state: '', history: [] };
   if (!c) return;
 
   const status = s.status || {};
   const rows = [];
   // 长设定不适合塞弹层，看状态就够
+  const carried = status.items && typeof status.items === 'object' ? status.items[name] : '';
+  if (carried) rows.push(['物品', carried]);
   if (c.state) rows.push(['状态', c.state]);
   if (c.history && c.history.length) {
     rows.push(['近况', c.history.slice(-3).join('；')]);
   }
   if (!rows.length) rows.push(['状态', '还没有记录，聊几轮之后这里会有内容']);
+  if (name === me) rows.unshift(['身份', '你这一局演的就是 TA']);
 
   pop.textContent = '';
   pop.dataset.for = name;
@@ -730,12 +784,25 @@ export function pickTurn(text, speaker) {
   return out;
 }
 
-/** 旁白。不加「系统」之类的小徽章：生成中和生成完之后必须长得一样，
- *  区别只靠左边那道细线和浅色底，字号字色跟角色台词一致。
+/** 旁白。顶部的小标签写故事名（不是「系统」），一眼看出这段属于哪个故事。
+ *  生成中和生成完之后必须长得一样，所以流式和落盘都走这里。
  */
-export function narratorNode(text) {
+/** 旁白标签上写的故事名：优先故事模板的标题，没有就用这局对话的标题。 */
+function storyName() {
+  const s = state.session || {};
+  const story = (state.stories || []).find((x) => x.id === s.story_id);
+  return (story && story.title) || s.title || '故事';
+}
+
+export function narratorNode(text, tag = '') {
   const el = document.createElement('div');
   el.className = 'narrator';
+  if (tag) {
+    const label = document.createElement('span');
+    label.className = 'narr-tag';
+    label.textContent = tag;
+    el.appendChild(label);
+  }
   const body = document.createElement('div');
   body.className = 'narr-body';
   body.innerHTML = mdToHtml(text);
@@ -757,7 +824,8 @@ export function buildTurn(narrator, speaker, line) {
 export function renderTurn(container, turn) {
   if (!container) return null;
   container.innerHTML = '';
-  if (turn.narrator) container.appendChild(narratorNode(turn.narrator));
+  const storyTag = turn.speaker ? '' : storyName();
+  if (turn.narrator) container.appendChild(narratorNode(turn.narrator, storyTag));
   if (!turn.line) return null;          // 一般模式只有叙述，没有角色气泡
   const msg = buildMessage('assistant', turn.line, turn.speaker || 'AI');
   container.appendChild(msg.el);
@@ -976,7 +1044,7 @@ export function renderMessages() {
       // 一般模式：系统叙述，没有角色名
       host = document.createElement('div');
       host.className = 'turn';
-      host.appendChild(narratorNode(m.narrator || m.content || ''));
+      host.appendChild(narratorNode(m.narrator || m.content || '', storyName()));
     }
     host.dataset.index = index;
     host.appendChild(toolsNode(m.role === 'user' ? 'user' : 'assistant'));
