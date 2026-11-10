@@ -533,31 +533,36 @@ export function updateSub() {
   if (!s) { el.textContent = ''; return; }
   el.textContent = '';
   const put = (text) => el.appendChild(document.createTextNode(text));
-  put('我 = ' + (s.user_name || '我') + ' · ');
-
   const chars = s.characters || [];
   const status = s.status || {};
   const present = status.present || [];
   const away = status.away || [];
   const me = s.user_name || '我';
-  if (!chars.length) {
-    put('AI = ' + (s.ai_name || 'AI'));
-  } else {
-    put('在场 ');
-    // 主角也是场上的人，一起列出来；他在 characters 里可能没有卡，chip 走另一条路
-    const names = [me].concat(chars.map((c) => c.name).filter((n) => n !== me));
-    for (const name of names) {
-      const left = away.includes(name)
-        || (present.length > 0 && !present.includes(name));
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'char-chip' + (left ? ' off' : '') + (name === me ? ' me' : '');
-      btn.dataset.name = name;
-      btn.title = name === me ? '点开看自己的当前状态' : '点开看这个角色的当前状态';
-      btn.textContent = name + (left ? '（离场）' : '');
-      el.appendChild(btn);
+  const isLeft = (name) => away.includes(name)
+    || (present.length > 0 && !present.includes(name));
+  const chip = (name) => {
+    const left = isLeft(name);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'char-chip' + (left ? ' off' : '') + (name === me ? ' me' : '');
+    btn.dataset.name = name;
+    btn.title = name === me ? '点开看自己的当前状态' : '点开看这个角色的当前状态';
+    btn.textContent = name + (left ? '（离场）' : '');
+    return btn;
+  };
+
+  // 主角只在这一处出现：本人→名字。别再在在场的名单里重复一遍
+  put('本人→');
+  el.appendChild(chip(me));
+  const others = chars.filter((c) => c.name !== me);
+  if (others.length) {
+    put(' · 在场 ');
+    for (const c of others) {
+      el.appendChild(chip(c.name));
       put(' ');
     }
+  } else if (!chars.length) {
+    put(' · AI = ' + (s.ai_name || 'AI'));
   }
   put('· ' + ((s.context ? s.context.messages : (s.messages || []).length) || 0) + ' 条');
 
