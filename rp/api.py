@@ -238,10 +238,16 @@ def seed_opening(sess):
 
 
 def _bind_story(sess, story):
-    """把会话的设定同步进故事模板，保证「设定」面板编辑的就是故事本身。"""
-    if not story:
-        story = new_story(sess.get("title") or DEFAULT_TITLE)
+    """让会话记住自己从哪份设定来。有现成设定就只记 id，不回写内容。
+
+    在对话里改设定改的是这一局，故事模板只有「故事」视图里那条 PUT 才能改。
+    以前这里每次都 update_from + save_story，于是改对话等于改模板，
+    下一局开出来也带着被污染的设定。只有一局全新的空对话才顺手建一份模板。
+    """
+    if story:
         sess["story_id"] = story["id"]
+        return story
+    story = new_story(sess.get("title") or DEFAULT_TITLE)
     update_from(story, sess)
     save_story(story)
     sess["story_id"] = story["id"]
@@ -631,7 +637,6 @@ def api_update_session(sid):
             if (sess.get("ai_role") or "").strip():
                 chars[0]["role"] = sess["ai_role"].strip()[:400]
         seed_opening(sess)
-        _bind_story(sess, load_story(sess.get("story_id") or ""))
         save_session(sess)
         sess["context_chars"] = context_chars(sess)
         sess["context"] = context_info(sess)

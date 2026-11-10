@@ -275,6 +275,13 @@ def main():
           saved["ai_name"] == "沈砚" and saved["ai_role"] == "守灯人",
           (saved.get("ai_name"), saved.get("ai_role")))
 
+    # 模板是独立一层：想让新局带上设定，得显式改模板，改对话不会写回去
+    client.put("/api/stories/" + saved["story_id"], json={
+        "title": saved["title"], "user_name": saved["user_name"],
+        "user_role": saved["user_role"], "world": saved["world"],
+        "rules": saved["rules"], "opening": saved["opening"],
+        "characters": saved["characters"],
+    })
     second = client.post("/api/sessions", json={"story_id": saved["story_id"]}).get_json()
     check("同一故事开新局沿用设定",
           [c["name"] for c in second["characters"]] == ["沈砚", "周惠兰"]
@@ -365,8 +372,9 @@ def main():
     check("世界书会随设定保存", saved_lore["lore"][0]["content"] == "老板只收旧币。",
           saved_lore.get("lore"))
     story_after = client.get("/api/sessions/" + fresh["id"]).get_json()["story"]
-    check("世界书同步进故事模板",
-          (story_after or {}).get("lore") and story_after["lore"][0]["keys"] == "酒馆",
+    # 以前这里会把对话的世界书也写进故事模板；现在故事只能在故事视图里改
+    check("世界书不再同步进故事模板",
+          not (story_after or {}).get("lore"),
           (story_after or {}).get("lore"))
 
     # 13. 设定扩写：一次一个字段，贴住用户原话、不丢其它角色
@@ -1624,6 +1632,41 @@ def main():
     [_t.join() for _t in _ts]
     check("并发写只成一个，另一个被拦",
           sorted(_codes) == [200, 409], _codes)
+
+    # 72. 故事模板不能被对话改掉
+    _st72 = client.post("/api/stories", json={"title": "模板72"}).get_json()
+    client.put("/api/stories/%s" % _st72["id"], json={
+        "title": "模板72",
+        "world": "旧城，常年下雨。",
+        "rules": "不用感叹号。",
+        "characters": [{"name": "沈砚", "role": "守灯人。"}],
+    })
+    _sp72 = pathlib.Path(rp_stories.story_path(_st72["id"]))
+    _before72 = _sp72.read_bytes()
+    _run72 = client.post("/api/sessions", json={"story_id": _st72["id"]}).get_json()
+    check("从故事开局拿到模板设定",
+          _run72.get("world") == "旧城，常年下雨。", _run72.get("world"))
+    client.put("/api/sessions/%s" % _run72["id"], json={
+        "title": "这局自己的名字",
+        "world": "这局自己的世界。",
+        "characters": [{"name": "沈砚", "role": "守灯人。"},
+                        {"name": "阿鸾", "role": "新来的。"}],
+    })
+    check("在对话里改设定，故事字节不变",
+          _sp72.read_bytes() == _before72)
+    check("对话自己的设定真的改了",
+          rp_storage.load_session(_run72["id"]).get("world") == "这局自己的世界。")
+    _run72b = client.post("/api/sessions", json={"story_id": _st72["id"]}).get_json()
+    check("改过一局之后，新局仍拿到模板原样",
+          _run72b.get("world") == "旧城，常年下雨。"
+          and [c["name"] for c in _run72b.get("characters") or []] == ["沈砚"],
+          (_run72b.get("world"), _run72b.get("characters")))
+    _n72 = len(rp_stories.list_stories())
+    _blank72 = client.post("/api/sessions", json={}).get_json()
+    check("空对话绑一份模板、不多建",
+          bool(_blank72.get("story_id")) and len(rp_stories.list_stories()) == _n72 + 1,
+          (bool(_blank72.get("story_id")), _n72, len(rp_stories.list_stories())))
+    check("建空对话也没碰原模板", _sp72.read_bytes() == _before72)
 
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
