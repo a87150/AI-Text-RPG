@@ -19,7 +19,7 @@
       "turn": 7,
       "mode": "rp",
       "story_id": "65af52ef42e0",
-      "user_name": "林晚",
+      "user_name": "我",
       "user_role": "夜班护士，手上有一道旧疤。",
       "world": "旧城，常年下雨。",
       "rules": "用户自己加的额外要求",
@@ -28,22 +28,22 @@
       "compressed_upto": 12,
       "pending_character": null,
       "characters": [
-        {"name": "沈砚", "role": "守灯人，话少，记仇。", "state": "此刻的状态", "history": ["最近的变化"]}
+        {"name": "甲", "role": "守灯人，话少，记仇。", "state": "此刻的状态", "history": ["最近的变化"]}
       ],
       "status": {
-        "present": ["沈砚"], "away": ["周掌柜"],
-        "location": "银月酒馆", "time": "深夜",
-        "relations": "戒备", "items": {"沈砚": "湿伞、铜钥匙"}, "goal": "等他先开口"
+        "present": ["甲"], "away": ["周掌柜"],
+        "location": "某酒馆", "time": "深夜",
+        "relations": "戒备", "items": {"甲": "湿伞、铜钥匙"}, "goal": "等他先开口"
       },
       "facts": [
-        {"fact": "钥匙到了沈砚手里", "state": "active", "turn": 3, "subject": "钥匙"}
+        {"fact": "钥匙到了甲手里", "state": "active", "turn": 3, "subject": "钥匙"}
       ],
       "messages": [
         {"role": "user", "content": "我推门进去。"},
         {"role": "assistant", "narrator": "旁白",
-         "lines": [{"speaker": "沈砚", "text": "台词"}, {"speaker": "阿鸾", "text": "另一句"}]}
+         "lines": [{"speaker": "甲", "text": "台词"}, {"speaker": "阿鸾", "text": "另一句"}]}
       ],
-      "lore": [{"keys": "银月酒馆", "content": "城南的酒馆，老板欠沈砚一条命。"}]
+      "lore": [{"keys": "某酒馆", "content": "城南的酒馆，老板欠甲一条命。"}]
     }
 
 character 的 state 和 history 由模型每轮的「【变化】」维护；第 0 个角色决定 ai_name 和 ai_role。
@@ -162,7 +162,7 @@ POST /api/sessions/<sid>/branch {"index": n}
 
 ## SSE 事件
 
-    {"type": "speaker", "name": "沈砚"}
+    {"type": "speaker", "name": "甲"}
     {"type": "thinking", "delta": "..."}
     {"type": "delta", "delta": "正文增量"}
     {"type": "retry", "attempt": 2, "max": 3, "reason": "内容太短"}

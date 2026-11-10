@@ -27,7 +27,7 @@ function renderLoreList() {
   if (!draftLore.length) {
     const empty = document.createElement('div');
     empty.className = 'lore-empty';
-    empty.textContent = '还没有条目。例：关键词「银月酒馆」，内容写它的规矩、老板、暗号。';
+    empty.textContent = '还没有条目。例：关键词「某酒馆」，内容写它的规矩、老板、暗号。';
     box.appendChild(empty);
     return;
   }
@@ -37,7 +37,7 @@ function renderLoreList() {
 
     const keys = document.createElement('input');
     keys.className = 'lore-keys';
-    keys.placeholder = '关键词，逗号分隔：银月酒馆,酒馆';
+    keys.placeholder = '关键词，逗号分隔：某酒馆,酒馆';
     keys.value = item.keys || '';
     keys.oninput = () => { draftLore[i].keys = keys.value; };
 

@@ -40,10 +40,10 @@ def check(name, ok, detail=""):
 MODE = {"kind": "error"}
 TURN_TEXT = (
     "【旁白】雨还在下，走廊的灯闪了一下。\n"
-    "【沈砚】他把伞收起来，靠在门边。\n"
-    "【周惠兰】这是抢话，必须被丢掉。\n"
-    '【新角色】{"name":"周惠兰","role":"房东，耳朵很尖","relation":"住在楼下"}\n'
-    '【变化】{"name":"沈砚","change":"开始怀疑有人跟踪"}'
+    "【甲】他把伞收起来，靠在门边。\n"
+    "【庚】这是抢话，必须被丢掉。\n"
+    '【新角色】{"name":"庚","role":"房东，耳朵很尖","relation":"住在楼下"}\n'
+    '【变化】{"name":"甲","change":"开始怀疑有人跟踪"}'
 )
 
 
@@ -86,7 +86,7 @@ def main():
           created.get("context"))
 
     client.put("/api/sessions/" + sid, json={
-        "ai_name": "沈砚", "ai_role": "沉默的警察",
+        "ai_name": "甲", "ai_role": "沉默的警察",
         "world": "雨夜小城", "opening": "雨水敲打着窗。",
     })
     sess = client.get("/api/sessions/" + sid).get_json()
@@ -157,58 +157,58 @@ def main():
           cleared["messages"])
 
     # 6. 旁白 / 单角色发言 / 轮换 / 新角色 / 设定演进
-    parsed = lt.parse_turn(TURN_TEXT, "沈砚")
+    parsed = lt.parse_turn(TURN_TEXT, "甲")
     check("旁白与台词分开", parsed["narrator"].startswith("雨还在下")
           and parsed["line"].startswith("他把伞"), parsed)
     check("越权发言被丢弃", "抢话" not in parsed["line"], parsed["line"])
     check("新角色与变化被解析",
-          parsed["new_character"]["name"] == "周惠兰"
-          and parsed["updates"][0]["name"] == "沈砚", parsed)
+          parsed["new_character"]["name"] == "庚"
+          and parsed["updates"][0]["name"] == "甲", parsed)
     check("无标记输出整段归给发言人",
-          lt.parse_turn("他点了点头。", "沈砚")["line"] == "他点了点头。")
+          lt.parse_turn("他点了点头。", "甲")["line"] == "他点了点头。")
 
     story = client.post("/api/sessions", json={}).get_json()
     story_sid = story["id"]
-    client.put("/api/sessions/" + story_sid, json={"ai_name": "沈砚", "ai_role": "沉默的警察"})
+    client.put("/api/sessions/" + story_sid, json={"ai_name": "甲", "ai_role": "沉默的警察"})
     MODE["kind"] = "final"
 
     client.post("/api/chat", json={"session_id": story_sid, "message": "我回来了"}).get_data(as_text=True)
     after_turn = client.get("/api/sessions/" + story_sid).get_json()
     last = after_turn["messages"][-1]
-    check("落盘的助手消息带说话人", last["speaker"] == "沈砚", last)
+    check("落盘的助手消息带说话人", last["speaker"] == "甲", last)
     check("落盘的助手消息带旁白", last.get("narrator", "").startswith("雨还在下"), last)
     check("落盘内容不含抢话段落", "抢话" not in last["content"], last["content"])
     names = [c["name"] for c in after_turn["characters"]]
-    check("新角色已加入角色表", "周惠兰" in names, names)
-    shen = [c for c in after_turn["characters"] if c["name"] == "沈砚"][0]
+    check("新角色已加入角色表", "庚" in names, names)
+    shen = [c for c in after_turn["characters"] if c["name"] == "甲"][0]
     check("角色设定随进展更新", shen["state"] == "开始怀疑有人跟踪", shen)
     check("回合数推进", after_turn["turn"] == 1, after_turn["turn"])
 
     # 用户对角色表有最终决定权
     edited = client.put("/api/sessions/" + story_sid, json={
         "characters": [
-            {"name": "沈砚", "role": "刑警"},
-            {"name": "周惠兰", "role": "房东"},
+            {"name": "甲", "role": "刑警"},
+            {"name": "庚", "role": "房东"},
             {"name": "阿岚", "role": "线人"},
         ]
     }).get_json()
     check("用户可以新增角色", [c["name"] for c in edited["characters"]]
-          == ["沈砚", "周惠兰", "阿岚"], edited["characters"])
+          == ["甲", "庚", "阿岚"], edited["characters"])
 
     removed = client.put("/api/sessions/" + story_sid, json={
-        "characters": [{"name": "沈砚", "role": "刑警"}]
+        "characters": [{"name": "甲", "role": "刑警"}]
     }).get_json()
     check("用户可以删除角色",
-          [c["name"] for c in removed["characters"]] == ["沈砚"], removed["characters"])
+          [c["name"] for c in removed["characters"]] == ["甲"], removed["characters"])
 
     kept = client.put("/api/sessions/" + story_sid, json={
-        "characters": [{"name": "沈砚", "role": "刑警，旧城区长大"}]
+        "characters": [{"name": "甲", "role": "刑警，旧城区长大"}]
     }).get_json()
     check("用户改的人设被保留",
           kept["characters"][0]["role"] == "刑警，旧城区长大", kept["characters"])
 
     # AI 引入同名角色时，不能覆盖用户写的人设
-    lt.upsert_character(kept, {"name": "沈砚", "role": "其实是鬼", "change": "伤了一条腿"})
+    lt.upsert_character(kept, {"name": "甲", "role": "其实是鬼", "change": "伤了一条腿"})
     check("AI 不会改写用户的人设",
           kept["characters"][0]["role"] == "刑警，旧城区长大", kept["characters"][0])
     check("AI 只推进状态",
@@ -225,15 +225,15 @@ def main():
     plain = client.post("/api/sessions", json={}).get_json()
     plain_sid = plain["id"]
     client.put("/api/sessions/" + plain_sid, json={
-        "ai_name": "沈砚", "ai_role": "沉默的警察", "world": "雨夜小城",
-        "characters": [{"name": "沈砚", "role": "沉默的警察"},
-                       {"name": "周惠兰", "role": "房东"}],
+        "ai_name": "甲", "ai_role": "沉默的警察", "world": "雨夜小城",
+        "characters": [{"name": "甲", "role": "沉默的警察"},
+                       {"name": "庚", "role": "房东"}],
     })
     plain_sess = client.get("/api/sessions/" + plain_sid).get_json()
     check("一般模式没有发言人",
           rp_characters.next_speaker(plain_sess) == "",
           rp_characters.next_speaker(plain_sess))
-    turn = rp_characters.parse_turn("雨还在下。\n【沈砚】他把伞收起来。", "")
+    turn = rp_characters.parse_turn("雨还在下。\n【甲】他把伞收起来。", "")
     check("一般模式整段算叙述",
           turn["narrator"].startswith("雨还在下") and not turn["lines"], turn)
 
@@ -247,11 +247,11 @@ def main():
           and bool(last_plain.get("narrator")),
           (last_plain, plain_body[:160]))
 
-    rules_plain = rp_prompts.build_rules("林晚", "normal", "沈砚、周惠兰")
+    rules_plain = rp_prompts.build_rules("我", "normal", "甲、庚")
     check("一般模式提示词是叙述者口吻",
           "叙述者" in rules_plain and "你这一轮演的就是" not in rules_plain,
           rules_plain[:80])
-    rules_rp = rp_prompts.build_rules("林晚", "rp", "沈砚")
+    rules_rp = rp_prompts.build_rules("我", "rp", "甲")
     check("角色扮演提示词要求在场角色各自发言",
           "各写一段" in rules_rp and "旁白" in rules_rp, rules_rp[:90])
     rp_config.save_mode("rp", persist=False)
@@ -263,16 +263,16 @@ def main():
     check("新对话自动绑定一个故事", bool(fresh.get("story_id")), fresh.get("story_id"))
 
     saved = client.put("/api/sessions/" + fresh["id"], json={
-        "title": "雨夜旧城", "user_name": "林晚", "user_role": "记者",
+        "title": "雨夜旧城", "user_name": "我", "user_role": "记者",
         "world": "雨夜", "opening": "雨落下来。",
-        "characters": [{"name": "沈砚", "role": "守灯人"},
-                       {"name": "周惠兰", "role": "房东"}],
+        "characters": [{"name": "甲", "role": "守灯人"},
+                       {"name": "庚", "role": "房东"}],
         "mode": "rp",
     }).get_json()
     check("模式改为扮演后固定在这个对话",
           saved["mode"] == "rp", saved.get("mode"))
     check("第一个角色就是 AI 角色",
-          saved["ai_name"] == "沈砚" and saved["ai_role"] == "守灯人",
+          saved["ai_name"] == "甲" and saved["ai_role"] == "守灯人",
           (saved.get("ai_name"), saved.get("ai_role")))
 
     # 模板是独立一层：想让新局带上设定，得显式改模板，改对话不会写回去
@@ -284,8 +284,8 @@ def main():
     })
     second = client.post("/api/sessions", json={"story_id": saved["story_id"]}).get_json()
     check("同一故事开新局沿用设定",
-          [c["name"] for c in second["characters"]] == ["沈砚", "周惠兰"]
-          and second["world"] == "雨夜" and second["user_name"] == "林晚",
+          [c["name"] for c in second["characters"]] == ["甲", "庚"]
+          and second["world"] == "雨夜" and second["user_name"] == "我",
           second.get("characters"))
     check("新局只带开场，不带旧对话",
           [m["role"] for m in second["messages"]] == ["assistant"],
@@ -296,11 +296,11 @@ def main():
     check("故事列表记录开过几局", bool(mine) and mine[0]["runs"] == 2, stories)
 
     # 10. 状态面板：剥离、解析、注入
-    status_text = ('【旁白】雨还在下。\n【沈砚】他收起伞。\n'
+    status_text = ('【旁白】雨还在下。\n【甲】他收起伞。\n'
                    '<StatusBlock>{"location":"酒馆","time":"深夜",'
                    '"relations":"互相试探","items":["伞","旧钥匙"],'
                    '"goal":"问清来意"}</StatusBlock>')
-    st_turn = rp_characters.parse_turn(status_text, "沈砚")
+    st_turn = rp_characters.parse_turn(status_text, "甲")
     check("状态块从正文里剥离",
           "StatusBlock" not in st_turn["line"]
           and "StatusBlock" not in st_turn["narrator"], st_turn)
@@ -311,7 +311,7 @@ def main():
 
     with_status = dict(saved)
     with_status["status"] = st_turn["status"]
-    prompt = rp_prompts.build_system_prompt(with_status, "沈砚")
+    prompt = rp_prompts.build_system_prompt(with_status, "甲")
     check("上一轮状态注入下一轮提示词",
           "【此刻的处境】" in prompt and "问清来意" in prompt, prompt[-160:])
 
@@ -321,9 +321,9 @@ def main():
     raw = rp_storage.load_session(esid)
     raw["messages"] = [
         {"role": "user", "content": "第一句"},
-        {"role": "assistant", "content": "第一答", "speaker": "沈砚"},
+        {"role": "assistant", "content": "第一答", "speaker": "甲"},
         {"role": "user", "content": "第二句"},
-        {"role": "assistant", "content": "第二答", "speaker": "沈砚"},
+        {"role": "assistant", "content": "第二答", "speaker": "甲"},
     ]
     rp_storage.save_session(raw)
 
@@ -351,19 +351,19 @@ def main():
     # 12. 世界书：只注入命中关键词的条目
     lore_sess = dict(saved)
     lore_sess["lore"] = [
-        {"keys": "银月酒馆,酒馆", "content": "银月酒馆的老板只收旧币。"},
+        {"keys": "某酒馆,酒馆", "content": "某酒馆的老板只收旧币。"},
         {"keys": "遗迹", "content": "遗迹在城北，夜里会浮起来。"},
     ]
     lore_sess["messages"] = [{"role": "user", "content": "我推开酒馆的门"}]
-    hit_msgs = rp_prompts.build_messages(lore_sess, "沈砚")
+    hit_msgs = rp_prompts.build_messages(lore_sess, "甲")
     check("提到关键词才注入世界书",
-          "银月酒馆的老板只收旧币" in hit_msgs[0]["content"]
+          "某酒馆的老板只收旧币" in hit_msgs[0]["content"]
           and "遗迹在城北" not in hit_msgs[0]["content"],
           hit_msgs[0]["content"][:80])
     lore_sess["messages"] = [{"role": "user", "content": "外面还在下雨"}]
-    calm_msgs = rp_prompts.build_messages(lore_sess, "沈砚")
+    calm_msgs = rp_prompts.build_messages(lore_sess, "甲")
     check("没提到就不塞世界书",
-          all("银月酒馆的老板只收旧币" not in (m.get("content") or "") for m in calm_msgs),
+          all("某酒馆的老板只收旧币" not in (m.get("content") or "") for m in calm_msgs),
           len(calm_msgs))
 
     saved_lore = client.put("/api/sessions/" + fresh["id"], json={
@@ -388,12 +388,12 @@ def main():
           "AI 角色还没定" in solo, solo[-160:])
 
     named = rp_prompts.build_field_prompt(
-        "character", name="沈砚", user_role="夜班护士",
-        characters=[{"name": "沈砚", "role": "跑网约车的"},
-                    {"name": "周惠兰", "role": "房东"}])
+        "character", name="甲", user_role="夜班护士",
+        characters=[{"name": "甲", "role": "跑网约车的"},
+                    {"name": "庚", "role": "房东"}])
     check("角色卡要求照着名字写并给出字数",
-          "沈砚" in named and "只写一个部分" in named, named[:80])
-    check("其它角色一并列出", "周惠兰" in named and "必须原样保留" in named)
+          "甲" in named and "只写一个部分" in named, named[:80])
+    check("其它角色一并列出", "庚" in named and "必须原样保留" in named)
 
     name_prompt = rp_prompts.build_field_prompt("ai_name", user_role="夜班护士")
     check("起名任务只要名字", "只输出名字" in name_prompt)
@@ -418,8 +418,8 @@ def main():
     normal_sess = dict(saved)
     normal_sess["mode"] = "normal"
     normal_sess["characters"] = [
-        {"name": "沈砚", "role": "守灯人，话少"},
-        {"name": "周惠兰", "role": "房东，爱管闲事"},
+        {"name": "甲", "role": "守灯人，话少"},
+        {"name": "庚", "role": "房东，爱管闲事"},
     ]
     normal_prompt = rp_prompts.build_system_prompt(normal_sess, "")
     check("一般模式也拿到完整角色卡",
@@ -429,11 +429,11 @@ def main():
           "角色按各自的人设" in normal_prompt and "不必轮流" in normal_prompt)
 
     rp_sess = dict(normal_sess, mode="rp")
-    rp_prompt = rp_prompts.build_system_prompt(rp_sess, "周惠兰")
+    rp_prompt = rp_prompts.build_system_prompt(rp_sess, "庚")
     check("两种模式读的是同一份角色表",
-          "房东，爱管闲事" in rp_prompt and "你这一轮演的就是：周惠兰" in rp_prompt)
+          "房东，爱管闲事" in rp_prompt and "你这一轮演的就是：庚" in rp_prompt)
     check("RP 模式先钉死身份",
-          rp_prompt.startswith("你这一轮就是【周惠兰】本人"), rp_prompt[:30])
+          rp_prompt.startswith("你这一轮就是【庚】本人"), rp_prompt[:30])
 
     # 15. 思考强度（Ollama 的 reasoning_effort）
     check("默认思考强度是中等", rp_config.reasoning_effort() == "medium",
@@ -452,8 +452,8 @@ def main():
 
     # 16. 补全只输出正文：去前言、去标题、去重复、整段覆盖简述
     dirty = ("好的，以下是为你生成的角色设定：\n\n**角色卡：**\n\n"
-             "林晚，27 岁，赛博朋克城市的夜班护士，习惯把疲惫藏在利落的手脚里。\n\n"
-             "林晚今年 27 岁，是赛博朋克城市的夜班护士，习惯把疲惫藏在利落的手脚里。\n\n"
+             "我，27 岁，赛博朋克城市的夜班护士，习惯把疲惫藏在利落的手脚里。\n\n"
+             "我今年 27 岁，是赛博朋克城市的夜班护士，习惯把疲惫藏在利落的手脚里。\n\n"
              "说话简短，不主动开口。")
     cleaned = rp_prompts.clean_generated(dirty)
     check("补全不带开场客套", not cleaned.startswith("好的"), cleaned[:16])
@@ -472,15 +472,15 @@ def main():
     story = client.post("/api/stories", json={}).get_json()
     check("能单独建一份故事", bool(story.get("id")), str(story)[:40])
     saved = client.put("/api/stories/" + story["id"], json={
-        "title": "雨夜旧城", "user_name": "林晚", "world": "旧城雨季。",
-        "characters": [{"name": "沈砚", "role": "守灯人"}],
+        "title": "雨夜旧城", "user_name": "我", "world": "旧城雨季。",
+        "characters": [{"name": "甲", "role": "守灯人"}],
     }).get_json()
     check("故事设定能单独保存",
-          saved.get("world") == "旧城雨季。" and saved["characters"][0]["name"] == "沈砚",
+          saved.get("world") == "旧城雨季。" and saved["characters"][0]["name"] == "甲",
           str(saved)[:60])
-    check("故事自己派生 AI 角色名", saved.get("ai_name") == "沈砚", saved.get("ai_name"))
+    check("故事自己派生 AI 角色名", saved.get("ai_name") == "甲", saved.get("ai_name"))
     check("故事改动已落盘",
-          client.get("/api/stories/" + story["id"]).get_json().get("user_name") == "林晚")
+          client.get("/api/stories/" + story["id"]).get_json().get("user_name") == "我")
     check("删除故事返回成功",
           client.delete("/api/stories/" + story["id"]).get_json().get("ok") is True)
 
@@ -488,12 +488,12 @@ def main():
     story2 = client.post("/api/stories", json={}).get_json()
     sess2 = client.post("/api/sessions", json={"story_id": story2["id"]}).get_json()
     live = rp_storage.load_session(sess2["id"])
-    live["characters"] = [{"name": "沈砚", "role": "守灯人", "state": "受伤", "history": ["第 3 幕"]}]
+    live["characters"] = [{"name": "甲", "role": "守灯人", "state": "受伤", "history": ["第 3 幕"]}]
     added = rp_stories.promote_characters(live, 4)
-    check("新角色会回流进故事", added == ["沈砚"], str(added))
+    check("新角色会回流进故事", added == ["甲"], str(added))
     saved_story = client.get("/api/stories/" + story2["id"]).get_json()
     cards = saved_story.get("characters") or []
-    shen = next((c for c in cards if c.get("name") == "沈砚"), None)
+    shen = next((c for c in cards if c.get("name") == "甲"), None)
     check("故事里能查到长期角色", shen is not None, str(cards)[:80])
     check("回流不带这一局的状态",
           shen is not None and shen["state"] == "" and shen["history"] == [])
@@ -502,7 +502,7 @@ def main():
 
     # 19. 人设锚定：聊久了把角色核心重插到近处
     anchor_sess = rp_storage.new_session("锚定测试")
-    anchor_sess["characters"] = [{"name": "沈砚", "role": "守灯人，话少，不主动开口",
+    anchor_sess["characters"] = [{"name": "甲", "role": "守灯人，话少，不主动开口",
                                   "state": "", "history": []}]
     # 间隔由档位决定，这里按当前档位的间隔来验
     every = rp_config.tier_limits()["anchor_every"]
@@ -520,20 +520,20 @@ def main():
     # 20. 上下文检查器：能看见这一轮发了什么
     dbg_sess = rp_storage.new_session("检查器测试")
     dbg_sess["user_role"] = "夜班护士"
-    dbg_sess["characters"] = [{"name": "沈砚", "role": "守灯人", "state": "", "history": []}]
-    dbg_sess["lore"] = [{"keys": "银月酒馆", "content": "城南的酒馆，老板欠沈砚一条命。"}]
-    dbg_sess["messages"] = [{"role": "user", "content": "去银月酒馆看看"}]
+    dbg_sess["characters"] = [{"name": "甲", "role": "守灯人", "state": "", "history": []}]
+    dbg_sess["lore"] = [{"keys": "某酒馆", "content": "城南的酒馆，老板欠甲一条命。"}]
+    dbg_sess["messages"] = [{"role": "user", "content": "去某酒馆看看"}]
     dbg = rp_prompts.build_context_debug(dbg_sess)
     check("检查器给出 system 全文", "【写法】" in dbg["system"])
     check("检查器标出命中的世界书",
-          bool(dbg["lore"]) and dbg["lore"][0]["keys"] == "银月酒馆", str(dbg["lore"])[:50])
+          bool(dbg["lore"]) and dbg["lore"][0]["keys"] == "某酒馆", str(dbg["lore"])[:50])
     check("检查器给出 token 估算", dbg["tokens"] > 0)
     check("上下文接口带 debug", "debug" in rp_context.context_info(dbg_sess))
 
     # 21. 事实账本：旧说法让位，不双写
     book_sess = {"turn": 3}
-    rp_characters.merge_facts(book_sess, ["沈砚拿走了钥匙"], turn=3)
-    rp_characters.merge_facts(book_sess, ["钥匙被沈砚拿走了"], turn=4)
+    rp_characters.merge_facts(book_sess, ["甲拿走了钥匙"], turn=3)
+    rp_characters.merge_facts(book_sess, ["钥匙被甲拿走了"], turn=4)
     live = rp_characters.active_facts(book_sess)
     check("账本只留最新一条", len(live) == 1 and live[0]["turn"] == 4, str(live))
     check("旧事实标记为已失效",
@@ -541,7 +541,7 @@ def main():
     check("账本写进 system prompt",
           "已经发生" in rp_prompts.build_system_prompt(book_sess))
     parsed = rp_characters.parse_turn(
-        '<StatusBlock>{"facts": ["两人约好三天后见"]}</StatusBlock>【沈砚】嗯。', "沈砚")
+        '<StatusBlock>{"facts": ["两人约好三天后见"]}</StatusBlock>【甲】嗯。', "甲")
     check("状态块能声明事实", parsed["facts"] == ["两人约好三天后见"], str(parsed["facts"]))
     check("事实不会混进状态字段", "facts" not in (parsed["status"] or {}))
 
@@ -631,10 +631,10 @@ def main():
 
     # 27. 设定生成要去掉英文解释行
     cleaned = rp_prompts.clean_generated(NL.join([
-        "Here is the setting:", "", "夜班护士林晚。", "She is calm.", "手上有疤。",
+        "Here is the setting:", "", "夜班护士我。", "She is calm.", "手上有疤。",
     ]))
     check("生成设定里没有英文行", "Here is" not in cleaned and "She is" not in cleaned, repr(cleaned))
-    check("中文正文保留下来", "夜班护士林晚" in cleaned and "手上有疤" in cleaned, repr(cleaned))
+    check("中文正文保留下来", "夜班护士我" in cleaned and "手上有疤" in cleaned, repr(cleaned))
 
     # 28. 状态格式提醒贴在最后一条 user 上，不能只在 system 里
     tail_sess = rp_storage.new_session()
@@ -665,32 +665,32 @@ def main():
     check("配置接口带出档位", client.get("/api/config").get_json()["tier"] == "basic")
 
     # 30. 在场 / 离场：解析、分组、发言权、状态累积
-    scene_status = {"present": ["沈砚"], "away": ["周掌柜"]}
-    scene_chars = [{"name": "沈砚", "role": "守灯人"},
+    scene_status = {"present": ["甲"], "away": ["周掌柜"]}
+    scene_chars = [{"name": "甲", "role": "守灯人"},
                    {"name": "阿鸾", "role": "跑堂"},
                    {"name": "周掌柜", "role": "账房"}]
     on, off = rp_characters.scene_split(scene_chars, scene_status)
-    check("按在场名单分组", [c["name"] for c in on] == ["沈砚"]
+    check("按在场名单分组", [c["name"] for c in on] == ["甲"]
           and "周掌柜" in [c["name"] for c in off], str((on, off)))
     check("没标过就全员在场",
           len(rp_characters.scene_split(scene_chars, {})[0]) == 3)
     scene_sess = {"turn": 3, "mode": "rp", "characters": scene_chars, "status": scene_status}
     check("圆桌式不再指定单一发言人", rp_characters.next_speaker(scene_sess) == "")   # 在场分组见下面两条
-    block = rp_prompts.build_character_block(scene_chars, "沈砚", scene_status)
+    block = rp_prompts.build_character_block(scene_chars, "甲", scene_status)
     check("离场角色写进提示但标注不要出现",
           "周掌柜" in block and "不在这一场" in block, block[-80:])
     merged = rp_characters.merge_status(
-        {"location": "酒馆", "present": ["沈砚"], "away": ["周掌柜"]}, {"goal": "试探"})
+        {"location": "酒馆", "present": ["甲"], "away": ["周掌柜"]}, {"goal": "试探"})
     check("状态是累积的，没写到的字段不丢",
           merged.get("location") == "酒馆" and merged.get("goal") == "试探"
           and merged.get("away") == ["周掌柜"], str(merged))
     check("状态行里写在场也能解析",
-          (rp_characters.extract_status("正文。\n[[在场：沈砚,阿鸾|离场：周掌柜|地点：酒馆]]")[1] or {})
-          .get("present") == ["沈砚", "阿鸾"])
+          (rp_characters.extract_status("正文。\n[[在场：甲,阿鸾|离场：周掌柜|地点：酒馆]]")[1] or {})
+          .get("present") == ["甲", "阿鸾"])
     check("JSON 里写在场也能解析",
           (rp_characters.extract_status(
               "正文。<StatusBlock>" + chr(123) + chr(34) + "present" + chr(34) + ":[" + chr(34)
-              + "沈砚" + chr(34) + "]," + chr(34) + "away" + chr(34) + ":[" + chr(34)
+              + "甲" + chr(34) + "]," + chr(34) + "away" + chr(34) + ":[" + chr(34)
               + "周掌柜" + chr(34) + "]" + chr(125) + "</StatusBlock>")[1] or {})
           .get("away") == ["周掌柜"])
 
@@ -699,7 +699,7 @@ def main():
     rp_storage.save_session(dict(
         rp_storage.load_session(edit_sess2["id"]),
         messages=[{"role": "user", "content": "我说的"},
-                  {"role": "assistant", "content": "它说的", "speaker": "沈砚"}]))
+                  {"role": "assistant", "content": "它说的", "speaker": "甲"}]))
     ok = client.put("/api/sessions/%s/message" % edit_sess2["id"],
                     json={"index": 0, "text": "改自己的话"})
     check("能改自己的消息", ok.status_code == 200, str(ok.status_code))
@@ -707,18 +707,18 @@ def main():
                      json={"index": 1, "text": "想改 AI 的"})
     check("不能改 AI 的消息", bad.status_code == 400, str(bad.status_code))
     check("AI 的正文没被动过",
-          (rp_storage.load_session(edit_sess2["id"])["messages"][1].get("speaker")) == "沈砚")
+          (rp_storage.load_session(edit_sess2["id"])["messages"][1].get("speaker")) == "甲")
 
     # 32. 档位决定注入策略：历史条数、人设长度、账本条数、锚定间隔
     def _fat_sess():
         return {"turn": 8, "mode": "rp", "user_name": "甲",
-                "characters": [{"name": "沈砚", "role": "守灯人，话少。" * 30}],
+                "characters": [{"name": "甲", "role": "守灯人，话少。" * 30}],
                 "facts": [{"fact": "事实%d" % i, "state": "active", "turn": i} for i in range(20)],
                 "messages": [{"role": "user", "content": "u%d" % i} if i % 2 == 0
                              else {"role": "assistant", "content": "a%d" % i} for i in range(40)]}
 
     rp_config.save_tier("basic", persist=False)
-    msgs = rp_prompts.build_messages(_fat_sess(), "沈砚")
+    msgs = rp_prompts.build_messages(_fat_sess(), "甲")
     hist = [m for m in msgs if m["role"] != "system"]
     check("初级只带最近 16 条历史", len(hist) == 16, str(len(hist)))
     check("历史不从 assistant 开头", msgs[-16]["role"] == "user", msgs[-16]["role"])
@@ -727,18 +727,18 @@ def main():
     check("截断断在句号上", _cut.startswith("守灯人") and _cut.rstrip("…")[-1] in "。！？", _cut[-26:])
     check("截断后告诉模型这是节选",
           "节选" in rp_prompts.build_character_block(
-              [{"name": "沈砚", "role": "守灯人，话少。" * 40}], "沈砚"))
-    body = rp_prompts.build_system_prompt(_fat_sess(), "沈砚")
+              [{"name": "甲", "role": "守灯人，话少。" * 40}], "甲"))
+    body = rp_prompts.build_system_prompt(_fat_sess(), "甲")
     check("初级只注入 6 条账本",
           body.count("· 事实") == 6, str(body.count("· 事实")))
     check("初级第 8 轮就重插人设",
           any("人设锚定" in m["content"] for m in msgs))
 
     rp_config.save_tier("advanced", persist=False)
-    msgs2 = rp_prompts.build_messages(_fat_sess(), "沈砚")
+    msgs2 = rp_prompts.build_messages(_fat_sess(), "甲")
     hist2 = [m for m in msgs2 if m["role"] != "system"]
     check("高级不砍历史", len(hist2) == 40, str(len(hist2)))
-    body2 = rp_prompts.build_system_prompt(_fat_sess(), "沈砚")
+    body2 = rp_prompts.build_system_prompt(_fat_sess(), "甲")
     check("高级注入 20 条账本",
           body2.count("· 事实") == 20, str(body2.count("· 事实")))
     check("高级不截人设",
@@ -770,7 +770,7 @@ def main():
     # 34. 规则文案也按档位分：初级短且硬，高级才谈写法
     def _rule_body(level):
         rp_config.save_tier(level, persist=False)
-        return rp_prompts.build_rules("林晚", "rp", "沈砚")
+        return rp_prompts.build_rules("我", "rp", "甲")
 
     body_basic = _rule_body("basic").replace(rp_prompts.status_prompt(), "")
     body_std = _rule_body("standard").replace(rp_prompts.status_prompt(), "")
@@ -783,7 +783,7 @@ def main():
           all("不要代替" in b or "绝不代替" in b for b in (body_basic, body_std, body_adv)))
     for _lv in ("basic", "standard", "advanced"):
         rp_config.save_tier(_lv, persist=False)
-        _full = rp_prompts.build_rules("林晚", "rp", "沈砚")
+        _full = rp_prompts.build_rules("我", "rp", "甲")
         check("第 %s 档带状态说明" % _lv, rp_prompts.status_prompt()[:20] in _full)
     rp_config.save_tier("basic", persist=False)
 
@@ -798,9 +798,9 @@ def main():
     ]
     br_sess["messages"] = [
         {"role": "user", "content": "第一句"},
-        {"role": "assistant", "content": "回应", "speaker": "沈砚", "turn": 3},
+        {"role": "assistant", "content": "回应", "speaker": "甲", "turn": 3},
         {"role": "user", "content": "第二句"},
-        {"role": "assistant", "content": "后来的回应", "speaker": "沈砚", "turn": 9},
+        {"role": "assistant", "content": "后来的回应", "speaker": "甲", "turn": 9},
     ]
     rp_storage.save_session(br_sess)
     cut = client.post("/api/sessions/%s/branch" % br["id"], json={"index": 1}).get_json()
@@ -860,9 +860,9 @@ def main():
     def _tail(level):
         rp_config.save_creativity(level, persist=False)
         sess = {"turn": 1, "mode": "rp", "user_name": "甲",
-                "characters": [{"name": "沈砚", "role": "守灯人"}],
+                "characters": [{"name": "甲", "role": "守灯人"}],
                 "messages": [{"role": "user", "content": "我推门进去。"}]}
-        return rp_prompts.build_messages(sess, "沈砚")[-1]["content"]
+        return rp_prompts.build_messages(sess, "甲")[-1]["content"]
 
     check("标准档不提换角度", "别写第一反应" not in _tail("standard"))
     check("创意档要求换一个接法", "别写第一反应" in _tail("creative"))
@@ -981,7 +981,7 @@ def main():
     def _sess(text, time=""):
         st = {"time": time} if time else {}
         return {"turn": 3, "mode": "rp", "user_name": "我",
-                "characters": [{"name": "沈砚", "role": "守灯人"}],
+                "characters": [{"name": "甲", "role": "守灯人"}],
                 "status": st, "messages": [{"role": "user", "content": text}]}
 
     check("极短输入判成 thin", rp_prompts.input_density(_sess("我点头。"))[0] == "thin")
@@ -998,7 +998,7 @@ def main():
           str(rp_prompts.input_density(_sess("我点头。"))[1]))
 
     def _tail_of(sess):
-        return rp_prompts.build_messages(sess, "沈砚")[-1]["content"]
+        return rp_prompts.build_messages(sess, "甲")[-1]["content"]
 
     check("极短时要求撑起场景", "别跟着变短" in _tail_of(_sess("我点头。")))
     check("长段时要求不复述", "不要复述我刚写过的动作" in _tail_of(_sess("我推开门，抬手挡了一下灯，转身把包扔在椅子上，走过去拉开窗帘。")))
@@ -1023,20 +1023,20 @@ def main():
     _sp = client.post("/api/sessions", json={}).get_json()
     client.put("/api/sessions/%s" % _sp["id"], json={
         "title": "导出检查", "mode": "rp", "user_name": "我",
-        "characters": [{"name": "沈砚", "role": "守灯人", "state": "靠在门边"}],
+        "characters": [{"name": "甲", "role": "守灯人", "state": "靠在门边"}],
         "world": "海边有座孤塔。"})
     rp_storage.save_session(dict(rp_storage.load_session(_sp["id"]), messages=[
         {"role": "user", "content": "我推门进去。"},
-        {"role": "assistant", "content": "你来了。", "speaker": "沈砚", "narrator": "门轴响了一声。"},
-    ], status={"location": "灯塔二层", "time": "深夜", "present": ["沈砚"]},
+        {"role": "assistant", "content": "你来了。", "speaker": "甲", "narrator": "门轴响了一声。"},
+    ], status={"location": "灯塔二层", "time": "深夜", "present": ["甲"]},
         facts=[{"text": "钥匙在抽屉里"}], turn=2))
 
     _r = client.post("/api/sessions/%s/commit_partial" % _sp["id"],
-                     json={"content": "他没抬头，只把灯芯挑亮了一点。", "speaker": "沈砚"})
+                     json={"content": "他没抬头，只把灯芯挑亮了一点。", "speaker": "甲"})
     check("草稿能入库", _r.status_code == 200, str(_r.status_code))
     _msgs = _r.get_json()["messages"]
     check("草稿带 partial 标记", _msgs[-1].get("partial") is True)
-    check("草稿带说话人", _msgs[-1].get("speaker") == "沈砚")
+    check("草稿带说话人", _msgs[-1].get("speaker") == "甲")
     check("草稿进了历史", len(_msgs) == 3, str(len(_msgs)))
     check("空草稿被拒",
           client.post("/api/sessions/%s/commit_partial" % _sp["id"], json={"content": "   "}).status_code == 400)
@@ -1051,7 +1051,7 @@ def main():
     check("导出有标题", _text.startswith("# 导出检查"), _text[:20])
     check("用户消息渲染成引用", "> **我**" in _text)
     check("旁白单独成行", "*门轴响了一声。*" in _text)
-    check("角色言行带名字", "**沈砚**：你来了。" in _text)
+    check("角色言行带名字", "**甲**：你来了。" in _text)
     check("草稿有标注", "停止后保留的草稿" in _text)
     check("附录有状态", "## 结尾时的状态" in _text and "灯塔二层" in _text)
     check("附录有账本", "## 事实账本" in _text and "钥匙在抽屉里" in _text)
@@ -1075,8 +1075,8 @@ def main():
     # 42. 一般模式必须把 AI 自己写的旁白喂回上下文（否则每轮都从头起笔）
     _nm = {
         "title": "一般模式", "mode": "normal", "user_name": "我",
-        "characters": [{"name": "沈砚", "role": "守灯人"}],
-        "status": {"present": ["沈砚"], "location": "灯塔"},
+        "characters": [{"name": "甲", "role": "守灯人"}],
+        "status": {"present": ["甲"], "location": "灯塔"},
         "turn": 3,
         "messages": [
             {"role": "user", "content": "我推门进去。"},
@@ -1140,7 +1140,7 @@ def main():
     _esess = rp_storage.load_session(_es["id"])
     _esess["messages"] = [
         {"role": "user", "content": "我推门进去。"},
-        {"role": "assistant", "content": "你来了。", "speaker": "沈砚"},
+        {"role": "assistant", "content": "你来了。", "speaker": "甲"},
     ]
     rp_storage.save_session(_esess)
     _e1 = client.put("/api/sessions/%s/message" % _es["id"],
@@ -1278,13 +1278,13 @@ def main():
 
     # 52. 四个字数设置合起来决定一轮的总量
     _ws = {"turn": 1, "mode": "rp", "user_name": "我",
-           "characters": [{"name": "沈砚", "role": "守灯人"}],
+           "characters": [{"name": "甲", "role": "守灯人"}],
            "status": {}, "messages": [{"role": "user", "content": "我点头。"}]}
     _w = rp_config.writing()
     _total = _w["narrator_max"] + _w["line_max"]
     for _t in ("basic", "standard", "advanced"):
         rp_config.save_tier(_t, persist=False)
-        _bd = rp_prompts.build_system_prompt(_ws, "沈砚")
+        _bd = rp_prompts.build_system_prompt(_ws, "甲")
         check("%s档的规则给出合计上限" % _t, ("不超过 %d 字" % _total) in _bd)
     rp_config.save_tier("basic", persist=False)
     _nb = rp_prompts.build_system_prompt(dict(_ws, mode="normal"), None)
@@ -1293,10 +1293,10 @@ def main():
           ("%d~%d 字" % (_lo, _total)) in _nb, _nb[_nb.find("每次"):][:40])
     # 改设置，规则和尾巴都要跟着变
     rp_config.save_writing({"line_max": 120}, persist=False)
-    _bd2 = rp_prompts.build_system_prompt(_ws, "沈砚")
+    _bd2 = rp_prompts.build_system_prompt(_ws, "甲")
     check("调小台词上限后合计上限跟着降",
           ("不超过 %d 字" % (_w["narrator_max"] + 120)) in _bd2)
-    _tl = rp_prompts.build_messages(_ws, "沈砚")[-1]["content"]
+    _tl = rp_prompts.build_messages(_ws, "甲")[-1]["content"]
     _tl_hi = rp_prompts.input_density(_ws)[1][1]
     check("尾巴里的上限也跟着降", ("最多 %d 字" % _tl_hi) in _tl, _tl[-120:])
     check("尾巴上限是密度缩放后的值", _tl_hi >= _w["narrator_max"] + 120, str(_tl_hi))
@@ -1304,13 +1304,13 @@ def main():
 
     # 53. 一般模式也要认【新角色】【变化】，这两块以前被整段跳过
     _NL = chr(10)
-    _raw = ("雨点砸在窗户上。" + _NL + "【新角色】" + '{"name": "阿珍", "role": "杂货铺女儿"}'
-            + _NL + "【变化】" + '{"name": "玉芬", "change": "开始招呼新人"}'
+    _raw = ("雨点砸在窗户上。" + _NL + "【新角色】" + '{"name": "丁", "role": "杂货铺女儿"}'
+            + _NL + "【变化】" + '{"name": "乙", "change": "开始招呼新人"}'
             + _NL + "[[地点：客厅|时间：深夜]]")
     _n = rp_characters.parse_turn(_raw, None)
-    check("一般模式能认出新角色", (_n["new_character"] or {}).get("name") == "阿珍",
+    check("一般模式能认出新角色", (_n["new_character"] or {}).get("name") == "丁",
           str(_n["new_character"]))
-    check("一般模式能认出变化", len(_n["updates"]) == 1 and _n["updates"][0]["name"] == "玉芬",
+    check("一般模式能认出变化", len(_n["updates"]) == 1 and _n["updates"][0]["name"] == "乙",
           str(_n["updates"]))
     check("一般模式也能读到状态行", _n["status"].get("location") == "客厅", str(_n["status"]))
     check("新角色那行不留在正文里", '"name"' not in _n["narrator"] and "新角色" not in _n["narrator"],
@@ -1359,7 +1359,7 @@ def main():
     # 57. 角色上限由设置决定，最高 10 个；一般模式也要真的写进角色表
     _cs = rp_storage.new_session()
     _cs["mode"] = "normal"
-    _cs["characters"] = [{"name": "谭谈", "role": "主角", "state": "", "history": []}]
+    _cs["characters"] = [{"name": "甲", "role": "主角", "state": "", "history": []}]
     rp_config.save_writing({"max_characters": 10}, persist=False)
     _NL2 = chr(10)
     for _i in range(1, 10):
@@ -1381,17 +1381,17 @@ def main():
     check("输入框 max 跟着改成 10", 'id="w-chars" type="number" min="1" max="10"' in _html4)
 
     # 58. 物品绑定角色 + 主角也在场上
-    _src1, _st1 = rp_characters._take_mark_line("[[物品：玉芬=纱裙、皮鞭；谭谈=手机]]")
+    _src1, _st1 = rp_characters._take_mark_line("[[物品：乙=纱裙、皮鞭；甲=手机]]")
     check("物品能按人分开",
-          _st1.get("items") == {"玉芬": "纱裙、皮鞭", "谭谈": "手机"}, str(_st1))
+          _st1.get("items") == {"乙": "纱裙、皮鞭", "甲": "手机"}, str(_st1))
     _src2, _st2 = rp_characters._take_mark_line("[[物品：一把湿伞]]")
     check("不写名字还是公共物品", _st2.get("items") == "一把湿伞", str(_st2))
-    _src3, _st3 = rp_characters._take_mark_line("[[物品：玉芬＝纱裙；公共的钥匙]]")
-    check("全角等号也认", (_st3.get("items") or {}).get("玉芬") == "纱裙", str(_st3))
-    _merged = rp_characters.merge_status({"items": {"玉芬": "纱裙", "谭谈": "手机"}},
-                                         {"items": {"玉芬": "纱裙碎了"}})
+    _src3, _st3 = rp_characters._take_mark_line("[[物品：乙＝纱裙；公共的钥匙]]")
+    check("全角等号也认", (_st3.get("items") or {}).get("乙") == "纱裙", str(_st3))
+    _merged = rp_characters.merge_status({"items": {"乙": "纱裙", "甲": "手机"}},
+                                         {"items": {"乙": "纱裙碎了"}})
     check("物品合并不冲掉别人",
-          _merged["items"] == {"玉芬": "纱裙碎了", "谭谈": "手机"}, str(_merged))
+          _merged["items"] == {"乙": "纱裙碎了", "甲": "手机"}, str(_merged))
 
     # 59. 角色满了要问用户，不能静默丢掉
     _full = rp_storage.new_session()
@@ -1415,20 +1415,20 @@ def main():
 
     # 62. 圆桌式：一轮旁白 + 在场角色各自发言
     _round = ("夜深了，客厅只剩一盏灯。" + chr(10) + chr(10)
-              + "【玉芬】她回过头：「你还没睡。」" + chr(10) + chr(10)
-              + "【小雅】她把膝盖抱得更紧了。")
-    _r6 = rp_characters.parse_turn(_round, "", ["玉芬", "小雅"])
+              + "【乙】她回过头：「你还没睡。」" + chr(10) + chr(10)
+              + "【丙】她把膝盖抱得更紧了。")
+    _r6 = rp_characters.parse_turn(_round, "", ["乙", "丙"])
     check("旁白和发言分开",
           _r6["narrator"].startswith("夜深") and len(_r6["lines"]) == 2, str(_r6["lines"]))
-    check("每个在场角色各一条", [x["speaker"] for x in _r6["lines"]] == ["玉芬", "小雅"],
+    check("每个在场角色各一条", [x["speaker"] for x in _r6["lines"]] == ["乙", "丙"],
           str(_r6["lines"]))
     check("认不出的名字不吞内容", "路人" not in _r6["narrator"])
 
-    _r7 = rp_characters.parse_turn("开头。" + chr(10) + "【路人甲】他说了一句。", "", ["玉芬"])
+    _r7 = rp_characters.parse_turn("开头。" + chr(10) + "【路人甲】他说了一句。", "", ["乙"])
     check("临时路人也能露脸", len(_r7["lines"]) == 1 and _r7["narrator"] == "开头。", str(_r7))
     check("rp 不再按轮次指定发言人", rp_characters.next_speaker({"mode": "rp", "turn": 3,
           "characters": [{"name": "A", "role": "", "state": "", "history": []}]}) == "")
-    _rules_rp = rp_prompts.build_rules("林晚", "rp", "玉芬")
+    _rules_rp = rp_prompts.build_rules("我", "rp", "乙")
     check("规则要求先旁白再逐人发言",
           "旁白" in _rules_rp and "各写一段" in _rules_rp, _rules_rp[:90])
 
@@ -1639,7 +1639,7 @@ def main():
         "title": "模板72",
         "world": "旧城，常年下雨。",
         "rules": "不用感叹号。",
-        "characters": [{"name": "沈砚", "role": "守灯人。"}],
+        "characters": [{"name": "甲", "role": "守灯人。"}],
     })
     _sp72 = pathlib.Path(rp_stories.story_path(_st72["id"]))
     _before72 = _sp72.read_bytes()
@@ -1649,7 +1649,7 @@ def main():
     client.put("/api/sessions/%s" % _run72["id"], json={
         "title": "这局自己的名字",
         "world": "这局自己的世界。",
-        "characters": [{"name": "沈砚", "role": "守灯人。"},
+        "characters": [{"name": "甲", "role": "守灯人。"},
                         {"name": "阿鸾", "role": "新来的。"}],
     })
     check("在对话里改设定，故事字节不变",
@@ -1659,7 +1659,7 @@ def main():
     _run72b = client.post("/api/sessions", json={"story_id": _st72["id"]}).get_json()
     check("改过一局之后，新局仍拿到模板原样",
           _run72b.get("world") == "旧城，常年下雨。"
-          and [c["name"] for c in _run72b.get("characters") or []] == ["沈砚"],
+          and [c["name"] for c in _run72b.get("characters") or []] == ["甲"],
           (_run72b.get("world"), _run72b.get("characters")))
     _n72 = len(rp_stories.list_stories())
     _blank72 = client.post("/api/sessions", json={}).get_json()
@@ -1670,25 +1670,25 @@ def main():
 
     # 73. 设定里的 {主角} 占位符
     check("占位符换成真名",
-          rp_stories.fill_names("{主角}推开门。", "沈砚") == "沈砚推开门。")
+          rp_stories.fill_names("{主角}推开门。", "甲") == "甲推开门。")
     check("没给名字就原样",
           rp_stories.fill_names("{主角}推开门。", "") == "{主角}推开门。")
     check("裸的主角不动",
-          rp_stories.fill_names("这个故事的主角很安静。", "沈砚")
+          rp_stories.fill_names("这个故事的主角很安静。", "甲")
           == "这个故事的主角很安静。")
     check("混用时只换带花括号的",
-          rp_stories.fill_names("{主角}是主角。", "沈砚") == "沈砚是主角。")
+          rp_stories.fill_names("{主角}是主角。", "甲") == "甲是主角。")
 
     _ph = client.post("/api/sessions", json={}).get_json()
     client.put("/api/sessions/" + _ph["id"], json={
         "world": "{主角}是守灯人，{主角}怕黑。",
         "rules": "不要让{主角}轻易妥协。",
-        "characters": [{"name": "沈砚", "role": "守灯人。"}],
+        "characters": [{"name": "甲", "role": "守灯人。"}],
     })
     _phs = rp_storage.load_session(_ph["id"])
     _sys = rp_prompts.build_system_prompt(_phs)
-    check("系统提示里世界观已替换", "沈砚是守灯人，沈砚怕黑。" in _sys)
-    check("系统提示里额外要求已替换", "不要让沈砚轻易妥协。" in _sys)
+    check("系统提示里世界观已替换", "甲是守灯人，甲怕黑。" in _sys)
+    check("系统提示里额外要求已替换", "不要让甲轻易妥协。" in _sys)
     check("存下来的仍是占位符",
           _phs["world"] == "{主角}是守灯人，{主角}怕黑。", _phs.get("world"))
 
@@ -1701,7 +1701,7 @@ def main():
           "顾辞是守灯人，顾辞怕黑。" in _sys2)
     check("改名不动存下来的设定", _phs2["world"] == _phs["world"])
     check("按位置找出被改掉的名字",
-          rp_api._renames([{"name": "沈砚"}], [{"name": "顾辞"}]) == {"沈砚": "顾辞"})
+          rp_api._renames([{"name": "甲"}], [{"name": "顾辞"}]) == {"甲": "顾辞"})
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")

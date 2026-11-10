@@ -40,6 +40,10 @@ os.environ["LT_BACKUP_DIR"] = os.path.join(TMP_DIR, "backups")
 
 ## 加功能的约定
 
+**文档里不写用户故事的具体内容。** 例子一律用甲、乙、丙这种代号，或者“角色甲”；
+地名写某城、某酒馆。代码注释、check.py 的测试文案、提示词示例同样适用。
+
+
 **配置参数走四层**。新增一个可配项时，四样东西必须同时到位，否则 `check.py` 第 66 组会报：
 
 1. `config.py` 里的默认值与范围（`WRITING_DEFAULTS` / `WRITING_BOUNDS` 或备份那张表）。
