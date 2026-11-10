@@ -25,27 +25,39 @@
       "rules": "用户自己加的额外要求",
       "opening": "开场那一段正文",
       "summary": "更早剧情的压缩摘要",
+      "compressed_upto": 12,
+      "pending_character": null,
       "characters": [
         {"name": "沈砚", "role": "守灯人，话少，记仇。", "state": "此刻的状态", "history": ["最近的变化"]}
       ],
       "status": {
         "present": ["沈砚"], "away": ["周掌柜"],
         "location": "银月酒馆", "time": "深夜",
-        "relations": "戒备", "items": "湿伞", "goal": "等他先开口"
+        "relations": "戒备", "items": {"沈砚": "湿伞、铜钥匙"}, "goal": "等他先开口"
       },
       "facts": [
         {"fact": "钥匙到了沈砚手里", "state": "active", "turn": 3, "subject": "钥匙"}
       ],
       "messages": [
         {"role": "user", "content": "我推门进去。"},
-        {"role": "assistant", "speaker": "沈砚", "content": "台词", "narrator": "旁白"}
+        {"role": "assistant", "narrator": "旁白",
+         "lines": [{"speaker": "沈砚", "text": "台词"}, {"speaker": "阿鸾", "text": "另一句"}]}
       ],
       "lore": [{"keys": "银月酒馆", "content": "城南的酒馆，老板欠沈砚一条命。"}]
     }
 
 character 的 state 和 history 由模型每轮的「【变化】」维护；第 0 个角色决定 ai_name 和 ai_role。
 
-一般模式下 assistant 消息只有 narrator，content 为空；角色扮演模式两者都有。
+一般模式下 assistant 消息只有 narrator。角色扮演模式下多一个 lines 数组，每个开口的角色一条
+{"speaker", "text"}，按发言顺序排；渲染时一人一个气泡。旧的单发言人数据用 speaker + content，
+读取时两种都兼容。
+
+status.items 是 {人名: "东西、东西"}；模型写成没有归属的一串时退回字符串，界面上标「（公共）」。
+
+compressed_upto 是压缩游标：小于它的消息已经进了 summary。消息本身不删，所以分叉、导出、全文搜索
+都还能读全文。
+
+pending_character 是角色数满时暂存的新人 {"name", "role"}，等用户在弹窗里决定换谁进来。
 
 ## 分叉
 
@@ -94,6 +106,7 @@ POST /api/sessions/<sid>/branch {"index": n}
     DELETE /api/sessions/<sid>            删除
     POST   /api/sessions/<sid>/clear      清空消息
     POST   /api/sessions/<sid>/compress   手动触发压缩
+    POST   /api/sessions/<sid>/character-pick   角色满时换人，落定 pending_character
     GET    /api/stories                   故事列表
     POST   /api/stories                   新建故事
     GET    /api/stories/<id>              读故事
@@ -114,6 +127,7 @@ POST /api/sessions/<sid>/branch {"index": n}
 
 配置与维护：
 
+    GET    /api/search                    全文搜索，?q= 至少两个字，?limit= 上限 200
     GET    /api/config                    当前模型、模式、参数、档位
     POST   /api/writing                   保存写作参数 / 模式 / 思考强度 / 档位
     GET    /api/models                    本地可用模型
@@ -127,7 +141,7 @@ POST /api/sessions/<sid>/branch {"index": n}
     GET    /api/backups/<name>            下载备份
     POST   /api/backups/<name>/restore    还原这份备份
     DELETE /api/backups/<name>            删除备份
-    PUT    /api/backup-config              定时备份开关
+    PUT    /api/backup-config              定时备份：enabled / every_minutes / keep
 
 还原的三个要点：
 

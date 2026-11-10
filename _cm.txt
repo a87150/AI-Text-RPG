@@ -1,0 +1,25 @@
+docs: README 重写并拆出功能、配置、开发、更新记录；修正文档里过时的行为描述
+
+README 只留概览、快速开始、怎么用、功能速览和 docs 索引，细则全部下放到 docs/。
+
+新增三份：
+- docs/FEATURES.md  每种模式的完整行为：圆桌式一轮怎么走、角色状态与物品、
+  状态行与账本、发送前冲突检查、压缩、草稿与滚动、全文搜索、备份与存档点、导出
+- docs/CONFIG.md    全部可配参数、范围、界面 id、落点；档位表；环境变量；
+                    前端 localStorage 的 key 清单；以及「写设置只能走 persist_settings」
+                    这条硬规矩的由来
+- docs/DEVELOPMENT.md  check.py 的分组与临时目录隔离、加功能要同步的四层、
+                       前端不能拿模块级导入名当局部变量、CDP 无头调试的坑
+- docs/CHANGELOG.md  按版本记这几轮的功能与修复，倒序
+
+修正的过时描述（代码早就改了，文档没跟上）：
+- ARCHITECTURE：next_speaker 按轮次轮转 → 圆桌式不再指定发言人；
+  parse_turn 多了 names 参数、消息多了 lines；压缩「原消息从 messages 移除」
+  → 只推 compressed_upto 游标；前端模块表补 search.js
+- PROMPTS：在场判定的「谁有发言权」改成模型按剧情判定；
+  rules_basic 的「只一人说话」改成先旁白后逐人发言；
+  补两条新人登记来源和名单解析的清洗规则
+- DATA：status.items 改成 {人名: 东西}、消息加 lines、补 compressed_upto 与
+  pending_character；接口表补 /api/search 与 character-pick，备份配置改分钟制
+
+所有 md 之间的相对链接已校验，无断链。

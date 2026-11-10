@@ -29,11 +29,14 @@ Flask 提供 JSON/SSE 接口，前端是零构建的原生 ES modules，所有�
 
 1. **加锁**：try_acquire_busy(sid)。同一会话同时只能有一轮在生成，第二个请求拿 409。
 2. **落用户消息**：load_session → 追加 user 消息 → save_session。首次发言顺便用它当标题。
-3. **分配发言人**：next_speaker(sess) 按轮次在当前**在场**角色里轮转。一般模式返回空串。
+3. **确定场面**：读状态里的在场 / 离场名单，把角色卡分成「在场完整展开」「不在场只列名字」两组。
+   圆桌式之下不再由代码指定发言人——next_speaker() 恒返回空串，谁开口由模型按剧情决定。
 4. **拼提示词**：build_messages(sess, speaker) 生成 system + 历史，最后一条 user 末尾补一行状态格式提醒。
 5. **调模型**：completion_events() 逐块吐出 thinking/delta，失败自动重试（最多 MAX_CHAT_ATTEMPTS），太短也当失败。
-6. **解析**：parse_turn(text, speaker) 把输出拆成旁白、台词、状态、新角色、变化。
-7. **落盘**：_commit_turn() 写消息、合并状态、合并事实账本、登记新角色、轮次 +1、每 15 轮存快照。
+6. **解析**：parse_turn(text, speaker, names) 把输出拆成旁白、台词、状态、新角色、变化。
+   角色扮演模式下每个【名字】段落各收一条进 lines；一般模式整段算旁白。
+7. **落盘**：_commit_turn() 写消息（含 lines）、合并状态、合并事实账本、登记新角色、
+   按在场名单给没登记过的人补建角色卡、轮次 +1、每 15 轮存快照。
 8. **回传**：done 事件带上下文占用、角色表、状态，前端据此重绘。
 9. **后台压缩**：background_compress(sid) 在线程里跑，不阻塞这次响应。
 
@@ -51,6 +54,7 @@ SSE 事件类型：speaker（这轮谁说话）、thinking（模型的思考，�
     sessions.js     会话与故事列表、分页、视图切换、刷新后的位置记忆
     settings.js     故事设定表单、单项 AI 生成、开新局
     msgops.js       重写、编辑、分叉
+    search.js       全文搜索面板
     backup.js       备份面板
     api.js          统一请求封装与 SSE 解析
     state.js        全局状态对象
@@ -59,9 +63,11 @@ SSE 事件类型：speaker（这轮谁说话）、thinking（模型的思考，�
 
 ## 上下文压缩
 
-context.py 按字符数估算占用（中文字符约 0.7 token）。超过 context_limit 时，把最早的一批消息交给模型压成摘要，写进 sess 的 summary 字段，原消息从 messages 里移除。摘要会以「前情提要」的形式重新进入 system 提示。
+context.py 按字符数估算占用（中文字符约 0.7 token）。两个闸门任一触发就压：字数超过 context_limit，或消息条数超过当前档位的历史条数。
 
-压缩在后台线程里做，用户感知不到停顿。
+压缩把最早的一批消息交给模型写成摘要，累加进 sess.summary，然后把游标 compressed_upto 往前推。**消息本身不删**——只推游标。这一点很重要：分叉、回溯、导出、全文搜索都还要读全文，删了就没了。摘要以「前情提要」的形式重新进入 system 提示。
+
+保留区间从「压缩后保留最近消息数」起算，并对齐到一条 user 消息上，避免把一问一答切开。压缩在后台线程里做，用户感知不到停顿。
 
 ## 快照
 
