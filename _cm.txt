@@ -1,0 +1,24 @@
+fix: 发送必崩——sendMessage 签名漏了 isContinue
+
+上一轮加续写时改了函数体，却漏改签名：
+
+    async function sendMessage(text, { isRetry }) {   ← 这里少一个参数
+      const box = $('#messages');
+      if (isContinue && box) {                        ← 第一句就炸
+
+点发送 → ReferenceError → 冒泡到 window 的 unhandledrejection → 弹出
+「出现未预期的错误」。请求根本没发出去，所以后端日志干净、模型也没被调用，
+看起来像"偶发"，实际是每次都崩。
+
+同一个脚本里另外三处替换也一起没落，一并补上：
+
+- 请求体没带 continue: !!isContinue —— 续写按钮会当普通发送，后端拿不到续写意图
+- done 分支无条件 s.messages.push —— 续写会把拼好的内容又塞一条，界面上变两条
+- 用户气泡没加 !isContinue —— 续写时先画一个空的用户气泡
+
+check.py 加第 70 组，专钉这三个接缝：签名里有没有那两个参数、请求体带没带
+continue、done 分支有没有 if (!isContinue)、用户气泡有没有判、▶ 是不是只在
+最后一条、msgops 有没有接住动作。这类"函数体用了但签名没声明"的错，node
+--check 查不出（语法合法），只有真正执行才炸，所以用文本断言便宜地钉住。
+
+全绿。实测：假 SSE 注入后点发送，零 rejection，气泡正常渲染。

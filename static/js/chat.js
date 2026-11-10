@@ -203,7 +203,7 @@ function showDraftActions(turnBox, shown, speaker, isPlain, originalText) {
   if (turnBox) turnBox.appendChild(bar);
 }
 
-async function sendMessage(text, { isRetry }) {
+async function sendMessage(text, { isRetry, isContinue }) {
   const s = state.session;
   if (!s.ai_role && !s.world) {
     toast('先点右上角「设定」，把角色和背景写一下', 'error');
@@ -223,7 +223,7 @@ async function sendMessage(text, { isRetry }) {
 
   const userLabel = s.user_name || '我';
   const aiLabel = s.ai_name || 'AI';
-  if (!isRetry && box) box.appendChild(buildMessage('user', text, userLabel).el);
+  if (!isRetry && !isContinue && box) box.appendChild(buildMessage('user', text, userLabel).el);
 
   // 生成中不露角色名：只有旁白块 + 一个带省略号和秒数的气泡
   const turnBox = document.createElement('div');
@@ -266,7 +266,7 @@ async function sendMessage(text, { isRetry }) {
   try {
     await streamSSE(
       '/api/chat',
-      { session_id: s.id, message: text, retry: !!isRetry },
+      { session_id: s.id, message: text || '', retry: !!isRetry, continue: !!isContinue },
       (ev) => {
         if (ev.type === 'speaker') {
           speaker = ev.name || '';
@@ -304,7 +304,8 @@ async function sendMessage(text, { isRetry }) {
             if (turn.narrator) msg.narrator = turn.narrator;
             if (turn.speaker) msg.speaker = turn.speaker;
             if ((turn.lines || []).length) msg.lines = turn.lines;
-            s.messages.push(msg);
+            // 续写是拼到原来那条上面的，不是新增一条
+            if (!isContinue) s.messages.push(msg);
           }
           if (ev.characters) s.characters = ev.characters;
           if (ev.pending_character && ev.pending_character.name) {

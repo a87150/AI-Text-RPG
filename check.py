@@ -1568,6 +1568,21 @@ def main():
     check("上下文信息带读写耗时",
           isinstance(_ctx69.get("io"), dict) and "save_ms" in _ctx69["io"])
 
+    # 70. 续写的三个接缝都得在（上一次只改了函数体，签名没改，点发送直接抛 ReferenceError）
+    _chat70 = (pathlib.Path(__file__).parent / "static" / "js" / "chat.js").read_text(encoding="utf-8")
+    _sig70 = [l for l in _chat70.split(chr(10)) if "async function sendMessage" in l]
+    check("sendMessage 有且只有一个定义", len(_sig70) == 1, len(_sig70))
+    check("形参里声明了 isContinue", bool(_sig70) and "isContinue" in _sig70[0])
+    check("形参里声明了 isRetry", bool(_sig70) and "isRetry" in _sig70[0])
+    check("续写请求体真的带了 continue", "continue: !!isContinue" in _chat70)
+    check("续写不重复往本地列表塞消息", "if (!isContinue) s.messages.push" in _chat70)
+    check("续写不画用户气泡", "!isRetry && !isContinue" in _chat70)
+    _ui70 = (pathlib.Path(__file__).parent / "static" / "js" / "ui.js").read_text(encoding="utf-8")
+    check("只有最后一条回复能续写", "index === msgs.length - 1" in _ui70)
+    check("操作条有 continue 动作", "'continue'" in _ui70)
+    _mo70 = (pathlib.Path(__file__).parent / "static" / "js" / "msgops.js").read_text(encoding="utf-8")
+    check("continue 动作真的被接住", "act === 'continue'" in _mo70)
+
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")
