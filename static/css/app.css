@@ -31,11 +31,12 @@
 }
 
 /* 字号：根字号驱动，侧栏、按钮、弹窗、消息一起变 */
-html { font-size: 14px; }
-html[data-font="sm"] { font-size: 13px; }
-html[data-font="md"] { font-size: 14px; }
-html[data-font="lg"] { font-size: 16px; }
-html[data-font="xl"] { font-size: 17.5px; }
+/* 整体上调一档并新增最大档：原「大」17.5 现在是「标准」，19.5 是「大」，21.5 是「特大」 */
+html { font-size: 17.5px; }
+html[data-font="sm"] { font-size: 16px; }
+html[data-font="md"] { font-size: 17.5px; }
+html[data-font="lg"] { font-size: 19.5px; }
+html[data-font="xl"] { font-size: 21.5px; }
 
 [data-theme="light"] {
   --bg: #f5f6fb;
