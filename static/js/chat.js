@@ -32,6 +32,9 @@ function itemConflict(text) {
   if (!sess) return null;
   const items = (sess.status && sess.status.items) || {};
   const me = sess.user_name || '我';
+  // 一件东西可能被记在好几个人名下（各持一把，也可能是模型写重了）。
+  // 只报第一个会指错人，得把持有者全列出来让用户自己判断。
+  const found = new Map();
   for (const owner of Object.keys(items)) {
     if (owner === me) continue;
     const bag = items[owner];
@@ -40,10 +43,13 @@ function itemConflict(text) {
       const name = String(raw).trim();
       // 单字（伞、刀）太容易撞上普通用词，只认两个字符以上的
       if (name.length < 2 || !text.includes(name)) continue;
-      return { item: name, owner };
+      if (!found.has(name)) found.set(name, []);
+      if (!found.get(name).includes(owner)) found.get(name).push(owner);
     }
   }
-  return null;
+  if (!found.size) return null;
+  const [item, owners] = found.entries().next().value;
+  return { item, owners };
 }
 
 let conflictPassed = '';
@@ -58,7 +64,8 @@ function showConflict(hit, text) {
   if (!tip) return;
   tip.innerHTML = '';
   const msg = document.createElement('span');
-  msg.textContent = '⚠ 账本里「' + hit.item + '」记在' + hit.owner + '名下，这条消息说你手上有它。';
+  msg.textContent = '⚠ 账本里「' + hit.item + '」记在' + hit.owners.join('、')
+    + '名下，这条消息说你手上有它。';
   const fix = document.createElement('button');
   fix.type = 'button';
   fix.textContent = '仍然发送';
