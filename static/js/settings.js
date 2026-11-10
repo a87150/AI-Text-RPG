@@ -413,8 +413,10 @@ export async function saveSettings() {
       toast('故事设定已保存', 'ok');
       return;
     }
+    // 带上拿着的版本号：别的标签页这期间写过，就不能整份覆盖掉
     state.session = await api('/api/sessions/' + state.session.id, {
-      method: 'PUT', body: payload,
+      method: 'PUT',
+      body: { ...payload, updated_at: state.session && state.session.updated_at },
     });
     $('#settings-modal').classList.add('hidden');
     renderMessages();
@@ -424,6 +426,13 @@ export async function saveSettings() {
     toast('设定已保存', 'ok');
     setTimeout(() => focusComposer({ force: true }), 0);
   } catch (e) {
+    if (e.status === 409) {
+      toast('这个对话在别处更新过，已重新读取，请确认后再存', 'error');
+      await refreshCurrentSession();
+      renderMessages();
+      syncAll();
+      return;
+    }
     toast('保存失败：' + e.message, 'error');
   } finally {
     busySave = false;

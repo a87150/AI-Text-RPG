@@ -1513,6 +1513,61 @@ def main():
     check("同一件东西记在多人名下时全列出来",
           "found.set(name, [])" in _chat67 and "owners.join" in _chat67 and "hit.owner " not in _chat67)
 
+    # 68. 数据层：乐观锁、半截幂等、取消标志、物品与事实分工
+    _s68 = rp_storage.new_session(title="冲突测试")
+    rp_storage.save_session(_s68)
+    _stamp = rp_storage.load_session(_s68["id"])["updated_at"]
+    try:
+        rp_storage.save_session(dict(_s68), expect=_stamp - 5)
+        check("旧版本写入会被拦下", False, "没抛 StaleSession")
+    except rp_storage.StaleSession:
+        check("旧版本写入会被拦下", True)
+    _again = rp_storage.load_session(_s68["id"])
+    check("正常版本能写",
+          rp_storage.save_session(dict(_again), expect=_again["updated_at"]) is None)
+    check("updated_at 是数值不是字符串",
+          isinstance(rp_storage.current_stamp(_s68["id"]), (int, float)))
+
+    # 半截入库不能和完整回复同时存两条
+    _p68 = client.post("/api/sessions", json={}).get_json()
+    _full = "他把钥匙放在桌上，转身走了。雨还在下。"
+    client.post("/api/sessions/%s/commit_partial" % _p68["id"],
+                json={"content": _full})
+    _m68 = rp_storage.load_session(_p68["id"])["messages"]
+    check("半截能入库", len(_m68) == 1 and _m68[0]["partial"])
+    client.post("/api/sessions/%s/commit_partial" % _p68["id"],
+                json={"content": "他把钥匙放在桌上，转身走了。"})
+    _m68b = rp_storage.load_session(_p68["id"])["messages"]
+    check("已存过的半截不重复插入", len(_m68b) == 1, str(len(_m68b)))
+
+    _api68 = (pathlib.Path(__file__).parent / "rp" / "api.py").read_text(encoding="utf-8")
+    check("断开时会置取消标志", "except GeneratorExit" in _api68 and "cancelled[\u0022flag\u0022] = True" in _api68)
+    check("写盘前检查取消标志", _api68.count("if cancelled[\u0022flag\u0022]:") >= 2)
+    _st68 = (pathlib.Path(__file__).parent / "rp" / "prompts" / "status.md").read_text(encoding="utf-8")
+    check("物品与事实分工写进提示词",
+          "物品只管「此刻谁手里有什么」" in _st68 and "反例" in _st68)
+
+    # 69. 导入与耗时可见
+    _src69 = client.post("/api/sessions", json={}).get_json()
+    client.post("/api/sessions/%s/commit_partial" % _src69["id"],
+                json={"content": "他把伞收了。"})
+    _dump69 = rp_storage.load_session(_src69["id"])
+    _imp69 = client.post("/api/sessions/import", json=_dump69)
+    check("导入返回 200", _imp69.status_code == 200, _imp69.status_code)
+    _new69 = _imp69.get_json()
+    check("导入换了新 id", _new69.get("id") != _src69["id"])
+    check("导入把消息带过来了", _new69.get("messages") == 1, _new69)
+    _back69 = rp_storage.load_session(_new69["id"])
+    check("导入的内容一致", _back69["messages"][0]["content"] == "他把伞收了。")
+    check("导入疯话文件被拒",
+          client.post("/api/sessions/import", json={}).status_code == 400)
+    check("导入不是对象也被拒",
+          client.post("/api/sessions/import", json=[1, 2]).status_code == 400)
+
+    _ctx69 = rp_context.context_info(rp_storage.load_session(_new69["id"]))
+    check("上下文信息带读写耗时",
+          isinstance(_ctx69.get("io"), dict) and "save_ms" in _ctx69["io"])
+
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")

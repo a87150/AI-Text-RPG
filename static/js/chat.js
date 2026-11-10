@@ -173,7 +173,8 @@ function showDraftActions(turnBox, shown, speaker, isPlain, originalText) {
     keep.disabled = true;
     try {
       await api('/api/sessions/' + state.session.id + '/commit_partial',
-        { method: 'POST', body: { content: shown, speaker: speaker || '' } });
+        { method: 'POST', body: { content: shown, speaker: speaker || '',
+          updated_at: state.session && state.session.updated_at } });
       bar.remove();
       await refreshCurrentSession();
       renderMessages();
@@ -210,6 +211,11 @@ async function sendMessage(text, { isRetry }) {
   }
 
   const box = $('#messages');
+  if (isContinue && box) {
+    const turns = box.querySelectorAll('.turn');
+    const tailTurn = turns[turns.length - 1];
+    if (tailTurn) tailTurn.remove();
+  }
   const empty = box && box.querySelector('.empty');
   if (empty) empty.remove();
   const oldHint = box && box.querySelector('.retry-hint');
@@ -386,6 +392,21 @@ async function sendMessage(text, { isRetry }) {
 }
 
 /** 顶部「重试上一条」卡片与重试事件。 */
+/** 上一条没写完时往下接：不重摸一轮，不新增消息。 */
+export async function continueLast() {
+  if (!state.session || state.busy) {
+    toast('正在生成，稍等一下', 'error');
+    return;
+  }
+  await sendMessage('', { isContinue: true });
+  // 后端把新内容拼到原来那条上，拉一次才是真相
+  try {
+    await refreshCurrentSession();
+    renderMessages();
+    syncAll();
+  } catch (e) { /* 拉不到就保持现状 */ }
+}
+
 export function bindRetryEvents() {
   document.addEventListener('rp:retry-last', (e) => {
     const text = e.detail && e.detail.text;

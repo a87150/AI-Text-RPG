@@ -56,19 +56,56 @@ def session_path(sid):
     return os.path.join(DATA_DIR, sid + ".json")
 
 
-def save_session(sess):
+class StaleSession(Exception):
+    """磁盘上的版本比调用方拿着的新：另一个标签页先写了。"""
+
+    def __init__(self, expected, actual):
+        super().__init__("会话已在别处更新")
+        self.expected = expected
+        self.actual = actual
+
+
+def current_stamp(sid):
+    """读磁盘上的 updated_at，不建立完整对象。"""
+    path = session_path(sid)
+    if not path or not os.path.isfile(path):
+        return None
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return None
+    return data.get("updated_at") if isinstance(data, dict) else None
+
+
+# 最近一次读/写耗时（毫秒），供上下文面板显示。
+IO_TIMING = {"load_ms": 0.0, "save_ms": 0.0, "bytes": 0}
+
+
+def save_session(sess, expect=None):
+    """写盘。expect 给就是乐观锁：磁盘上的 updated_at 和它对不上就报 StaleSession。
+
+    只有用户交互式的写（改设定、改消息、半截入库）需要传；后端自己在锁内 load 完立刻写的路径不需要，竞争窗口已经被锁封住。
+    """
     sid = sess.get("id")
     path = session_path(sid)
     if not path:
         raise ValueError("非法的会话 ID")
     with get_session_lock(sid):
+        if expect is not None:
+            actual = current_stamp(sid)
+            if actual is not None and abs(float(actual) - float(expect)) > 1e-6:
+                raise StaleSession(expect, actual)
         sess["updated_at"] = time.time()
         # 每次写入用独立临时名，避免并发写同一 .tmp 把文件写坏
         tmp = "%s.%s.tmp" % (path, uuid.uuid4().hex[:8])
         try:
+            _t0 = time.perf_counter()
             with open(tmp, "w", encoding="utf-8") as f:
                 json.dump(sess, f, ensure_ascii=False, indent=2)
             os.replace(tmp, path)
+            IO_TIMING["save_ms"] = (time.perf_counter() - _t0) * 1000
+            IO_TIMING["bytes"] = os.path.getsize(path) if os.path.isfile(path) else 0
         finally:
             if os.path.isfile(tmp):
                 try:
@@ -83,8 +120,12 @@ def load_session(sid):
         return None
     with get_session_lock(sid):
         try:
+            _t0 = time.perf_counter()
             with open(path, encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+            IO_TIMING["load_ms"] = (time.perf_counter() - _t0) * 1000
+            IO_TIMING["bytes"] = os.path.getsize(path)
+            return data
         except (OSError, json.JSONDecodeError):
             return None
 

@@ -9,7 +9,7 @@ from .llm import model_text
 from .prompts import build_context_debug, build_summary_prompt
 from .snapshots import snapshot
 from .storage import (
-    get_session_lock, load_session, save_session,
+    IO_TIMING, get_session_lock, load_session, save_session,
 )
 
 def context_chars(sess):
@@ -42,6 +42,8 @@ def context_info(sess):
         "limit": writing()["context_limit"],
         "debug": debug,
         "messages": len(msgs),
+        # 读写一份会话 JSON 的耗时：超过 100ms 就该拆数据层了
+        "io": dict(IO_TIMING),
         # 显示压缩真正会留下的条数，别跟实际行为对不上
         "keep_recent": max(writing()["keep_recent"],
                            tier_limits()["history_msgs"] or writing()["keep_recent"]),

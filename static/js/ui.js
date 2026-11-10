@@ -441,6 +441,10 @@ export function renderContextDetail() {
       ? comp.dropped + ' 条 / ' + fmtNumber(comp.dropped_chars) + ' 字' : '—'],
     ['保留最近', (c.keep_recent || 0) + ' 条'],
     ['前情提要', c.summary_chars ? fmtNumber(c.summary_chars) + ' 字' : '无'],
+    // 超过 100ms 就该拆数据层了，不要凭感觉提前重构
+    ['写盘耗时', c.io ? (Math.round(c.io.save_ms || 0) + ' ms') : '—'],
+    ['读盘耗时', c.io ? (Math.round(c.io.load_ms || 0) + ' ms') : '—'],
+    ['会话文件', c.io && c.io.bytes ? fmtNumber(Math.round(c.io.bytes / 1024)) + ' KB' : '—'],
   ];
   for (const [k, v] of items) {
     const row = document.createElement('div');
@@ -1028,10 +1032,11 @@ export function buildMessage(role, content, name, edited) {
 }
 
 /** 每条消息右下角的操作条。只给自己写的话提供编辑，改 AI 的话没有意义。 */
-function toolsNode(role) {
+function toolsNode(role, isLast) {
   const acts = role === 'user'
     ? [['edit', '✎', '编辑这句话'], ['rewrite', '↻', '重发这句'], ['branch', '⧉', '从这里分叉']]
-    : [['rewrite', '↻', '删掉这条及之后重新生成'], ['branch', '⧉', '从这里分叉']];
+    : [['rewrite', '↻', '删掉这条及之后重新生成'], ['branch', '⧉', '从这里分叉']]
+      .concat(isLast ? [['continue', '▶', '这条没写完，接着往下写']] : []);
   const bar = document.createElement('div');
   bar.className = 'msg-tools';
   for (const [act, icon, title] of acts) {
@@ -1158,7 +1163,8 @@ export function renderMessages() {
       host.appendChild(narratorNode(m.narrator || m.content || '', storyName()));
     }
     host.dataset.index = index;
-    host.appendChild(toolsNode(m.role === 'user' ? 'user' : 'assistant'));
+    // 只有最后一条 AI 回复能续写：往前接就不是同一轮了
+    host.appendChild(toolsNode(m.role === 'user' ? 'user' : 'assistant', index === msgs.length - 1));
     box.appendChild(host);
   });
 

@@ -562,6 +562,29 @@ async function refreshBackendStatus() {
   }
 }
 
+/** 把导出出去的会话 JSON 装回来：既是导出的对称，也是换机器时的底。 */
+async function importSessionFile(e) {
+  const input = e.target;
+  const file = input.files && input.files[0];
+  input.value = '';                     // 清掉选择，同一个文件能再选一次
+  if (!file) return;
+  try {
+    const raw = await file.text();
+    let data;
+    try { data = JSON.parse(raw); } catch (err) {
+      toast('这不是一份 JSON 文件', 'error');
+      return;
+    }
+    const r = await api('/api/sessions/import', { method: 'POST', body: data });
+    await loadSessions();
+    switchSideView('sessions');
+    await openSession(r.id);
+    toast('已导入 ' + r.messages + ' 条消息、' + r.characters + ' 个角色', 'ok');
+  } catch (err) {
+    toast('导入失败：' + err.message, 'error');
+  }
+}
+
 function openContext() {
   renderContextDetail();
   $('#ctx-modal').classList.remove('hidden');
@@ -594,6 +617,8 @@ function bindUI() {
   });
   $('#btn-new-story').onclick = newStory;
   $('#btn-new-session').onclick = () => openPickStory();
+  $('#btn-import-session').onclick = () => $('#import-file').click();
+  $('#import-file').onchange = importSessionFile;
   $('#btn-send').onclick = sendFromInput;
   $('#btn-settings').onclick = () => openSettings();
   $('#btn-clear').onclick = clearSession;

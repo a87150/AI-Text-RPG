@@ -1,6 +1,7 @@
 /** 消息级操作：重写、就地编辑、从这里分叉。 */
 import { api } from './api.js';
 import { state } from './state.js';
+import { continueLast } from './chat.js';
 import { $, toast, renderMessages, syncAll } from './ui.js';
 import { loadSessions, refreshCurrentSession } from './sessions.js';
 import { retryLast } from './chat.js';
@@ -144,5 +145,6 @@ export function bindMessageActions() {
     if (act === 'rewrite') rewrite(index);
     else if (act === 'branch') branch(index);
     else if (act === 'edit') startEdit(index, host);
+  else if (act === 'continue') continueLast();
   });
 }

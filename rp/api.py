@@ -42,7 +42,7 @@ from .stories import (
 )
 from .snapshots import list_snapshots, load_snapshot, snapshot
 from .storage import (
-    DEFAULT_TITLE, TEXT_FIELDS, get_session_lock, list_sessions,
+    DEFAULT_TITLE, TEXT_FIELDS, StaleSession, get_session_lock, list_sessions,
     load_session, new_session, release_busy, save_session, session_path,
     try_acquire_busy,
 )
@@ -505,13 +505,75 @@ def api_get_session(sid):
     return jsonify(sess)
 
 
+@app.post("/api/sessions/import")
+def api_import_session():
+    """把导出出去的会话 JSON 装回来。既与导出对称，也是换机器时的底。"""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "不是一份会话文件"}), 400
+    msgs = data.get("messages")
+    if not isinstance(msgs, list) or not msgs:
+        return jsonify({"error": "这份文件里没有对话记录"}), 400
+    if len(msgs) > 20000:
+        return jsonify({"error": "对话太长，导入不了"}), 400
+
+    clean = []
+    for m in msgs:
+        if not isinstance(m, dict) or m.get("role") not in ("user", "assistant"):
+            continue
+        item = {"role": m["role"]}
+        for key in ("content", "narrator", "speaker"):
+            if isinstance(m.get(key), str):
+                item[key] = m[key]
+        if isinstance(m.get("lines"), list):
+            item["lines"] = [{"speaker": str(x.get("speaker") or ""),
+                              "text": str(x.get("text") or "")}
+                             for x in m["lines"] if isinstance(x, dict)]
+        if isinstance(m.get("turn"), int):
+            item["turn"] = m["turn"]
+        clean.append(item)
+    if not clean:
+        return jsonify({"error": "这份文件里没有可用的消息"}), 400
+
+    sess = new_session(title=(str(data.get("title") or "导入的对话"))[:40] + "（导入）")
+    for key in TEXT_FIELDS:
+        if isinstance(data.get(key), str):
+            sess[key] = data[key]
+    if data.get("mode") in MODES:
+        sess["mode"] = data["mode"]
+    if isinstance(data.get("characters"), list):
+        sess["characters"] = [c for c in data["characters"] if isinstance(c, dict) and c.get("name")]
+    if isinstance(data.get("status"), dict):
+        sess["status"] = data["status"]
+    if isinstance(data.get("facts"), list):
+        sess["facts"] = [f for f in data["facts"] if isinstance(f, dict)][:200]
+    if isinstance(data.get("lore"), list):
+        sess["lore"] = [e for e in data["lore"] if isinstance(e, dict)][:40]
+    if isinstance(data.get("summary"), str):
+        sess["summary"] = data["summary"]
+    sess["messages"] = clean
+    sess["turn"] = len([m for m in clean if m["role"] == "assistant"])
+    save_session(sess)
+    return jsonify({"id": sess["id"], "title": sess["title"],
+                    "messages": len(clean), "characters": len(sess.get("characters") or [])})
+
+
 @app.put("/api/sessions/<sid>")
 def api_update_session(sid):
     data = request.get_json(silent=True) or {}
+    expect = data.get("updated_at")
     with get_session_lock(sid):
         sess = load_session(sid)
         if not sess:
             return jsonify({"error": "会话不存在"}), 404
+        # 别的标签页已经写过了就不能整份覆盖，否则对面刚聊的内容无声消失
+        if expect is not None and sess.get("updated_at") is not None:
+            try:
+                if abs(float(sess["updated_at"]) - float(expect)) > 1e-6:
+                    return jsonify({"error": "这个对话在别处更新过，请重新打开再改",
+                                    "conflict": True}), 409
+            except (TypeError, ValueError):
+                pass
         snapshot(sess, "settings")     # 改设定前留底，改坏了能退回来
         for key in TEXT_FIELDS:
             if isinstance(data.get(key), str):
@@ -669,13 +731,27 @@ def api_commit_partial(sid):
     if not content:
         return jsonify({"error": "没有内容可存"}), 400
     speaker = str(data.get("speaker") or "").strip()
+    # 赛跑：用户点停止的同时后端也可能把完整回复写进去了。
+    # 已经有一条 assistant 把这段包含进去了就不再重复存，否则一轮会变成两条。
+    msgs = sess.setdefault("messages", [])
+    last = msgs[-1] if msgs else None
+    if last and last.get("role") == "assistant":
+        existing = (last.get("content") or "").strip()
+        if existing and (existing.startswith(content) or content.startswith(existing)):
+            out = dict(sess)
+            out["context_chars"] = context_chars(sess)
+            out["context"] = context_info(sess)
+            return jsonify(out)
     msg = {"role": "assistant", "content": content, "partial": True}
     if speaker:
         msg["speaker"] = speaker
-    sess.setdefault("messages", []).append(msg)
     msg["turn"] = sess.get("turn") or 0
-    sess["updated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
-    save_session(sess)
+    msgs.append(msg)
+    try:
+        save_session(sess, expect=data.get("updated_at"))
+    except StaleSession:
+        return jsonify({"error": "这个对话在别处更新过，已重新读取",
+                        "conflict": True}), 409
     out = dict(sess)
     out["context_chars"] = context_chars(sess)
     out["context"] = context_info(sess)
@@ -988,8 +1064,50 @@ def _stream_model(messages, speaker, temperature, max_attempts, use_rp):
     return None, 0
 
 
-def _commit_turn(s2, turn, use_rp):
-    """一轮生成之后要落盘的所有副作用：消息、状态、账本、角色、轮次、存档。"""
+def _join_text(prev, extra):
+    """续写的拼接：模型常把上一句的末尾重复一遍再往下写，能对上就切掉。"""
+    if not extra:
+        return prev
+    if not prev:
+        return extra
+    for n in (6, 4, 2, 1):
+        head = extra[:n]
+        if head and prev.endswith(head):
+            extra = extra[n:]
+            break
+    return prev + extra
+
+
+def _commit_turn(s2, turn, use_rp, resume=False):
+    """一轮生成之后要落盘的所有副作用：消息、状态、账本、角色、轮次、存档。
+
+    resume=True 表示这是上一条回复的延续：内容拼到尾上，不新增消息，
+    也不推进轮次——那还是同一轮。
+    """
+    msgs = s2.setdefault("messages", [])
+    if resume and msgs and msgs[-1].get("role") == "assistant":
+        tail = msgs[-1]
+        if use_rp:
+            tail["content"] = _join_text(tail.get("content") or "", turn["line"])
+            if turn["narrator"]:
+                tail["narrator"] = _join_text(tail.get("narrator") or "", turn["narrator"])
+            if turn.get("lines"):
+                merged = list(tail.get("lines") or [])
+                for line in turn["lines"]:
+                    if merged and merged[-1].get("speaker") == line.get("speaker"):
+                        merged[-1] = {"speaker": line["speaker"],
+                                      "text": _join_text(merged[-1].get("text") or "", line.get("text") or "")}
+                    else:
+                        merged.append(dict(line))
+                tail["lines"] = merged
+        else:
+            tail["narrator"] = _join_text(tail.get("narrator") or "", turn["narrator"])
+        tail.pop("partial", None)
+        if turn.get("status"):
+            s2["status"] = merge_status(s2.get("status"), turn["status"])
+        merge_facts(s2, turn.get("facts"), s2.get("turn"))
+        save_session(s2)
+        return tail
     if use_rp:
         msg = {"role": "assistant", "content": turn["line"], "speaker": turn["speaker"]}
         if turn["narrator"]:
@@ -1038,8 +1156,9 @@ def api_chat():
     sid = data.get("session_id")
     text = (data.get("message") or "").strip()
     is_retry = bool(data.get("retry"))
+    is_continue = bool(data.get("continue"))
 
-    if not text:
+    if not text and not is_continue:
         return jsonify({"error": "消息不能为空"}), 400
     if not session_path(sid):
         return jsonify({"error": "非法的会话 ID"}), 400
@@ -1059,12 +1178,20 @@ def api_chat():
             msgs = sess.setdefault("messages", [])
             if not isinstance(msgs, list):
                 msgs = sess["messages"] = []
+            # 续写：不新增 user 消息，把已经写出的半截当成待接的上文
+            resume_from = ""
+            if is_continue and msgs and msgs[-1].get("role") == "assistant":
+                resume_from = (msgs[-1].get("content") or msgs[-1].get("narrator") or "").strip()
             last_is_same_user = (
                 bool(msgs)
                 and msgs[-1].get("role") == "user"
                 and msgs[-1].get("content") == text
             )
-            if not (is_retry and last_is_same_user):
+            if is_continue:
+                if not resume_from:
+                    release_busy(sid)
+                    return jsonify({"error": "上一条不是没写完的回复，无从接起"}), 400
+            elif not (is_retry and last_is_same_user):
                 msgs.append({"role": "user", "content": text})
             if sess.get("title") in ("", DEFAULT_TITLE, "新对话"):
                 sess["title"] = text[:16]
@@ -1072,6 +1199,12 @@ def api_chat():
             cast = [c["name"] for c in ensure_characters(sess)]
             save_session(sess)
             messages = build_messages(sess, speaker)
+            if resume_from:
+                messages.append({"role": "assistant", "content": resume_from})
+                messages.append({"role": "user", "content": (
+                    "上一条回复被截断了。从它停下的那个字接着写，"
+                    "不要重复已经写过的内容，不要重新开头，不要加任何说明。"),
+                })
     except LookupError as exc:
         release_busy(sid)
         return jsonify({"error": str(exc)}), 404
@@ -1086,6 +1219,8 @@ def api_chat():
     except (TypeError, ValueError):
         temperature = creativity_temp()
     temperature = max(0.0, min(1.5, temperature))
+
+    cancelled = {"flag": False}      # 客户端断开时置位，写盘前必须看一眼
 
     def generate():
         use_rp = sess_mode == "rp"
@@ -1106,10 +1241,14 @@ def api_chat():
                 yield sse({"type": "error", "message": "模型没有给出内容，请重试。"})
                 return
 
+            if cancelled["flag"]:
+                return                # 用户已经点了停止，不要把没要的东西写进去
             with get_session_lock(sid):
+                if cancelled["flag"]:
+                    return
                 s2 = load_session(sid)
                 if s2 is not None:
-                    _commit_turn(s2, turn, use_rp)
+                    _commit_turn(s2, turn, use_rp, resume=bool(resume_from))
                     context = context_chars(s2)
                     count = len(s2.get("messages") or [])
                     characters = ensure_characters(s2)
@@ -1128,9 +1267,16 @@ def api_chat():
                 "characters": characters,
                 "pending_character": (s2 or {}).get("pending_character"),
             })
+        except GeneratorExit:
+            # 客户端 abort：Flask 会 close 这个 generator。标记之后必须 re-raise，
+            # 否则 Python 会报 "generator ignored GeneratorExit"。
+            cancelled["flag"] = True
+            raise
         finally:
             release_busy(sid)
 
+        if cancelled["flag"]:
+            return
         background_compress(sid)
 
     return Response(
