@@ -68,12 +68,29 @@ def advance_turn(sess):
     sess["turn"] = int(sess.get("turn") or 0) + 1
 
 
+# 模型会把「无」「暂无」当成名字写出来，这些不是人
+_BAD_NAMES = {"无", "没有", "暂无", "未知", "不详", "空", "none", "null",
+              "-", "—", "（无）", "无。", "无人物", "路人", "众人"}
+
+
+def is_bad_name(name):
+    return str(name or "").strip().lower() in _BAD_NAMES
+
+
+def looks_like_name(name):
+    """从在场名单里捞人用：像人名才建卡，免得把整句话塞进角色列。"""
+    text = str(name or "").strip()
+    if not text or is_bad_name(text) or len(text) > 8:
+        return False
+    return not re.search(r"[，,。；;：:！？!?\s0-9]", text)
+
+
 def upsert_character(sess, data):
     """登记新角色 / 更新已有角色的设定与变化，返回 (名字, 是否新增)。"""
     if not isinstance(data, dict):
         return None
     name = (data.get("name") or "").strip()[:24]
-    if not name:
+    if not name or is_bad_name(name):
         return None
     chars = ensure_characters(sess)
     for c in chars:

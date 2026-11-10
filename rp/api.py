@@ -12,7 +12,7 @@ from flask import Response, jsonify, render_template, request, send_file
 from .characters import (
     advance_turn, apply_change, ensure_characters,
     merge_facts, merge_status, next_speaker, parse_turn, role_labels,
-    upsert_character,
+    looks_like_name, upsert_character,
 )
 from . import backup
 from .config import (
@@ -960,6 +960,18 @@ def _commit_turn(s2, turn, use_rp):
     fresh = turn.get("new_characters") or ([turn["new_character"]] if turn["new_character"] else [])
     for item in fresh:
         upsert_character(s2, item)
+    # 模型常把新人物只写进在场名单、不给【新角色】标签，光等标签永远等不到。
+    # 名单里出现不认识的名字就补一张空卡，人设留白，等模型下一轮再补【变化】。
+    me, _ai = role_labels(s2)
+    st = s2.get("status") or {}
+    known = {(c.get("name") or "").strip() for c in ensure_characters(s2)}
+    for raw in list(st.get("present") or []) + list(st.get("away") or []):
+        nm = str(raw or "").strip()
+        if nm == me or nm in known or not looks_like_name(nm):
+            continue
+        known.add(nm)
+        fresh.append({"name": nm})
+        upsert_character(s2, {"name": nm})
     if fresh:
         promote_characters(s2, writing()["max_characters"])
     for upd in turn["updates"]:
