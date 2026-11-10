@@ -5,6 +5,7 @@
 """
 import json
 import os
+import re
 import pathlib
 import shutil
 import tempfile
@@ -1439,6 +1440,49 @@ def main():
     check("界面上能填份数", "#backup-keep" in _bjs)
     _h64 = (pathlib.Path(__file__).parent / "templates" / "index.html").read_text(encoding="utf-8")
     check("输入框上限是 30", 'id="backup-keep" min="1" max="30"' in _h64)
+
+    # 65. 角色弹层能点开，且不许用 state 当局部变量名（会撞上模块级 state，TDZ 直接崩）
+    _ui65 = (pathlib.Path(__file__).parent / "static" / "js" / "ui.js").read_text(encoding="utf-8")
+    _pop = _ui65[_ui65.index("export function toggleCharPop"):]
+    _tail = chr(10) + "def "
+    _pop = _pop[:_pop.index(_tail)] if _tail in _pop else _pop
+    check("弹层里没有叫 state 的局部变量", "const state =" not in _pop and "let state =" not in _pop)
+    check("状况行始终存在", "['状况'" in _pop)
+    check("只要状况，不要额外的最近一行", "lastSaid" not in _pop and "['最近'" not in _pop)
+    check("在场名单会剔掉「无」这类占位", "_clean_names" in rp_characters.__dict__ or "def _clean_names" in
+          (pathlib.Path(__file__).parent / "rp" / "characters.py").read_text(encoding="utf-8"))
+    check("在场名单不再被角色数硬截断",
+          'names = _clean_names(value)' in (pathlib.Path(__file__).parent / "rp" / "characters.py").read_text(encoding="utf-8"))
+
+    # 66. 四层对账：常量 / 界面 min-max / 磁盘现值 / 代码引用，任何一层对不上就报
+    _html66 = (pathlib.Path(__file__).parent / "templates" / "index.html").read_text(encoding="utf-8")
+    _UI_IDS = {
+        "narrator_min": "w-narrator-min", "narrator_max": "w-narrator-max",
+        "line_min": "w-line-min", "line_max": "w-line-max",
+        "context_limit": "w-context", "keep_recent": "w-keep",
+        "max_characters": "w-chars", "summary_chars": "w-summary",
+        "every_minutes": "backup-minutes", "keep": "backup-keep",
+    }
+    _src66 = "".join(f.read_text(encoding="utf-8") for f in
+                     sorted((pathlib.Path(__file__).parent / "rp").rglob("*.py")))
+    for _k, _ui in _UI_IDS.items():
+        _bounds = rp_config.WRITING_BOUNDS.get(_k) or rp_config.BACKUP_BOUNDS.get(_k)
+        _tag = re.search(r'<input[^>]*id="%s"[^>]*>' % re.escape(_ui), _html66)
+        check("界面有 %s 的输入框" % _k, bool(_tag), _ui)
+        if _tag:
+            _lo = re.search(r'min="(\d+)"', _tag.group(0))
+            _hi = re.search(r'max="(\d+)"', _tag.group(0))
+            check("界面 %s 的下限和常量一致" % _k,
+                  _lo and int(_lo.group(1)) == _bounds[0],
+                  "%s vs %s" % (_lo.group(1) if _lo else "缺", _bounds))
+            check("界面 %s 的上限和常量一致" % _k,
+                  _hi and int(_hi.group(1)) == _bounds[1],
+                  "%s vs %s" % (_hi.group(1) if _hi else "缺", _bounds))
+        check("配置键 %s 真的被用到" % _k, _src66.count('"' + _k + '"') >= 2,
+              "只出现 %d 次" % _src66.count('"' + _k + '"'))
+    # 档位里的每个键也得有人用，别留死配置
+    for _k in ("context", "history_msgs", "role_chars", "facts", "anchor_every", "attempts"):
+        check("档位键 %s 有人用" % _k, _src66.count('["%s"]' % _k) >= 1)
 
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:

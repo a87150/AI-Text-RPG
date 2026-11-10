@@ -192,9 +192,9 @@ def _take_mark_line(text):
         elif key == "items":
             status[key] = _parse_items(value)
         elif key in ("present", "away"):
-            names = [n.strip() for n in NAME_SPLIT_RE.split(value) if n.strip()]
+            names = _clean_names(value)
             if names:
-                status[key] = names[:writing()["max_characters"]]
+                status[key] = names
         else:
             status[key] = value
     return src, status
@@ -274,6 +274,21 @@ STATUS_FIELDS = ("location", "time", "relations", "items", "goal")
 FACT_KEY = "facts"
 
 
+def _clean_names(seq, cap=None):
+    """在场/离场名单：剔掉「无」这类占位词，去重，上限比角色数宽一点好接新人。"""
+    if isinstance(seq, str):
+        seq = NAME_SPLIT_RE.split(seq)
+    cap = cap or (writing()["max_characters"] + 4)
+    out = []
+    for raw in seq or []:
+        name = str(raw).strip()[:24]
+        if not name or name.lower() in _BAD_NAMES:
+            continue
+        if name not in out:
+            out.append(name)
+    return out[:cap]
+
+
 def extract_status(text):
     """取出状态块与事实行，并从正文里删掉它们。
 
@@ -304,9 +319,9 @@ def extract_status(text):
         if isinstance(names, str):
             names = NAME_SPLIT_RE.split(names)
         if isinstance(names, list):
-            names = [str(n).strip()[:24] for n in names if str(n).strip()]
+            names = _clean_names(names)
             if names:
-                status[key] = names[:writing()["max_characters"]]
+                status[key] = names
     for key in STATUS_FIELDS:
         value = obj.get(key)
         if isinstance(value, list):
@@ -321,10 +336,9 @@ def extract_status(text):
             status[FACT_KEY] = status[FACT_KEY][:3]
         elif key not in status:
             if key in ("present", "away"):
-                names = [str(n).strip()[:24] for n in value if str(n).strip()] \
-                    if isinstance(value, list) else [str(value).strip()]
+                names = _clean_names(value)
                 if names:
-                    status[key] = names[:writing()["max_characters"]]
+                    status[key] = names
             elif key == "items":
                 status[key] = value          # {人名: 东西}，别按字符串切
             else:

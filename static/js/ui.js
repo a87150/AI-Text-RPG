@@ -677,9 +677,10 @@ export function toggleCharPop(name, anchor) {
     const t = String(line || '').trim();
     if (t && t !== c.state && !beats.includes(t)) beats.push(t);
   }
-  const state = String(c.state || '').trim();
+  // 不能叫 state：模块顶部导入了 state（当前会话），同名会在 TDZ 里把上面的 state.session 弄崩
+  const nowText = String(c.state || '').trim();
   const tail = beats.length ? '（此前：' + beats.slice(-2).join('；') + '）' : '';
-  rows.push(['状况', (state || '还没有记录，聊几轮之后这里会有内容') + tail]);
+  rows.push(['状况', (nowText || '还没记下来，模型写了【变化】之后这里会有内容') + tail]);
   if (name === me) rows.unshift(['身份', '你这一局演的就是 TA']);
 
   pop.textContent = '';
