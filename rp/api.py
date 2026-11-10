@@ -956,8 +956,11 @@ def _commit_turn(s2, turn, use_rp):
     if turn.get("status"):
         s2["status"] = merge_status(s2.get("status"), turn["status"])
     merge_facts(s2, turn.get("facts"), s2.get("turn"))
-    if turn["new_character"]:
-        upsert_character(s2, turn["new_character"])
+    # 一轮里模型可能一次加好几个人（【新角色】后面连写几行 JSON）
+    fresh = turn.get("new_characters") or ([turn["new_character"]] if turn["new_character"] else [])
+    for item in fresh:
+        upsert_character(s2, item)
+    if fresh:
         promote_characters(s2, writing()["max_characters"])
     for upd in turn["updates"]:
         apply_change(s2, upd)

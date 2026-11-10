@@ -554,11 +554,13 @@ def build_field_prompt(field, name="", user_name="", ai_name="", user_role="",
 
 
 
-def build_summary_prompt(prev_summary, text, summary_chars=400):
+def build_summary_prompt(prev_summary, text, summary_chars=None):
+    # 摘要长度是写作参数之一：短了省 token 但细节留不住，长了占预算
+    chars = writing()["summary_chars"] if summary_chars is None else summary_chars
     head = ""
     if prev_summary:
         head = "【已有前情提要】\n%s\n" % prev_summary
-    return render("summary.md", head=head, text=text, summary_chars=summary_chars)
+    return render("summary.md", head=head, text=text, summary_chars=chars)
 
 
 _SENT_SPLIT = re.compile(r"[。！？；\n]+")

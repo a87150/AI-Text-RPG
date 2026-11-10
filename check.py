@@ -1393,7 +1393,7 @@ def main():
     _uijs2 = (pathlib.Path(__file__).parent / "static" / "js" / "ui.js").read_text(encoding="utf-8")
     check("前端会弹选择框", "askCharacterPick" in _chjs and "export function askCharacterPick" in _uijs2)
     check("选择框能选不要新角色", "不要新角色" in _uijs2)
-    check("主角也出现在在场名单里", "concat(chars.map((c) => c.name)" in _uijs2)
+    check("主角单独成格，不再混进在场名单", "put('主角：')" in _uijs2)
     check("主角也有自己的状态弹层", "if (!c && name === me)" in _uijs2)
 
     shutil.rmtree(TMP_DIR, ignore_errors=True)

@@ -279,7 +279,7 @@ function fillWritingForm() {
     ['#w-narrator-min', 'narrator_min'], ['#w-narrator-max', 'narrator_max'],
     ['#w-line-min', 'line_min'], ['#w-line-max', 'line_max'],
     ['#w-context', 'context_limit'], ['#w-keep', 'keep_recent'],
-    ['#w-chars', 'max_characters'],
+    ['#w-chars', 'max_characters'], ['#w-summary', 'summary_chars'],
   ]) {
     const el = $(id);
     if (el) el.value = w[key] == null ? '' : w[key];
@@ -390,7 +390,7 @@ async function saveWriting(quiet = false) {
     ['#w-narrator-min', 'narrator_min'], ['#w-narrator-max', 'narrator_max'],
     ['#w-line-min', 'line_min'], ['#w-line-max', 'line_max'],
     ['#w-context', 'context_limit'], ['#w-keep', 'keep_recent'],
-    ['#w-chars', 'max_characters'],
+    ['#w-chars', 'max_characters'], ['#w-summary', 'summary_chars'],
   ]) {
     const el = $(id);
     const raw = el ? String(el.value || '').trim() : '';

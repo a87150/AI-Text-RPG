@@ -4,7 +4,8 @@ import re
 from difflib import SequenceMatcher
 
 from .config import mode_for, writing
-from .llm import extract_json, loose_status_json, strip_status_leaks, strip_thinking
+from .llm import (extract_json, extract_json_all, loose_status_json,
+                  strip_status_leaks, strip_thinking)
 
 # ============================== 提示词构造 ==============================
 def guess_name(text):
@@ -125,7 +126,13 @@ def role_labels(sess):
 SEG_RE = re.compile(r"【([^】]{1,24})】")
 STATUS_RE = re.compile(r"<StatusBlock>(.*?)</StatusBlock>", re.S | re.I)
 # 单行写法：[[地点：银月酒馆|时间：深夜|关系：戒备|物品：湿伞|目标：等对方开口|事实：甲；乙]]
-MARK_RE = re.compile(r"^[ \t]*\[\[([^\[\]]{2,400})\]\][ \t]*$", re.M)
+MARK_KEYS_RX = "在场|离场|退场|地点|位置|场景|时间|关系|人物|物品|携带|目标|意图|事实"
+# 模型常常把 [[…]] 写成【…】，两个竖线还在；不认这种写法的话整行状态就丢了
+MARK_RE = re.compile(
+    r"^[ \t]*\[\[([^\[\]]{2,400})\]\][ \t]*$"
+    r"|^[ \t]*【((?:" + MARK_KEYS_RX + r")[：:][^【】]{0,380})】[ \t]*$",
+    re.M,
+)
 MARK_KEYS = {
     "地点": "location", "位置": "location", "场景": "location",
     "时间": "time",
@@ -147,7 +154,7 @@ def _take_mark_line(text):
         return src, {}
     src = (src[:match.start()] + src[match.end():]).strip()
     status = {}
-    for chunk in re.split(r"[|｜]", match.group(1)):
+    for chunk in re.split(r"[|｜]", match.group(1) or match.group(2) or ""):
         if "：" in chunk:
             key, value = chunk.split("：", 1)
         elif ":" in chunk:
@@ -293,7 +300,15 @@ def extract_status(text):
             status[FACT_KEY] = (status.get(FACT_KEY) or []) + value
             status[FACT_KEY] = status[FACT_KEY][:3]
         elif key not in status:
-            status[key] = value[:160]
+            if key in ("present", "away"):
+                names = [str(n).strip()[:24] for n in value if str(n).strip()] \
+                    if isinstance(value, list) else [str(value).strip()]
+                if names:
+                    status[key] = names[:writing()["max_characters"]]
+            elif key == "items":
+                status[key] = value          # {人名: 东西}，别按字符串切
+            else:
+                status[key] = str(value)[:160]
     line = FACT_LINE_RE.search(cleaned)
     if line:
         cleaned = (cleaned[:line.start()] + cleaned[line.end():]).strip()
@@ -371,6 +386,12 @@ def active_facts(sess, limit=FACTS_KEEP):
     return live[-limit:]
 
 
+def _sync_new_character(result):
+    """new_characters 是准的，new_character 留第一个给旧调用方。"""
+    if result["new_characters"]:
+        result["new_character"] = result["new_characters"][0]
+
+
 def parse_turn(text, speaker):
     """拆出旁白与指定角色的台词。
 
@@ -381,7 +402,8 @@ def parse_turn(text, speaker):
     text, status = extract_status(text)
     facts = list((status or {}).pop(FACT_KEY, []) or [])
     result = {"narrator": "", "speaker": speaker, "line": "",
-              "new_character": None, "updates": [], "status": status,
+              "new_character": None, "new_characters": [],
+              "updates": [], "status": status,
               "facts": facts}
     if not text:
         return result
@@ -405,18 +427,20 @@ def parse_turn(text, speaker):
                 continue
             obj = None
             if tag in ("新角色", "新增角色", "角色"):
-                obj = extract_json(body)
-                if obj and (obj.get("name") or "").strip():
-                    result["new_character"] = obj
+                objs = [o for o in extract_json_all(body) if (o.get("name") or "").strip()]
+                if objs:
+                    result["new_characters"].extend(objs)
                     continue
             elif tag in ("变化", "状态", "设定变化"):
-                obj = extract_json(body)
-                if obj and (obj.get("name") or "").strip() and (obj.get("change") or "").strip():
-                    result["updates"].append(obj)
+                ups = [o for o in extract_json_all(body)
+                       if (o.get("name") or "").strip() and (o.get("change") or "").strip()]
+                if ups:
+                    result["updates"].extend(ups)
                     continue
             # 认不出来的标签、或格式写坏的，原样留在正文里，不吞内容
             keep.append(m.group(0) + body)
         result["narrator"] = "\n\n".join(keep).strip()
+        _sync_new_character(result)
         return result
 
     marks = list(SEG_RE.finditer(text))
@@ -439,13 +463,12 @@ def parse_turn(text, speaker):
         if tag in ("旁白", "叙述", "系统"):
             narrator_parts.append(body)
         elif tag in ("新角色", "新增角色", "角色"):
-            obj = extract_json(body)
-            if obj and (obj.get("name") or "").strip():
-                result["new_character"] = obj
+            result["new_characters"].extend(
+                o for o in extract_json_all(body) if (o.get("name") or "").strip())
         elif tag in ("变化", "状态", "设定变化"):
-            obj = extract_json(body)
-            if obj and (obj.get("name") or "").strip() and (obj.get("change") or "").strip():
-                result["updates"].append(obj)
+            result["updates"].extend(
+                o for o in extract_json_all(body)
+                if (o.get("name") or "").strip() and (o.get("change") or "").strip())
         elif tag == speaker:
             speaker_parts.append(body)
         # 其它角色的段落：丢弃
@@ -457,4 +480,5 @@ def parse_turn(text, speaker):
         narrator_parts = []
     result["narrator"] = "\n\n".join(narrator_parts).strip()
     result["line"] = line
+    _sync_new_character(result)
     return result

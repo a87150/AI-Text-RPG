@@ -72,6 +72,7 @@ WRITING_DEFAULTS = {
     "context_limit": 8000,
     "keep_recent": 16,
     "max_characters": 4,
+    "summary_chars": 400,
 }
 WRITING_BOUNDS = {
     "narrator_min": (10, 300),
@@ -81,6 +82,7 @@ WRITING_BOUNDS = {
     "context_limit": (2000, 60000),
     "keep_recent": (4, 60),
     "max_characters": (1, 10),
+    "summary_chars": (150, 1200),
 }
 _writing = dict(WRITING_DEFAULTS)
 

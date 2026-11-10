@@ -193,6 +193,33 @@ def strip_status_leaks(text):
     return body.strip()
 
 
+def extract_json_all(text):
+    """一段里可能连着写好几个对象（模型一次加两个人，中间只有换行），全都捞出来。
+
+    extract_json 是从第一个 { 取到最后一个 }，两个对象连写就整段解析失败，
+    结果一个都拿不到。
+    """
+    if not text:
+        return []
+    t = strip_thinking(text)
+    t = re.sub(r"\x60{3}(?:json|JSON)?", "", t)
+    decoder = json.JSONDecoder()
+    out, i = [], 0
+    while i < len(t):
+        start = t.find("{", i)
+        if start < 0:
+            break
+        try:
+            obj, end = decoder.raw_decode(t[start:])
+        except ValueError:
+            i = start + 1
+            continue
+        if isinstance(obj, dict):
+            out.append(obj)
+        i = start + end
+    return out
+
+
 def extract_json(text):
     if not text:
         return None

@@ -541,29 +541,30 @@ export function updateSub() {
   const isLeft = (name) => away.includes(name)
     || (present.length > 0 && !present.includes(name));
   const chip = (name) => {
-    const left = isLeft(name);
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'char-chip' + (left ? ' off' : '') + (name === me ? ' me' : '');
+    btn.className = 'char-chip' + (isLeft(name) ? ' off' : '') + (name === me ? ' me' : '');
     btn.dataset.name = name;
     btn.title = name === me ? '点开看自己的当前状态' : '点开看这个角色的当前状态';
-    btn.textContent = name + (left ? '（离场）' : '');
+    btn.textContent = name;
     return btn;
   };
-
-  // 主角只在这一处出现：本人→名字。别再在在场的名单里重复一遍
-  put('本人→');
-  el.appendChild(chip(me));
-  const others = chars.filter((c) => c.name !== me);
-  if (others.length) {
-    put(' · 在场 ');
-    for (const c of others) {
-      el.appendChild(chip(c.name));
+  const group = (label, list) => {
+    if (!list.length) return;
+    put(label);
+    for (const c of list) {
+      el.appendChild(chip(c.name || c));
       put(' ');
     }
-  } else if (!chars.length) {
-    put(' · AI = ' + (s.ai_name || 'AI'));
-  }
+  };
+
+  // 主角单独一格，在场/不在场按状态分两组，不再用「（离场）」这种尾巴
+  put('主角：');
+  el.appendChild(chip(me));
+  const others = chars.filter((c) => c.name !== me);
+  group(' 在场：', others.filter((c) => !isLeft(c.name)));
+  group(' 不在场：', others.filter((c) => isLeft(c.name)));
+  if (!chars.length) put(' AI = ' + (s.ai_name || 'AI'));
   put('· ' + ((s.context ? s.context.messages : (s.messages || []).length) || 0) + ' 条');
 
   // 当前状态单独占一行：地点、时间、关系、目标、物品都记在状态块里，
@@ -661,7 +662,13 @@ export function toggleCharPop(name, anchor) {
   const status = s.status || {};
   const rows = [];
   // 长设定不适合塞弹层，看状态就够
-  const carried = status.items && typeof status.items === 'object' ? status.items[name] : '';
+  // 物品按人分的时候各看各的；还是一条整串就标成公共的，至少别让人以为丢了
+  let carried = '';
+  if (status.items && typeof status.items === 'object') {
+    carried = status.items[name] || '';
+  } else if (typeof status.items === 'string' && status.items.trim()) {
+    carried = status.items.trim() + '（公共）';
+  }
   if (carried) rows.push(['物品', carried]);
   if (c.state) rows.push(['状态', c.state]);
   if (c.history && c.history.length) {
