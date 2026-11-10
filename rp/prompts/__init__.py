@@ -328,12 +328,19 @@ def input_density(sess):
     quotes = last.count("「") + last.count("“") + last.count("\"") // 2
 
     lo, hi = w["narrator_min"] + w["line_min"], w["narrator_max"] + w["line_max"]
+    # 这里定的是上限，不是目标值：能力强的模型一看到区间就往高处写，
+    # 写成一场完整的戏，用户还没接话故事就翻篇了
     if n < 15 and acts == 0:
-        return "thin", (int(hi * 0.9), int(hi * 1.6))
+        return "thin", (int(hi * 0.7), int(hi * 1.15))
     if n > 120 or acts >= 4:
-        return "thick", (int(lo * 1.1), int(lo * 2.2))
-    return "normal", (int(lo * 1.2), int(hi * 1.1))
+        return "thick", (int(lo * 0.9), int(lo * 1.6))
+    return "normal", (int(lo * 1.0), int(hi * 1.0))
 
+
+# 强模型会把一轮写成一场完整的戏：铺景、对话、转折、收束一气写完。
+# 用户还没接话，故事就翻篇了——这条把它按住
+STEP_HINT = ("（这一轮只往前挪一小步：一个动作、一段对话或一个反应就收住。"
+             "别跨场景、别跳时间，也别把几件事一次办完。）")
 
 DENSITY_HINT = {
     "thin": "（我这一句很短。别跟着变短：用环境、对手的反应和细节把这个场景撑起来。）",
@@ -402,9 +409,9 @@ def build_messages(sess, speaker=None):
             else:
                 messages.append({"role": "assistant", "content": head + content})
     level, (tlo, thi) = input_density(sess)
-    pace = "（这一轮写 %d~%d 字。）" % (tlo, thi) if level != "normal" else ""
+    pace = "（这一轮最多 %d 字，写到 %d 字也够；宁短勿凑。）" % (thi, tlo)
     tail = (TAIL_HINT.get(tier(), "") + CREATIVE_HINT.get(creativity(), "")
-            + pace + DENSITY_HINT[level] + timeline_hint(sess))
+            + pace + DENSITY_HINT[level] + STEP_HINT + timeline_hint(sess))
     if tail:
         # 格式要求写在 system 里离生成点太远，小模型容易忘；补在最后一条 user 尾巴上
         for item in reversed(messages):

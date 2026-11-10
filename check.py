@@ -977,8 +977,10 @@ def main():
     _thin = rp_prompts.input_density(_sess("我点头。"))[1]
     _thick = rp_prompts.input_density(_sess("我推开门，抬手挡了一下灯，转身把包扔在椅子上，走过去拉开窗帘。"))[1]
     check("极短时目标字数抬高", _thin[1] > _thick[1], "%s vs %s" % (_thin, _thick))
-    check("长段时目标字数收紧", _thick[0] >= rp_config.writing()["narrator_min"] + rp_config.writing()["line_min"],
-          str(_thick))
+    check("长段时目标字数收紧", _thick[1] < _thin[1] and _thick[1] <= 400, str(_thick))
+    check("上限不再随极短输入暴涨",
+          rp_prompts.input_density(_sess("我点头。"))[1][1] <= 460,
+          str(rp_prompts.input_density(_sess("我点头。"))[1]))
 
     def _tail_of(sess):
         return rp_prompts.build_messages(sess, "沈砚")[-1]["content"]
