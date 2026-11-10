@@ -426,17 +426,6 @@ def load_settings():
     if not isinstance(data, dict):
         return
 
-    saved = data.get("model")
-    if isinstance(saved, str) and saved.strip():   # 旧格式
-        _model_state["provider"] = DEFAULT_PROVIDER
-        _model_state["model"] = saved.strip()
-    elif isinstance(saved, dict):
-        pid = (saved.get("provider") or DEFAULT_PROVIDER).strip()
-        name = (saved.get("model") or "").strip()
-        if pid in PROVIDERS and name:
-            _model_state["provider"] = pid
-            _model_state["model"] = name
-
     global _reasoning
     level = data.get("reasoning")
     if level in REASONING_LEVELS:
@@ -450,6 +439,23 @@ def load_settings():
                     k: v for k, v in conf.items()
                     if k in ("base_url", "api_key", "models", "label") and isinstance(v, (str, list))
                 }
+
+    # 模型选择必须在读完提供方之后才校验：自定义提供方只存在于 providers 里。
+    # 旧版本把 model 存成嵌套的 {provider, model}，现在是 provider 和 model 平级两个字段，两种都得认。
+    # 之前只认嵌套形式，于是平级写法落进“字符串=旧格式”分支，provider 被强制改回 ollama，
+    # 重启一次就把用户选的云端丢了。
+    saved_model = data.get("model")
+    saved_pid = data.get("provider")
+    pid = name = ""
+    if isinstance(saved_model, dict):
+        pid = str(saved_model.get("provider") or "").strip()
+        name = str(saved_model.get("model") or "").strip()
+    elif isinstance(saved_model, str) and saved_model.strip():
+        pid = str(saved_pid or "").strip() or DEFAULT_PROVIDER
+        name = saved_model.strip()
+    if name and pid and (pid in PROVIDERS or pid in _provider_overrides):
+        _model_state["provider"] = pid
+        _model_state["model"] = name
 
     # 旧版本的 writing 没有版本号：默认值在那一版是 6 个角色，按新版重置一次
     write_conf = data.get("writing")
