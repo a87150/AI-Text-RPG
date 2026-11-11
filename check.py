@@ -1784,9 +1784,10 @@ def main():
         check(_rf2 + " 要求先过五条判定", "能力与资源" in _t2 and "铺垫" in _t2)
         check(_rf2 + " 不准替用户抄答案", "抄答案" in _t2)
     # 旁白只写背景和局面，角色细节归各自气泡
-    for _rf3 in ("rules.md", "rules_standard.md", "rules_advanced.md"):
+    for _rf3 in ("rules.md", "rules_standard.md", "rules_advanced.md", "rules_basic.md"):
         _t3 = (pathlib.Path("rp/prompts") / _rf3).read_text(encoding="utf-8")
         check(_rf3 + " 旁白不写角色细节", "不写任何具体角色的台词" in _t3)
+        check(_rf3 + " 每人一轮只一段", "一轮只起一段" in _t3)
         check(_rf3 + " 旁白不是画外音", "画外音" in _t3)
     _nm2 = (pathlib.Path("rp/prompts") / "normal.md").read_text(encoding="utf-8")
     check("normal.md 也要先判定再写", "不是「已经成了」" in _nm2)
