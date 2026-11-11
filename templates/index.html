@@ -43,20 +43,13 @@
           <select id="model-select" title="切换模型"></select>
           <button class="icon-btn" id="btn-refresh-models" type="button" title="刷新模型列表">⟳</button>
         </div>
-        <button id="btn-search" type="button" title="全文搜索：找某句话、某个名字出现在哪一轮">🔍</button>
-        <button id="btn-context" type="button" disabled title="上下文用量、压缩情况与在场角色">📊</button>
-        <button id="btn-settings" type="button" disabled>⚙ 设定</button>
-        <button id="btn-compress" type="button" disabled>🗜 压缩</button>
-        <button id="btn-clear" type="button" disabled>🧹 清空</button>
-        <div class="io-wrap">
-          <button id="btn-io" type="button" title="导入或导出这份对话">📂</button>
-          <div class="io-menu hidden" id="io-menu">
-            <button type="button" id="btn-import-session" title="把导出的会话 JSON 装回来">📥 导入对话</button>
-            <button type="button" id="btn-export" disabled title="导出成 Markdown，可以直接存档或分享">📤 导出 Markdown</button>
-          </div>
-          <input type="file" id="import-file" accept=".json,application/json" hidden>
-        </div>
-        <button id="btn-theme" type="button" title="切换亮色 / 暗色模式">🌙</button>
+        <button id="btn-search" type="button" title="全文搜索：找某句话、某个名字出现在哪一轮"><i>🔍</i>搜索</button>
+        <button id="btn-context" type="button" disabled title="上下文用量、压缩情况与在场角色"><i>📊</i>上下文</button>
+        <button id="btn-settings" type="button" disabled><i>⚙</i>设定</button>
+        <button id="btn-compress" type="button" disabled><i>🗜</i>压缩</button>
+        <button id="btn-clear" type="button" disabled><i>🧹</i>清空</button>
+        <button id="btn-io" type="button" title="导入或导出这份对话"><i>📂</i>导入导出</button>
+        <button id="btn-theme" type="button" title="切换亮色 / 暗色模式"><i>🌙</i>主题</button>
       </div>
     </header>
 
@@ -214,7 +207,35 @@
   </div>
 </div>
 
-<div class="modal hidden" id="pick-story-modal">
+<div class="modal hidden" id="io-modal">
+    <div class="modal-box narrow io-modal-box">
+      <h2>导入 / 导出</h2>
+      <div class="hint">导出的是这份对话的全部正文；导入不会动现有对话，它会开一份新的。</div>
+      <div class="io-list">
+        <button class="io-item" id="btn-export" type="button" disabled>
+          <span class="io-ico">📤</span>
+          <span class="io-txt">
+            <b>导出 Markdown</b>
+            <em>存成 .md 文件，直接归档或分享</em>
+          </span>
+        </button>
+        <button class="io-item" id="btn-import-session" type="button">
+          <span class="io-ico">📥</span>
+          <span class="io-txt">
+            <b>导入对话</b>
+            <em>把之前导出的会话 JSON 装回来</em>
+          </span>
+        </button>
+      </div>
+      <div class="modal-actions">
+        <div class="spacer"></div>
+        <button type="button" id="io-close">关闭</button>
+      </div>
+    </div>
+    <input type="file" id="import-file" accept=".json,application/json" hidden>
+  </div>
+
+  <div class="modal hidden" id="pick-story-modal">
     <div class="modal-box narrow pick-modal">
       <h2>从哪份设定开始</h2>
       <div class="hint">对话继承故事的设定；之后在「设定」里改的只影响这一局，故事本身不变。</div>

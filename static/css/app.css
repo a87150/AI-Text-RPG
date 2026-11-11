@@ -1019,27 +1019,8 @@ body.story-view #btn-search { display: none; }
 .conflict-tip button:hover { border-color: var(--accent); }
 
 /* 导入 / 导出：顶栏按钮多，合成一个入口 */
-.io-wrap { position: relative; display: inline-flex; }
-.io-menu {
-  position: absolute; top: calc(100% + 6px); right: 0; z-index: 40;
-  display: flex; flex-direction: column; gap: 2px; min-width: 148px;
-  padding: 6px; border-radius: 10px;
-  background: var(--bg-elev); border: 1px solid var(--border-strong);
-  box-shadow: var(--shadow);
-}
-.io-menu.hidden { display: none; }
-/* 补全弹窗里的角色数：跟勾选区分开，别挤在一起 */
-.idea-pop .idea-roles { margin-top: 10px; }
-.idea-pop .idea-roles input { width: 96px; }
-.io-menu button {
-  text-align: left; padding: 7px 10px; border-radius: 7px; width: 100%;
-  border: none; background: transparent; color: var(--text);
-  font-family: inherit; font-size: .7813rem; cursor: pointer;
-}
-.io-menu button:hover:not(:disabled) { background: var(--bg-hover); }
-.io-menu button:disabled { opacity: .45; cursor: default; }
-/* 故事视图里没有可导入导出的对话 */
-body.story-view .io-wrap { display: none; }
+/* 故事视图里没有会话，导入导出无意义 */
+body.story-view #btn-io { display: none; }
 
 /* 全文搜索 */
 #search-modal .modal-box.search-box { width: min(820px, 94vw); max-width: none; }
@@ -1103,3 +1084,39 @@ body.story-view .io-wrap { display: none; }
 
 /* 思考档位被服务端拒绝时的提示 */
 .hint#reasoning-hint { color: var(--warn, #b8860b); }
+
+/* 顶栏按钮：图标 + 文字，图标单独一格好对齐 */
+.topbar .actions button i {
+  font-style: normal;
+  font-size: .875rem;
+  line-height: 1;
+  opacity: .9;
+}
+.topbar .actions > button {
+  display: inline-flex; align-items: center; gap: 5px;
+  white-space: nowrap;
+}
+.topbar .actions .model-row.top button { gap: 0; }
+
+/* 导入导出弹窗 */
+.io-modal-box { width: min(480px, 100%); }
+.io-list { display: flex; flex-direction: column; gap: 10px; margin: 4px 0 6px; }
+.io-item {
+  display: flex; align-items: center; gap: 12px; text-align: left;
+  padding: 14px 16px; border-radius: 12px; cursor: pointer;
+  border: 1px solid var(--border-strong); background: var(--bg-elev); color: var(--text);
+  transition: background .15s, border-color .15s, transform .15s;
+}
+.io-item:hover:not(:disabled) {
+  background: var(--bg-hover); border-color: var(--accent);
+  transform: translateY(-1px);
+}
+.io-item:disabled { opacity: .5; cursor: default; }
+.io-ico { font-size: 1.25rem; line-height: 1; flex: none; width: 26px; text-align: center; }
+.io-txt { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.io-txt b { font-size: .875rem; font-weight: 600; }
+.io-txt em { font-style: normal; font-size: .75rem; color: var(--text-mute); line-height: 1.5; }
+
+@media (max-width: 720px) {
+  .topbar .actions > button { gap: 4px; font-size: .75rem; padding: 6px 8px; }
+}

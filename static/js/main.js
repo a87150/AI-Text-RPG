@@ -452,12 +452,24 @@ function bindBackdropClose(modalId, close) {
   });
 }
 
+function openIo() {
+  const el = $('#io-modal');
+  if (!el) return;
+  el.classList.remove('hidden');
+}
+
+function closeIo() {
+  const el = $('#io-modal');
+  if (el) el.classList.add('hidden');
+}
+
 function openPrefs() {
   fillProviderSelect();
   fillProviderForm();
   fillModelSelect();
   fillWritingForm();
   syncThemeSeg();
+  syncLanguageSeg();
   $('#prefs-modal').classList.remove('hidden');
 }
 
@@ -621,28 +633,19 @@ function bindUI() {
   });
   $('#btn-new-story').onclick = newStory;
   $('#btn-new-session').onclick = () => openPickStory();
-  const ioBtn = $('#btn-io');
-  const ioMenu = $('#io-menu');
-  if (ioBtn && ioMenu) {
-    ioBtn.onclick = (e) => {
-      e.stopPropagation();
-      ioMenu.classList.toggle('hidden');
-    };
-    // 点别处或按 Esc 就收起，别留个浮层挂在顶栏下面
-    document.addEventListener('click', (e) => {
-      if (!ioMenu.contains(e.target) && e.target !== ioBtn) ioMenu.classList.add('hidden');
-    });
-  }
-  $('#btn-import-session').onclick = () => {
-    ioMenu.classList.add('hidden');
-    $('#import-file').click();
-  };
-  $('#import-file').onchange = importSessionFile;
+  // 导入导出改成居中弹窗：下拉菜单挡不住误点，也放不下说明
+  $('#btn-io').onclick = openIo;
+  $('#io-close').onclick = closeIo;
+  $('#io-modal').addEventListener('click', (e) => {
+    if (e.target.id === 'io-modal') closeIo();
+  });
+  $('#btn-import-session').onclick = () => $('#import-file').click();
+  $('#import-file').onchange = (e) => { closeIo(); importSessionFile(e); };
   $('#btn-send').onclick = sendFromInput;
   $('#btn-settings').onclick = () => openSettings();
   $('#btn-clear').onclick = clearSession;
   $('#btn-export').onclick = () => {
-    ioMenu.classList.add('hidden');
+    closeIo();
     if (!state.session) return;
     const name = (state.session.title || 'story').replace(/[\\/:*?"<>|]/g, '');
     const a = document.createElement('a');

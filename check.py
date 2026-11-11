@@ -2088,6 +2088,19 @@ def main():
     check("列表不再分模式显示不同字段",
           "s.ai_name" not in _sl.split("meta.textContent")[1].split(";")[0])
 
+    # 顶栏按钮图标 + 文字；导入导出走中间弹窗
+    _tb = _html[_html.index('class="actions"'):_html.index('</header>')]
+    for _bid in ("btn-search", "btn-context", "btn-settings", "btn-compress",
+                 "btn-clear", "btn-io", "btn-theme"):
+        _seg = _tb[_tb.index('id="%s"' % _bid):]
+        _seg = _seg[:_seg.index("</button>")]
+        check(_bid + " 带文字", "<i>" in _seg and len(_seg.split("</i>")[-1].strip()) > 0,
+              _seg)
+    check("导入导出是弹窗", 'id="io-modal"' in _html and 'id="io-menu"' not in _html)
+    check("弹窗里两个操作都在",
+          'id="btn-export"' in _html and 'id="btn-import-session"' in _html)
+    check("弹窗有关闭按钮", 'id="io-close"' in _html)
+
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")
