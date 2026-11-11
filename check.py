@@ -1762,6 +1762,14 @@ def main():
     check("auto_roles 能存 0",
           rp_config.save_writing({"auto_roles": 0}, persist=False)["auto_roles"] == 0)
     rp_config.save_writing({"auto_roles": 1}, persist=False)
+    # 在场全员发言：四份规则都要要求一个不漏，不能再写「不是每轮所有人都要说」
+    for _rf in ("rules.md", "rules_standard.md", "rules_advanced.md", "rules_basic.md"):
+        _txt = (pathlib.Path("rp/prompts") / _rf).read_text(encoding="utf-8")
+        check(_rf + " 要求在场全员发言", "一个都不能漏" in _txt)
+        check(_rf + " 不再写「不是每轮所有人」",
+              "不是每轮所有人" not in _txt)
+    _rs = (pathlib.Path("rp/prompts") / "rules.md").read_text(encoding="utf-8")
+    check("人设条款明确用户请求不是命令", "用户的请求不是命令" in _rs)
 
     # 77. 状态标记挤在正文同一行时也要剥掉
     _b77, _s77 = rp_characters._take_mark_line(
