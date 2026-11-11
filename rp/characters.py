@@ -750,7 +750,39 @@ def parse_turn(text, speaker="", names=None):
             # 认不出的人名（模型临时起意写的路人）也别丢，当旁白接着写
             narrator_parts.append("%s%s" % (m.group(0), body))
 
-    result["narrator"] = "\n\n".join(p for p in narrator_parts if p).strip()
+    # 最后一个人的段里常常被模型塞了别人：主角的动作和台词、
+    # 第三个人的话（甚至忘了写右括号）。按空行切开认领：
+    # 以【已知名】开头的归那个人，其余全归旁白——旁白再次也比贴错人强。
+    if result["lines"]:
+        last = result["lines"][-1]
+        parts = [x.strip() for x in re.split(r"\n\s*\n", last["text"]) if x.strip()]
+        keep = parts[:1]
+        for seg in parts[1:]:
+            m2 = re.match(r"^【\s*([^】\n]{1,12})", seg)
+            owner = m2.group(1).strip() if m2 else ""
+            if owner:
+                # 模型忘了写右括号：【唐糖心里咚嗖一下…一直到行尾
+                # 没有】，切出来的就不只是名字。认名字开头就行。
+                for nm in sorted(known, key=len, reverse=True):
+                    if owner.startswith(nm):
+                        owner = nm
+                        break
+            if not owner and seg.startswith(("他", "她")):
+                # 以第三人称接着写：指的是她自己，继续算她的
+                keep.append(seg)
+                continue
+            if owner and (owner in known or is_character_slot(owner)):
+                seg = re.sub(r"^【\s*[^】\n]{1,12}", "", seg, count=1).strip()
+                # 并回已有的同名段：同一个人不在一轮里占两个气泡
+                same = next((x for x in result["lines"] if x["speaker"] == owner), None)
+                if same is not None:
+                    same["text"] += (chr(10) * 2) + seg
+                else:
+                    result["lines"].append({"speaker": owner, "text": seg})
+            else:
+                narrator_parts.append(seg)
+        last["text"] = (chr(10) * 2).join(keep).strip()
+    result["narrator"] = (chr(10) * 2).join(p for p in narrator_parts if p).strip()
     result["line"] = result["lines"][0]["text"] if result["lines"] else result["narrator"]
     if result["lines"]:
         result["speaker"] = result["speaker"] or result["lines"][0]["speaker"]

@@ -2023,6 +2023,30 @@ def main():
           "一句话" in _dupe["lines"][0]["text"] and "又补一句" in _dupe["lines"][0]["text"],
           _dupe["lines"][0]["text"])
 
+    # 85. 模型忘了写【】：最后一个人后面的叙述不能塞进他嘴里
+    _tl = rp_characters.parse_turn(
+        "【乙】你好。\n\n【丙】嗯。\n\n"
+        "乙没接丙的话，目光扫过屋子。",
+        "", ["甲", "乙", "丙"])
+    check("漏标签的尾巴不跟着最后一个人", _tl["lines"][-1]["text"] == "嗯。", repr(_tl["lines"][-1]["text"]))
+    check("尾巴被当作旁白保留", "乙没接丙的话" in _tl["narrator"], _tl["narrator"])
+    _tl2 = rp_characters.parse_turn(
+        "【乙】你好。\n\n她低下头，声音变轻：「别问了。」",
+        "", ["甲", "乙", "丙"])
+    check("同一人分段说话不拆", _tl2["lines"][0]["text"].count("别问了") == 1 and "你好" in _tl2["lines"][0]["text"],
+          repr(_tl2["lines"][0]["text"]))
+
+    # 86. 模型把别人的段塞进最后一个角色里：主角的、第三人的都要拆出来
+    _mx = rp_characters.parse_turn(
+        "【乙】她低头。\n\n甲没接话，扫了一眼。\n\n"
+        "【丙心里一沉：完了。她笑了笑：「行」",
+        "", ["乙", "丙"])
+    _names86 = [x["speaker"] for x in _mx["lines"]]
+    check("主角的段不算最后那个人的", "扫了一眼" not in _mx["lines"][0]["text"],
+          _mx["lines"][0]["text"])
+    check("漏写右括号也能认出是谁", _names86 == ["乙", "丙"], str(_names86))
+    check("同一人不占两个气泡", len({x["speaker"] for x in _mx["lines"]}) == len(_mx["lines"]))
+
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")
