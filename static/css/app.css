@@ -257,11 +257,16 @@ body.story-view #btn-search { display: none; }
 .story-item .si-del { align-self: center; }
 
 /* 点「AI 帮我完善设定」时浮出来，写完再开始 */
+/* 收到屏幕中间偏下、固定宽度：铺满整行时文字行长太宽，读起来累；
+   高度按内容撑，但留够写字的空地 */
 .idea-pop {
-  position: absolute; left: 26px; right: 26px; bottom: 76px; z-index: 6;
+  position: absolute; left: 50%; bottom: 76px; transform: translateX(-50%);
+  width: min(520px, calc(100% - 48px));
+  max-height: calc(100% - 130px); overflow-y: auto;
+  z-index: 6;
   display: flex; flex-direction: column; gap: 10px;
   background: var(--bg-panel); border: 1px solid var(--border-strong);
-  border-radius: 16px; padding: 18px 20px 16px; box-shadow: var(--shadow);
+  border-radius: 16px; padding: 20px 22px 16px; box-shadow: var(--shadow);
 }
 .idea-pop.hidden { display: none; }
 .idea-pop label {
@@ -271,8 +276,8 @@ body.story-view #btn-search { display: none; }
 .idea-pop .hint { font-size: .7813rem; color: var(--text-mute); line-height: 1.7; margin: -4px 0 0; }
 .idea-pop textarea {
   background: var(--bg-input); border: 1px solid var(--border-strong); color: var(--text);
-  border-radius: 10px; padding: 10px 12px; font-size: .8438rem; font-family: inherit;
-  line-height: 1.7; outline: none; resize: vertical; min-height: 96px;
+  border-radius: 10px; padding: 12px 14px; font-size: .875rem; font-family: inherit;
+  line-height: 1.75; outline: none; resize: vertical; min-height: 150px;
 }
 .idea-pop textarea:focus { border-color: var(--accent); }
 .brand .ver {
@@ -290,7 +295,7 @@ body.story-view #btn-search { display: none; }
 .idea-pop .idea-pick-bar button:hover { background: var(--bg-hover); color: var(--text); }
 .idea-pop .idea-pick {
   display: flex; flex-direction: column; gap: 7px;
-  max-height: 190px; overflow-y: auto;
+  max-height: 240px; overflow-y: auto;
   padding: 10px 12px; border-radius: 10px;
   background: var(--bg-input); border: 1px solid var(--border-strong);
 }
@@ -978,7 +983,7 @@ body.story-view #btn-search { display: none; }
   #story-pane #settings-form { max-width: none; }
   .field-head { flex-wrap: wrap; }
   .pick-list { grid-template-columns: 1fr; max-height: 40vh; }
-  .idea-pop { left: 12px; right: 12px; bottom: 12px; padding: 14px; }
+  .idea-pop { width: calc(100% - 24px); bottom: 12px; max-height: calc(100% - 90px); padding: 16px 16px 12px; }
   .composer { padding: 8px 12px; }
 
   .messages { padding: 12px; }
