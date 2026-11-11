@@ -2082,6 +2082,12 @@ def main():
           str([c["name"] for c in _z4.get("characters") or []]))
     client.delete("/api/sessions/" + _z["id"])
 
+    # 对话列表：两种模式都显示角色数与条数
+    _sl = (pathlib.Path(__file__).parent / "static" / "js" / "sessions.js").read_text(encoding="utf-8")
+    check("列表显示角色数", "char_count || 0) + ' 个角色'" in _sl)
+    check("列表不再分模式显示不同字段",
+          "s.ai_name" not in _sl.split("meta.textContent")[1].split(";")[0])
+
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")

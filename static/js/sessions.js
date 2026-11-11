@@ -86,8 +86,9 @@ export function renderSessionList() {
     title.textContent = s.title || '未命名故事';
     const meta = document.createElement('div');
     meta.className = 'si-meta';
+    // 两种模式都显示角色数：一般模式也有配角，只是不用角色扮演的说话格式
     meta.textContent = (s.mode === 'rp' ? '扮演' : '一般')
-      + (s.mode === 'rp' ? ' · ' + ((s.char_count || 0) || '无') + ' 个角色' : (s.ai_name ? ' · ' + s.ai_name : ''))
+      + ' · ' + ((s.char_count || 0) + ' 个角色')
       + ' · ' + ((s.message_count || 0) + ' 条')
       + (s.has_summary ? ' · 已压缩' : '');
     body.append(title, meta);
