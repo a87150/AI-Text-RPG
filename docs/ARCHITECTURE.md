@@ -16,7 +16,7 @@ Flask 提供 JSON/SSE 接口，前端是零构建的原生 ES modules，所有�
     rp/characters.py            回合解析：把模型输出拆成旁白/台词/状态/新角色
     rp/context.py               上下文长度计算与压缩
     rp/storage.py               会话 JSON 读写 + 每会话一把锁
-    rp/stories.py               故事 JSON 读写、设定回流
+    rp/stories.py               故事 JSON 读写、建局时快照给会话
     rp/snapshots.py             存档点
     rp/backup.py                data/ 打包成 zip
     rp/config.py                常量、模型配置、写作参数、档位、持久化

@@ -39,7 +39,7 @@ from .prompts import (
 )
 from .stories import (
     apply_to, delete_story, list_stories, load_story, new_story, save_story,
-    update_from, promote_characters, fill_names,
+    update_from, fill_names,
 )
 from .snapshots import list_snapshots, load_snapshot, snapshot
 from .storage import (
@@ -713,6 +713,12 @@ def _rewind_to(sess, index):
     _buff = writing()["keep_recent"]
     if _cur > index - _buff:
         sess["compressed_upto"] = max(0, index - _buff)
+    # 摘要是被删那批消息压出来的：游标退回去之后，它们会重新进上下文，
+    # 而旧摘要里还记着已经撤销的情节。原文都在 messages 里，
+    # 直接清掉让后台按剩下的内容重算——不清的话模型会接着一段作废剧情往下写。
+    if sess.get("summary"):
+        sess["summary"] = ""
+        sess["compressed_upto"] = 0
     facts = sess.get("facts")
     if isinstance(facts, list):
         # 账本的 turn 记在 advance_turn 之前，比消息的 turn 小 1，所以用严格小于
@@ -1209,8 +1215,6 @@ def _commit_turn(s2, turn, use_rp, resume=False):
         known.add(nm)
         fresh.append({"name": nm})
         upsert_character(s2, {"name": nm})
-    if fresh:
-        promote_characters(s2, writing()["max_characters"])
     for upd in turn["updates"]:
         apply_change(s2, upd)
     advance_turn(s2)                  # 一般模式也要数轮次，锚定和存档都靠它

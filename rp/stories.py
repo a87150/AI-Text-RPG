@@ -123,47 +123,6 @@ def update_from(story, sess):
     return story
 
 
-def promote_characters(sess, limit):
-    """对话里新出现的人回流成故事的长期角色。
-
-    只带名字和身份：state / history 是这一局自己的进展，不能带进下一局。
-    模板满员也不静默丢，照局内那套做法：记下来交给玩家选，
-    别替他决定谁该被换掉。
-    """
-    story = load_story(sess.get("story_id") or "")
-    if not story:
-        return []
-    cards = story.setdefault("characters", [])
-    known = {(c.get("name") or "").strip() for c in cards}
-    added = []
-    blocked = []
-    for c in sess.get("characters") or []:
-        name = (c.get("name") or "").strip()
-        if not name or name in known:
-            continue
-        if len(cards) >= limit:
-            blocked.append(c)      # 不 break：后面可能还有已在册的，不能一刀切
-            continue
-        cards.append({"name": name, "role": (c.get("role") or "").strip(),
-                      "state": "", "history": []})
-        known.add(name)
-        added.append(name)
-    if added:
-        first = cards[0] if cards else {}
-        story["ai_name"] = first.get("name") or ""
-        story["ai_role"] = first.get("role") or ""
-        save_story(story)
-    if blocked and not sess.get("pending_character"):
-        # 复用局内那个待定角色的位置，前端会弹选择框
-        c0 = blocked[0]
-        sess["pending_character"] = {
-            "name": (c0.get("name") or "").strip(),
-            "role": (c0.get("role") or "").strip()[:400],
-            "state": "",
-        }
-    return added
-
-
 def apply_to(sess, story):
     """用故事模板填一个空会话；对话内容（消息/前情/回合）保持干净。"""
     for key in STORY_FIELDS:

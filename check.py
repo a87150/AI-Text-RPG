@@ -484,21 +484,21 @@ def main():
     check("删除故事返回成功",
           client.delete("/api/stories/" + story["id"]).get_json().get("ok") is True)
 
-    # 18. 对话里新出现的角色回流成故事的长期角色
+    # 18. 对话和故事的设定互相独立：建局时快照一份，之后各走各的
     story2 = client.post("/api/stories", json={}).get_json()
     sess2 = client.post("/api/sessions", json={"story_id": story2["id"]}).get_json()
-    live = rp_storage.load_session(sess2["id"])
-    live["characters"] = [{"name": "甲", "role": "守灯人", "state": "受伤", "history": ["第 3 幕"]}]
-    added = rp_stories.promote_characters(live, 4)
-    check("新角色会回流进故事", added == ["甲"], str(added))
-    saved_story = client.get("/api/stories/" + story2["id"]).get_json()
-    cards = saved_story.get("characters") or []
-    shen = next((c for c in cards if c.get("name") == "甲"), None)
-    check("故事里能查到长期角色", shen is not None, str(cards)[:80])
-    check("回流不带这一局的状态",
-          shen is not None and shen["state"] == "" and shen["history"] == [])
-    check("再回流一次不会重复",
-          rp_stories.promote_characters(live, 4) == [])
+    client.put("/api/sessions/" + sess2["id"], json={
+        "characters": [{"name": "甲", "role": "守灯人", "state": "受伤"}],
+    })
+    cards_after = client.get("/api/stories/" + story2["id"]).get_json().get("characters") or []
+    check("对话里加角色不动故事模板",
+          not any((x.get("name") or "") == "甲" for x in cards_after), str(cards_after)[:80])
+    check("对话里改设定不动故事世界观",
+          (client.get("/api/stories/" + story2["id"]).get_json().get("world") or "") != "对话里的世界")
+    client.put("/api/stories/" + story2["id"], json={"world": "故事里的世界"})
+    check("改故事不影响已建的对话",
+          (rp_storage.load_session(sess2["id"]).get("world") or "") != "故事里的世界")
+    check("promote_characters 已移除", not hasattr(rp_stories, "promote_characters"))
 
     # 19. 人设锚定：聊久了把角色核心重插到近处
     anchor_sess = rp_storage.new_session("锚定测试")
@@ -1770,6 +1770,24 @@ def main():
     check("兜底清理行内残渣",
           rp_characters.strip_status_leaks("甲笑了。[[地点：某酒馆]]说完就走")
           == "甲笑了。说完就走")
+
+    # 78. 重新生成要连摘要一起退，否则旧剧情还在上下文里
+    _rw = rp_storage.new_session("重写测试")
+    _rw["messages"] = [
+        {"role": "user", "content": "甲推门。", "turn": 1},
+        {"role": "assistant", "content": "乙抬头。", "turn": 1},
+        {"role": "user", "content": "甲坐下。", "turn": 2},
+        {"role": "assistant", "content": "乙递茶。", "turn": 2},
+    ]
+    _rw["summary"] = "旧摘要：甲打赢了乙。"
+    _rw["compressed_upto"] = 2
+    rp_api._rewind_to(_rw, 3)
+    check("重写后摘要清空", _rw["summary"] == "", repr(_rw.get("summary")))
+    check("重写后压缩游标归零",
+          _rw["compressed_upto"] == 0, str(_rw.get("compressed_upto")))
+    check("重写后消息截到重写点",
+          len(_rw["messages"]) == 3, str(len(_rw["messages"])))
+    check("重写后轮次跟着退", _rw["turn"] == 2, str(_rw.get("turn")))
 
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
