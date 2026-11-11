@@ -682,34 +682,34 @@ def main():
     check("配置接口带出档位", client.get("/api/config").get_json()["tier"] == "basic")
 
     # 30. 在场 / 离场：解析、分组、发言权、状态累积
-    scene_status = {"present": ["甲"], "away": ["周掌柜"]}
+    scene_status = {"present": ["甲"], "away": ["丙"]}
     scene_chars = [{"name": "甲", "role": "守灯人"},
-                   {"name": "阿鸾", "role": "跑堂"},
-                   {"name": "周掌柜", "role": "账房"}]
+                   {"name": "乙", "role": "跑堂"},
+                   {"name": "丙", "role": "账房"}]
     on, off = rp_characters.scene_split(scene_chars, scene_status)
     check("按在场名单分组", [c["name"] for c in on] == ["甲"]
-          and "周掌柜" in [c["name"] for c in off], str((on, off)))
+          and "丙" in [c["name"] for c in off], str((on, off)))
     check("没标过就全员在场",
           len(rp_characters.scene_split(scene_chars, {})[0]) == 3)
     scene_sess = {"turn": 3, "mode": "rp", "characters": scene_chars, "status": scene_status}
     check("圆桌式不再指定单一发言人", rp_characters.next_speaker(scene_sess) == "")   # 在场分组见下面两条
     block = rp_prompts.build_character_block(scene_chars, "甲", scene_status)
     check("离场角色写进提示但标注不要出现",
-          "周掌柜" in block and "不在这一场" in block, block[-80:])
+          "丙" in block and "不在这一场" in block, block[-80:])
     merged = rp_characters.merge_status(
-        {"location": "酒馆", "present": ["甲"], "away": ["周掌柜"]}, {"goal": "试探"})
+        {"location": "酒馆", "present": ["甲"], "away": ["丙"]}, {"goal": "试探"})
     check("状态是累积的，没写到的字段不丢",
           merged.get("location") == "酒馆" and merged.get("goal") == "试探"
-          and merged.get("away") == ["周掌柜"], str(merged))
+          and merged.get("away") == ["丙"], str(merged))
     check("状态行里写在场也能解析",
-          (rp_characters.extract_status("正文。\n[[在场：甲,阿鸾|离场：周掌柜|地点：酒馆]]")[1] or {})
-          .get("present") == ["甲", "阿鸾"])
+          (rp_characters.extract_status("正文。\n[[在场：甲,乙|离场：丙|地点：酒馆]]")[1] or {})
+          .get("present") == ["甲", "乙"])
     check("JSON 里写在场也能解析",
           (rp_characters.extract_status(
               "正文。<StatusBlock>" + chr(123) + chr(34) + "present" + chr(34) + ":[" + chr(34)
               + "甲" + chr(34) + "]," + chr(34) + "away" + chr(34) + ":[" + chr(34)
-              + "周掌柜" + chr(34) + "]" + chr(125) + "</StatusBlock>")[1] or {})
-          .get("away") == ["周掌柜"])
+              + "丙" + chr(34) + "]" + chr(125) + "</StatusBlock>")[1] or {})
+          .get("away") == ["丙"])
 
     # 31. 只允许改自己的话，改 AI 的台词会被拒
     edit_sess2 = client.post("/api/sessions", json={}).get_json()
@@ -1676,7 +1676,7 @@ def main():
         "title": "这局自己的名字",
         "world": "这局自己的世界。",
         "characters": [{"name": "甲", "role": "守灯人。"},
-                        {"name": "阿鸾", "role": "新来的。"}],
+                        {"name": "乙", "role": "新来的。"}],
     })
     check("在对话里改设定，故事字节不变",
           _sp72.read_bytes() == _before72)
@@ -2128,6 +2128,57 @@ def main():
     _snap = rp_metrics.snapshot()
     check("面板能读到本轮用量", _snap["usage"]["prompt_tokens"] == 100, str(_snap["usage"]))
     check("面板能读到累计", _snap["total"]["calls"] >= 1, str(_snap["total"]))
+
+    # 90. 重发回滚：消息之外的符生状态也要一起退
+    _rw = {
+        "turn": 3,
+        "messages": [
+            {"role": "user", "content": "a"},
+            {"role": "assistant", "content": "b", "turn": 1,
+             "snap": {"status": {"present": ["甲"]}, "states": {"甲": "站着"}}},
+            {"role": "user", "content": "c"},
+            {"role": "assistant", "content": "d", "turn": 2,
+             "snap": {"status": {"present": ["甲", "乙"]}, "states": {"甲": "坐下", "乙": "进门"}}},
+            {"role": "user", "content": "e"},
+            {"role": "assistant", "content": "f", "turn": 3,
+             "snap": {"status": {"present": ["乙"]}, "states": {"甲": "离开", "乙": "守着"}}},
+        ],
+        "status": {"present": ["乙"]},
+        "characters": [{"name": "甲", "state": "离开"}, {"name": "乙", "state": "守着"}],
+        "facts": [{"turn": 0, "fact": "旧事"}, {"turn": 1, "fact": "中间事"}, {"turn": 2, "fact": "最后一件"}],
+        "lore": [{"keys": "旧", "content": "x", "turn": 0}, {"keys": "新", "content": "y", "turn": 2}],
+        "summary": "旧摘要",
+        "compressed_upto": 5,
+    }
+    # 退到第二轮回复之前（index=4）
+    rp_api._rewind_to(_rw, 4)
+    check("回滚：消息截到重发点", len(_rw["messages"]) == 4, str(len(_rw["messages"])))
+    check("回滚：轮次跟着退", _rw["turn"] == 2, str(_rw["turn"]))
+    check("回滚：未来的事实清掉",
+          [f["fact"] for f in _rw["facts"]] == ["旧事", "中间事"], str(_rw["facts"]))
+    check("回滚：未来的词条清掉",
+          [e["keys"] for e in _rw["lore"]] == ["旧"], str(_rw["lore"]))
+    check("回滚：场景恢复到那一轮",
+          _rw["status"].get("present") == ["甲", "乙"], str(_rw["status"]))
+    check("回滚：角色状态恢复",
+          [c["state"] for c in _rw["characters"]] == ["坐下", "进门"],
+          str([c["state"] for c in _rw["characters"]]))
+    check("回滚：摘要不留作废剧情", _rw["summary"] == "")
+
+    # 退到开头：第一轮的事实也要没，不能因为 turn=0 就绕过去
+    _rw2 = {
+        "turn": 1,
+        "messages": [{"role": "user", "content": "a"},
+                     {"role": "assistant", "content": "b", "turn": 1}],
+        "facts": [{"turn": 0, "fact": "第一轮的事"}],
+        "characters": [{"name": "甲", "state": "旧状态"}],
+        "status": {"present": ["甲"]},
+    }
+    rp_api._rewind_to(_rw2, 0)
+    check("回滚到开头：事实归零", _rw2["facts"] == [], str(_rw2["facts"]))
+    check("回滚到开头：场景不留残影",
+          _rw2["status"] == {} and _rw2["characters"][0]["state"] == "",
+          str((_rw2["status"], _rw2["characters"])))
 
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:

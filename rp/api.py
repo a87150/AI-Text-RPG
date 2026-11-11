@@ -705,6 +705,31 @@ def api_update_session(sid):
         return jsonify(sess)
 
 
+def _state_snapshot(sess):
+    """当下这一眼看得到的现场：场景格 + 每个人的状态一句。
+
+    存得很小（几百字节），但没它就无法回滚：场景和状态都是在旧值上叠加的，
+    只删消息的话它们会停在被撤销那一轮的样子，模型就以为那件事还发生着。
+    """
+    states = {}
+    for c in sess.get("characters") or []:
+        if isinstance(c, dict) and (c.get("name") or "").strip():
+            states[c["name"]] = c.get("state") or ""
+    st = sess.get("status")
+    return {"status": dict(st) if isinstance(st, dict) else {}, "states": states}
+
+
+def _restore_snapshot(sess, snap):
+    """把现场恢复成快照里的样子；没快照就清空，宁可空着也不能留错的。"""
+    snap = snap if isinstance(snap, dict) else {}
+    st = snap.get("status")
+    sess["status"] = dict(st) if isinstance(st, dict) else {}
+    states = snap.get("states") if isinstance(snap.get("states"), dict) else {}
+    for c in sess.get("characters") or []:
+        if isinstance(c, dict):
+            c["state"] = states.get(c.get("name") or "", "")
+
+
 def _rewind_to(sess, index):
     """把会话退回到 index 之前，轮次和账本一起退。
 
@@ -734,9 +759,25 @@ def _rewind_to(sess, index):
         sess["compressed_upto"] = 0
     facts = sess.get("facts")
     if isinstance(facts, list):
-        # 账本的 turn 记在 advance_turn 之前，比消息的 turn 小 1，所以用严格小于
+        # 账本的 turn 记在 advance_turn 之前，比消息的 turn 小 1，所以用严格小于。
+        # 不能给 mark 保底成 1：退到开头时 mark=0，那保底会把第一轮
+        # （已经被撤销）的事实全留下来，模型就以为那件事还在。
         sess["facts"] = [f for f in facts
-                         if not isinstance(f, dict) or int(f.get("turn") or 0) < max(mark, 1)]
+                         if isinstance(f, dict) and int(f.get("turn") or 0) < mark]
+    lore = sess.get("lore")
+    if isinstance(lore, list):
+        # 老存档里的词条没有 turn，不能当成 0 一起删掉
+        sess["lore"] = [e for e in lore
+                        if not isinstance(e, dict) or "turn" not in e
+                        or int(e.get("turn") or 0) < mark]
+    # 场景和角色状态回到剩下那一轮的现场
+    left = sess.get("messages") or []
+    snap = None
+    for m in reversed(left):
+        if isinstance(m.get("snap"), dict):
+            snap = m["snap"]
+            break
+    _restore_snapshot(sess, snap)
     return sess
 
 
@@ -1247,7 +1288,8 @@ def _commit_turn(s2, turn, use_rp, resume=False):
         merge_facts(s2, turn.get("facts"), s2.get("turn"))
         # 对话里新长出来的词条只进这一局的世界书，不碰故事模板
         for entry in turn.get("lore") or []:
-            add_lore(s2, entry)
+            add_lore(s2, entry, s2.get("turn"))
+        tail["snap"] = _state_snapshot(s2)      # 续写也得把现场刷新
         save_session(s2)
         return tail
     if use_rp:
@@ -1264,7 +1306,10 @@ def _commit_turn(s2, turn, use_rp, resume=False):
         s2["status"] = merge_status(s2.get("status"), turn["status"])
     merge_facts(s2, turn.get("facts"), s2.get("turn"))
     for entry in turn.get("lore") or []:
-        add_lore(s2, entry)
+        add_lore(s2, entry, s2.get("turn"))
+    # 状态和角色当前情形都是增量更新的，光删消息它们还停在被撤销
+    # 那一轮；每条回复存一份现场，重发时退到哪就恢复到哪。
+    msg["snap"] = _state_snapshot(s2)
     # 一轮里模型可能一次加好几个人（【新角色】后面连写几行 JSON）
     fresh = turn.get("new_characters") or ([turn["new_character"]] if turn["new_character"] else [])
     for item in fresh:

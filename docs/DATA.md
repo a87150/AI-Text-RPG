@@ -31,7 +31,7 @@
         {"name": "甲", "role": "守灯人，话少，记仇。", "state": "此刻的状态", "history": ["最近的变化"]}
       ],
       "status": {
-        "present": ["甲"], "away": ["周掌柜"],
+        "present": ["甲"], "away": ["丙"],
         "location": "某酒馆", "time": "深夜",
         "relations": "戒备", "items": {"甲": "湿伞、铜钥匙"}, "goal": "等他先开口"
       },
@@ -41,7 +41,7 @@
       "messages": [
         {"role": "user", "content": "我推门进去。"},
         {"role": "assistant", "narrator": "旁白",
-         "lines": [{"speaker": "甲", "text": "台词"}, {"speaker": "阿鸾", "text": "另一句"}]}
+         "lines": [{"speaker": "甲", "text": "台词"}, {"speaker": "乙", "text": "另一句"}]}
       ],
       "lore": [{"keys": "某酒馆", "content": "城南的酒馆，老板欠甲一条命。"}]
     }

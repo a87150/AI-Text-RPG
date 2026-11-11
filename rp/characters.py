@@ -570,8 +570,11 @@ def merge_facts(sess, new_facts, turn=None):
 LORE_MAX = 40
 
 
-def add_lore(sess, entry):
-    """对话里攒出来的词条：按 keys 去重，满了就不加。只写这一局，不碰故事模板。"""
+def add_lore(sess, entry, turn=None):
+    """对话里攒出来的词条：按 keys 去重，满了就不加。只写这一局，不碰故事模板。
+
+    记上轮次是为了重发：重写到第三轮，第五轮才长出来的词条就该一起撤掉。
+    """
     if not isinstance(entry, dict):
         return False
     raw_keys = str(entry.get("keys") or "").replace("，", ",")
@@ -589,7 +592,8 @@ def add_lore(sess, entry):
             return False
     if len(book) >= LORE_MAX:
         return False
-    book.append({"keys": keys[:120], "content": body})
+    book.append({"keys": keys[:120], "content": body,
+                 "turn": int(turn if turn is not None else sess.get("turn") or 0)})
     return True
 
 
