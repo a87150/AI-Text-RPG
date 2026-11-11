@@ -2063,6 +2063,11 @@ def main():
     rp_config.save_writing({"language": "zh"}, persist=False)
     check("切回中文", rp_config.writing()["language"] == "zh")
 
+    # 故事列表不再显示主角姓名
+    _sj = (pathlib.Path(__file__).parent / "static" / "js" / "sessions.js").read_text(encoding="utf-8")
+    check("故事列表没有主角姓名", "story.user_name" not in _sj)
+    check("故事列表还显示局数和角色数", "' 局 · '" in _sj and "character_count" in _sj)
+
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")

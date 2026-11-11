@@ -269,8 +269,7 @@ export function renderStoryList() {
     title.textContent = story.title || '未命名故事';
     const meta = document.createElement('div');
     meta.className = 'si-meta';
-    meta.textContent = runs.length + ' 局 · ' + story.character_count + ' 个角色'
-      + (story.user_name ? ' · ' + story.user_name : '');
+    meta.textContent = runs.length + ' 局 · ' + story.character_count + ' 个角色';
     head.append(title, meta);
 
     item.onclick = () => selectStory(story.id);
