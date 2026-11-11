@@ -1004,18 +1004,41 @@ body.story-view .composer { display: none !important; }
 .conflict-tip button:hover { border-color: var(--accent); }
 
 /* 全文搜索 */
-.search-hits {
-  max-height: 52vh; overflow-y: auto; margin: 10px 0;
-  display: flex; flex-direction: column; gap: 6px;
+#search-modal .modal-box.search-box { width: min(820px, 94vw); max-width: none; }
+#search-modal .search-bar { display: flex; align-items: center; gap: 12px; }
+#search-modal .search-bar input { flex: 1; min-width: 0; font-size: .9375rem; padding: 11px 15px; }
+#search-modal .search-count {
+  font-size: .75rem; color: var(--text-mute); white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
-.search-hit {
-  text-align: left; padding: 8px 10px; border-radius: 9px; cursor: pointer;
+#search-modal .search-hits {
+  max-height: 58vh; overflow-y: auto; margin: 12px 0 0;
+  display: flex; flex-direction: column; gap: 8px;
+  overscroll-behavior: contain;
+}
+#search-modal .search-hit {
+  text-align: left; padding: 11px 14px; border-radius: 11px; cursor: pointer;
   border: 1px solid var(--border); background: var(--bg-input); color: var(--text);
-  font-family: inherit; font-size: .7813rem;
+  font-family: inherit; font-size: .8125rem; line-height: 1.6;
+  transition: border-color .12s ease, background .12s ease;
 }
-.search-hit:hover { border-color: var(--accent); }
-.search-hit-head { color: var(--text-dim); font-size: .7188rem; margin-bottom: 3px; }
-.search-hit-body { line-height: 1.5; }
+#search-modal .search-hit:hover { border-color: var(--accent); }
+#search-modal .search-hit.active {
+  border-color: var(--accent); background: var(--bg-hover);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+#search-modal .search-hit-head {
+  display: flex; align-items: baseline; gap: 10px;
+  font-size: .7188rem; color: var(--text-mute); margin-bottom: 5px;
+}
+#search-modal .search-hit-title { color: var(--text-dim); font-weight: 600; }
+#search-modal .search-hit-pos { margin-left: auto; white-space: nowrap; opacity: .85; }
+#search-modal .search-hit-body mark {
+  background: rgba(255, 203, 84, .34); color: inherit;
+  border-radius: 3px; padding: 0 2px;
+}
+#search-modal .search-foot { justify-content: space-between; align-items: center; }
+#search-modal .search-foot .hint { font-size: .7188rem; color: var(--text-mute); }
 .search-flash { animation: searchFlash 1.6s ease-out; }
 @keyframes searchFlash {
   0% { background: rgba(120, 160, 255, .35); }

@@ -87,11 +87,14 @@
 </div>
 
 <div class="modal hidden" id="search-modal">
-  <div class="modal-box narrow">
-    <h2>全文搜索</h2>
-    <input id="search-input" type="text" placeholder="找一句话、一个名字、一件东西…" autocomplete="off">
+  <div class="modal-box search-box">
+    <div class="search-bar">
+      <input id="search-input" type="text" placeholder="找一句话、一个名字、一件东西…" autocomplete="off">
+      <span class="search-count" id="search-count"></span>
+    </div>
     <div class="search-hits" id="search-hits"></div>
-    <div class="modal-actions">
+    <div class="modal-actions search-foot">
+      <span class="hint">↑↓ 选 · Enter 跳过去 · Esc 关掉</span>
       <button id="btn-search-close" type="button">关闭</button>
     </div>
   </div>

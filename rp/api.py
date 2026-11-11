@@ -149,7 +149,7 @@ def api_search():
                 break
         if len(hits) >= limit:
             break
-    return jsonify({"hits": hits, "query": query})
+    return jsonify({"hits": hits, "query": query, "truncated": len(hits) >= limit})
 
 
 @app.get("/api/models")
