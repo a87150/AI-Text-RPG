@@ -1120,3 +1120,12 @@ body.story-view #btn-io { display: none; }
 @media (max-width: 720px) {
   .topbar .actions > button { gap: 4px; font-size: .75rem; padding: 6px 8px; }
 }
+
+/* 设定弹窗：标题下面那行小字。跟标题贴紧，不跟正文抢位置 */
+#story-meta {
+  font-size: .75rem;
+  line-height: 1.65;
+  color: var(--text-mute);
+  margin: -1px 0 18px;
+  max-width: 62ch;
+}
