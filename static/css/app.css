@@ -1129,3 +1129,11 @@ body.story-view #btn-io { display: none; }
   margin: -1px 0 18px;
   max-width: 62ch;
 }
+
+/* 启动期错误条：只在真出错时存在，没错就看不见 */
+#boot-error {
+  position: fixed; left: 0; right: 0; top: 0; z-index: 9999;
+  padding: 8px 14px; font-size: .8125rem; line-height: 1.5;
+  background: var(--danger); color: #fff; font-family: ui-monospace, monospace;
+  word-break: break-all;
+}

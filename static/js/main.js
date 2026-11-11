@@ -304,6 +304,18 @@ function syncLanguageSeg() {
   }
 }
 
+// 之前三处都调了它，但没人写过这个函数。openPrefs() 里那一声
+// 直接抛 ReferenceError，后面 remove('hidden') 永远执行不到——弹窗不出来，
+// 表现就是“设置按钮点不开”。
+function syncThemeSeg() {
+  const seg = $('#prefs-theme');
+  if (!seg) return;
+  const theme = document.documentElement.dataset.theme || 'dark';
+  for (const btn of seg.querySelectorAll('button')) {
+    btn.classList.toggle('active', btn.dataset.themeValue === theme);
+  }
+}
+
 function currentCreativity() {
   return (state.conf && state.conf.creativity) || 'standard';
 }
@@ -464,13 +476,20 @@ function closeIo() {
 }
 
 function openPrefs() {
-  fillProviderSelect();
-  fillProviderForm();
-  fillModelSelect();
-  fillWritingForm();
-  syncThemeSeg();
-  syncLanguageSeg();
-  $('#prefs-modal').classList.remove('hidden');
+  // 哪一步抛错，弹窗都不会出现，用户只看得到“点了没反应”。
+  // 把它变成可见的提示，比只在控制台里烂掉强。
+  try {
+    fillProviderSelect();
+    fillProviderForm();
+    fillModelSelect();
+    fillWritingForm();
+    syncThemeSeg();
+    syncLanguageSeg();
+    $('#prefs-modal').classList.remove('hidden');
+  } catch (e) {
+    console.error('openPrefs failed', e);
+    toast('设置打不开：' + (e && e.message ? e.message : e), 'error');
+  }
 }
 
 function closePrefs() {

@@ -2232,6 +2232,51 @@ def main():
     check("路由表与实现同数", _routes == _rows, "%d vs %d" % (_routes, _rows))
     check("SSE 文档写对字段名", '"content": "正文增量"' in _doc)
 
+    # 94. 前端模块：调用了但从未定义的函数。
+    # syncThemeSeg 就是这么漏的：三处调用、零处定义，而它在
+    # openPrefs() 里，抛错位置恰好在 remove('hidden') 之前——设置弹窗永远开不了。
+    # node --check 只看语法，看不出这个。
+    import re as _re
+    _js_dir = pathlib.Path(__file__).parent / "static" / "js"
+    _keywords = {
+        "if", "for", "while", "switch", "catch", "return", "typeof", "function", "parseInt",
+        "parseFloat", "isNaN", "String", "Number", "Boolean", "Array", "Object", "JSON",
+        "Math", "Date", "Promise", "Map", "Set", "console", "fetch", "setTimeout",
+        "clearTimeout", "setInterval", "clearInterval", "requestAnimationFrame",
+        "encodeURIComponent", "decodeURIComponent", "alert", "confirm", "await", "new",
+        "super", "do", "else", "try", "throw", "delete", "void", "in", "of", "case",
+        "async", "import", "export", "default", "from", "class", "extends", "yield", "this",
+    }
+    for _p in sorted(_js_dir.glob("*.js")):
+        _src = _p.read_text(encoding="utf-8")
+        _def = set(_keywords)
+        for _m in _re.finditer(r"(?:^|\n)\s*(?:export\s+)?(?:async\s+)?function\s+([A-Za-z0-9_$]+)", _src):
+            _def.add(_m.group(1))
+        for _m in _re.finditer(r"(?:^|\n)\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z0-9_$]+)\s*=", _src):
+            _def.add(_m.group(1))
+        for _m in _re.finditer(r"import\s*\{([^}]+)\}\s*from", _src):
+            for _part in _m.group(1).split(","):
+                _n = _part.strip().split(" as ").pop().strip()
+                if _n:
+                    _def.add(_n)
+        for _m in _re.finditer(r"function\s*\(([^)]*)\)", _src):
+            for _arg in _m.group(1).split(","):
+                _n = _arg.strip().split("=")[0].strip()
+                if _n:
+                    _def.add(_n)
+        for _m in _re.finditer(r"\(\s*([A-Za-z0-9_$,\s]*)\s*\)\s*=>", _src):
+            for _arg in _m.group(1).split(","):
+                _n = _arg.strip()
+                if _n:
+                    _def.add(_n)
+        for _m in _re.finditer(r"catch\s*\(\s*([A-Za-z0-9_$]+)", _src):
+            _def.add(_m.group(1))
+        _called = set(_re.findall(r"(?:^|[^.A-Za-z0-9_$])([a-z][A-Za-z0-9_$]*)\s*\(", _src))
+        # 前三个是方法名或解构回调参数，不是未定义函数
+        _skip = {"constructor", "onEvent", "onStop", "onGo", "onChange", "close", "remove", "syncHeader"}
+        _miss = sorted(_n for _n in _called if _n not in _def and _n not in _skip)
+        check("前端无未定义调用：" + _p.name, not _miss, ", ".join(_miss))
+
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")

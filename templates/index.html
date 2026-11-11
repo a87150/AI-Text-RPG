@@ -5,6 +5,30 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>代面 · RP Chat</title>
 <link rel="stylesheet" href="/static/css/app.css">
+<script>
+/* 启动阶段任何一行抛错，后面的事件绑定就全不执行了，表现出来就是
+   "按钮点不开"。这里把错误直接摆到页面上，不用开 F12 才能知道。 */
+window.__bootErrors = [];
+function __bootFail(text) {
+  window.__bootErrors.push(text);
+  var bar = document.getElementById('boot-error');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'boot-error';
+    document.addEventListener('DOMContentLoaded', function () {
+      if (!document.body.contains(bar)) document.body.insertBefore(bar, document.body.firstChild);
+    });
+  }
+  bar.textContent = '启动出错：' + text;
+}
+window.addEventListener('error', function (e) {
+  __bootFail((e.message || '未知错误') + (e.filename ? '  @' + e.filename.split('/').pop() + ':' + e.lineno : ''));
+});
+window.addEventListener('unhandledrejection', function (e) {
+  var r = e.reason;
+  __bootFail((r && (r.message || r)) || '未处理的异市');
+});
+</script>
 </head>
 <body>
 

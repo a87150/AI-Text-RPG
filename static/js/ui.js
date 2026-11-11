@@ -96,7 +96,7 @@ const FONT_SIZES = ['sm', 'md', 'lg', 'xl'];
 export function applyFont(size, persist = true) {
   const name = FONT_SIZES.includes(size) ? size : 'md';
   document.documentElement.dataset.font = name;
-  const sel = $('#font-select');
+  const sel = $('#prefs-font');
   if (sel) sel.value = name;
   if (persist) {
     try { localStorage.setItem(FONT_KEY, name); } catch (e) { /* ignore */ }
@@ -593,12 +593,19 @@ export function syncHeader() {
   // 故事视图里没有"当前对话"，这些操作只对对话有意义
   const storyView = state.sideView === 'stories';
   const on = !!state.session && !storyView;
-  for (const id of ['btn-settings', 'btn-compress', 'btn-clear', 'btn-context', 'btn-export']) {
+  for (const id of ['btn-compress', 'btn-clear', 'btn-context', 'btn-export']) {
     const el = $('#' + id);
     if (!el) continue;
     el.disabled = !on || state.busy;
     // 没选对话时按钮留着一个灰壳只会显得脏，直接收起来
     el.classList.toggle('hidden', !on);
+  }
+  // 「设定」不跟着藏：它没会话也有话说（提示先选一个）。
+  // 之前跟着一起 hidden，用户入口就没了，只能去控制台找
+  const settingsBtn = $('#btn-settings');
+  if (settingsBtn) {
+    settingsBtn.disabled = false;
+    settingsBtn.classList.remove('hidden');
   }
   for (const id of ['btn-new-story', 'btn-new-session']) {
     const el = $('#' + id);
