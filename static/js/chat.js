@@ -406,13 +406,14 @@ async function sendMessage(text, { isRetry, isContinue }) {
     if (!success && !(draftShown)) appendRetryHint(text, state.stopped);
 
     (async () => {
-      const before = (s.messages || []).length;
       const fresh = await refreshCurrentSession();
       if (fresh) {
-        const changed = (fresh.messages || []).length !== before
-          || (fresh.summary || '') !== (s.summary || '');
         updateSub();
-        if (changed && !state.busy) renderMessages();
+        // 无条件重绘。之前靠"消息数变了没"来决定，但流式成功时前端自己
+        // 已经 push 过一条，长度比对永远是"没变"，于是永远不重绘。而发送时
+        // 粘上去的那份用户消息 DOM 是没有工具条的（renderMessages 才给），
+        // 所以它就一直光着。
+        renderMessages();
       }
       loadSessions();
     })();
