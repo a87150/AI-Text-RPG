@@ -145,6 +145,12 @@ def api_writing():
         save_reasoning(data["reasoning_effort"])
     if data.get("tier"):
         save_tier(data["tier"])
+        # 换档会重写 context_limit / keep_recent / summary_chars。同一次请求里
+        # 用户明确给过的值要压回去，不然「保存写作参数」里手调的字数白调。
+        explicit = {k: data[k] for k in ("context_limit", "keep_recent", "summary_chars")
+                    if k in data}
+        if explicit:
+            conf = save_writing(explicit)
     if data.get("creativity"):
         save_creativity(data["creativity"])
     return jsonify({"writing": conf, "mode": mode_of(),

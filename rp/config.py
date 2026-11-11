@@ -81,7 +81,7 @@ WRITING_DEFAULTS = {
     "keep_recent": 16,
     "max_characters": 4,
     "auto_roles": 1,        # AI 补设定时自己起几个角色；0 = 不起，用 {主角} 指代
-    "summary_chars": 400,
+    "summary_chars": 300,
     "language": "zh",       # 正文语言：zh 中文 / en English
 }
 LANGUAGES = ("zh", "en")
@@ -103,13 +103,16 @@ _writing = dict(WRITING_DEFAULTS)
 # 档位对应的注入策略。小模型的真实限制不只是窗口小，还有注意力散：
 # 长历史会稀释近因，设定给多了会串味，账本读多了会开始抄。
 # 0 表示不限（history_msgs）或不截断（role_chars）。
+# summary：每次压缩要把一大段剧情压成一段提要。上下文越大，
+# 触发得越晚、一次压掉的量越多，提要还是 400 字就装不下了。
+# 大致按上下文的 2.5%–4% 取。
 TIER_LIMITS = {
     "basic": {"context": 8000, "history_msgs": 16, "role_chars": 200,
-              "facts": 6, "anchor_every": 8, "attempts": 3},
+              "facts": 6, "anchor_every": 8, "attempts": 3, "summary": 300},
     "standard": {"context": 16000, "history_msgs": 40, "role_chars": 400,
-                 "facts": 12, "anchor_every": 15, "attempts": 3},
+                 "facts": 12, "anchor_every": 15, "attempts": 3, "summary": 500},
     "advanced": {"context": 32000, "history_msgs": 0, "role_chars": 0,
-                 "facts": 24, "anchor_every": 24, "attempts": 2},
+                 "facts": 24, "anchor_every": 24, "attempts": 2, "summary": 800},
 }
 TIER_CONTEXT = {k: v["context"] for k, v in TIER_LIMITS.items()}
 
@@ -224,7 +227,8 @@ def save_tier(value, persist=True):
     # 换档位就换整份预算：上下文上限和压缩后保留的条数一起换，
     # 否则高级档能带更多历史，压缩却还只留 16 条，等于白换
     save_writing({"context_limit": TIER_LIMITS[value]["context"],
-                  "keep_recent": tier_keep(value)}, persist=False)
+                  "keep_recent": tier_keep(value),
+                  "summary_chars": TIER_LIMITS[value]["summary"]}, persist=False)
     if persist:
         persist_settings()
     return tier()

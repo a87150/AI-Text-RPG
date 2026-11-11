@@ -416,7 +416,7 @@ window.addEventListener('unhandledrejection', function (e) {
               </div>
               <div class="grid2">
                 <div class="field"><label for="w-chars">角色上限（同时在场最多几个，超出的模型不再登记）</label><input id="w-chars" type="number" min="1" max="10"></div>
-                <div class="field"><label for="w-summary">剧情摘要字数（压缩时生成，越长越细但越费 token）</label><input id="w-summary" type="number" min="150" max="1200" step="50"></div>
+                <div class="field"><label for="w-summary">剧情摘要字数（压缩时生成，越长越细但越费 token；换模型档位会重置成该档的值）</label><input id="w-summary" type="number" min="150" max="1200" step="50"></div>
               </div>
               <div class="grid2">
                 <div class="field"></div>

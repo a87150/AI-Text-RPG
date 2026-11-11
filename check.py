@@ -2277,6 +2277,15 @@ def main():
         _miss = sorted(_n for _n in _called if _n not in _def and _n not in _skip)
         check("前端无未定义调用：" + _p.name, not _miss, ", ".join(_miss))
 
+    # 摘要字数跟档位走：它要被压掉的量约束，不能是固定值
+    for _lv in ("basic", "standard", "advanced"):
+        _lim = rp_config.TIER_LIMITS[_lv]
+        check("档位 %s 定义了摘要字数" % _lv, "summary" in _lim, str(_lim.get("summary")))
+    _sz = [rp_config.TIER_LIMITS[k]["summary"] for k in ("basic", "standard", "advanced")]
+    check("摘要字数随档位递增", _sz == sorted(_sz) and len(set(_sz)) == 3, str(_sz))
+    check("默认摘要字数与初级档一致",
+          rp_config.WRITING_DEFAULTS["summary_chars"] == rp_config.TIER_LIMITS["basic"]["summary"])
+
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")

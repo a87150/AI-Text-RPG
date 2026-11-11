@@ -689,11 +689,13 @@ function bindUI() {
     if (!btn) return;
     state.conf = Object.assign({}, state.conf, { tier: btn.dataset.tier });
     syncTierSeg();
-    // 后端会按档位重置上下文预算，存完把新预算填回表单
-    saveWriting().then(async () => {
+    // 只发 tier：换档就是要重置整份预算（上下文、保留条数、摘要字数）。
+    // 走 saveWriting() 会连表单里的旧值一起发过去，那些值又把档位默认盖回去，等于没换
+    api('/api/writing', { method: 'POST', body: { tier: btn.dataset.tier } }).then(async () => {
       state.conf = await api('/api/config');
       fillWritingForm();
       syncTierSeg();
+      syncLanguageSeg();
     });
   };
   $('#reasoning-seg').onclick = (e) => {
