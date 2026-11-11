@@ -2012,6 +2012,16 @@ def main():
     finally:
         rp_llm.requests.post = _orig_post
 
+    # 84. 同一个角色一轮里连着写了两段：要并回去，不能占两个气泡
+    _dupe = rp_characters.parse_turn(
+        "【甲】一句话。\n\n【甲】又补一句。\n\n【乙】插一句。",
+        "", ["甲", "乙", "丙"])
+    _spk = [l["speaker"] for l in _dupe["lines"]]
+    check("连着的同名段贴回一起", _spk == ["甲", "乙"], str(_spk))
+    check("拆开的两句都还在",
+          "一句话" in _dupe["lines"][0]["text"] and "又补一句" in _dupe["lines"][0]["text"],
+          _dupe["lines"][0]["text"])
+
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")

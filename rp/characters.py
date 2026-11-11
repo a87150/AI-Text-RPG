@@ -740,7 +740,12 @@ def parse_turn(text, speaker="", names=None):
                 o for o in extract_json_all(body)
                 if (o.get("name") or "").strip() and (o.get("change") or "").strip())
         elif tag in known or (names and is_character_slot(tag)):
-            result["lines"].append({"speaker": tag, "text": body})
+            # 同一个人被拆成两段（模型写完又想补一句）：并回一段，
+            # 不让一个人在一轮里占两个气泡
+            if result["lines"] and result["lines"][-1]["speaker"] == tag:
+                result["lines"][-1]["text"] += chr(10) * 2 + body
+            else:
+                result["lines"].append({"speaker": tag, "text": body})
         else:
             # 认不出的人名（模型临时起意写的路人）也别丢，当旁白接着写
             narrator_parts.append("%s%s" % (m.group(0), body))
