@@ -2180,6 +2180,12 @@ def main():
           _rw2["status"] == {} and _rw2["characters"][0]["state"] == "",
           str((_rw2["status"], _rw2["characters"])))
 
+    # 91. 产品名一处不漏：标签页、侧栏品牌、启动日志、README 标题
+    _tpl = (pathlib.Path(__file__).parent / "templates" / "index.html").read_text(encoding="utf-8")
+    check("标签页标题是代面", "<title>代面 · RP Chat</title>" in _tpl)
+    check("侧栏品牌是代面", "🎭 代面<span class=\"ver\"" in _tpl)
+    check("旧名不残留", "灵枢" not in _tpl)
+
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")

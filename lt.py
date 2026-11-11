@@ -26,6 +26,6 @@ if __name__ == "__main__":
 
     start_auto(backup_conf)      # 定时备份：配置里没开就空转，开了一分钟内生效
     port = int(os.environ.get("PORT", "5000"))
-    print("灵枢 %s 已启动：http://127.0.0.1:%d" % (VERSION, port))
+    print("代面 %s 已启动：http://127.0.0.1:%d" % (VERSION, port))
     print("Ollama：%s" % OLLAMA_HOST)
     app.run(host="127.0.0.1", port=port, threaded=True, debug=False)
