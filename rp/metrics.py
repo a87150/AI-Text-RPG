@@ -27,7 +27,14 @@ LAST = {
     "first_token_ms": 0,   # 从发请求到第一个 delta 的耗时
     "total_ms": 0,         # 整轮到 done
     "messages": 0,
+    # 服务端报的真实用量；拿不到就是空字典，不要拿估算冒充
+    "usage": {},
+    "model": "",
+    "cost": None,
 }
+# 累计：这一会话问过多少次、花了多少
+TOTAL = {"calls": 0, "prompt_tokens": 0, "completion_tokens": 0,
+         "cached_tokens": 0, "cost": 0.0, "ms": 0}
 
 
 def _path():
@@ -90,10 +97,29 @@ def end(session_id, ok=True, **extra):
     _pending.clear()
 
 
+def record(usage, model=""):
+    """一轮结束后把用量记进来，顺带算个估算费用。"""
+    from .config import estimate_cost
+    usage = usage if isinstance(usage, dict) else {}
+    LAST["usage"] = dict(usage)
+    LAST["model"] = model or LAST.get("model") or ""
+    LAST["cost"] = estimate_cost(LAST["model"], usage)
+    hit = int(usage.get("prompt_cache_hit_tokens")
+              or (usage.get("prompt_tokens_details") or {}).get("cached_tokens") or 0)
+    TOTAL["calls"] += 1
+    TOTAL["prompt_tokens"] += int(usage.get("prompt_tokens") or 0)
+    TOTAL["completion_tokens"] += int(usage.get("completion_tokens") or 0)
+    TOTAL["cached_tokens"] += hit
+    if LAST["cost"]:
+        TOTAL["cost"] = round(TOTAL["cost"] + LAST["cost"]["total"], 6)
+    note("chat.usage", model=LAST["model"], usage=usage, cost=LAST["cost"])
+
+
 def snapshot():
     """面板要读的数字。"""
     out = dict(LAST)
     # 首 token 之后模型还在吐，用总耗时推个粗略的生成速度
     if out.get("total_ms") and out.get("first_token_ms"):
         out["decode_ms"] = max(0, out["total_ms"] - out["first_token_ms"])
+    out["total"] = dict(TOTAL)
     return out

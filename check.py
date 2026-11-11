@@ -24,6 +24,7 @@ import rp.characters as rp_characters  # noqa: E402
 import rp.config as rp_config  # noqa: E402
 import rp.context as rp_context  # noqa: E402
 import rp.llm as rp_llm  # noqa: E402
+import rp.metrics as rp_metrics  # noqa: E402
 import rp.prompts as rp_prompts  # noqa: E402
 import rp.storage as rp_storage  # noqa: E402
 import rp.stories as rp_stories  # noqa: E402
@@ -2100,6 +2101,33 @@ def main():
     check("弹窗里两个操作都在",
           'id="btn-export"' in _html and 'id="btn-import-session"' in _html)
     check("弹窗有关闭按钮", 'id="io-close"' in _html)
+
+    # 89. 用量与费用：能拿到真实 usage 就记真实的，拿不到就不猜
+    _u = {}
+    class _Sse:
+        def iter_lines(self, decode_unicode=True):
+            for line in [
+                'data: {"choices":[{"delta":{"content":"你好"}}]}',
+                'data: {"choices":[],"usage":{"prompt_tokens":1200,'
+                '"completion_tokens":480,"total_tokens":1680,'
+                '"prompt_cache_hit_tokens":900}}',
+                'data: [DONE]',
+            ]:
+                yield line
+    _parts = list(rp_llm.iter_sse_parts(_Sse(), _u))
+    check("流里能拿到用量", _u.get("prompt_tokens") == 1200, str(_u))
+    check("正文结果不受影响", _parts == [("你好", "")], str(_parts))
+
+    _cost = rp_config.estimate_cost("deepseek-chat", {
+        "prompt_tokens": 1000, "completion_tokens": 500, "prompt_cache_hit_tokens": 600})
+    check("费用按命中折算", _cost and abs(_cost["in"] - 0.000108) < 1e-9,
+          str(_cost))
+    check("未知模型不乱报价", rp_config.estimate_cost("mystery-model", {}) is None)
+
+    rp_metrics.record({"prompt_tokens": 100, "completion_tokens": 50}, "deepseek-chat")
+    _snap = rp_metrics.snapshot()
+    check("面板能读到本轮用量", _snap["usage"]["prompt_tokens"] == 100, str(_snap["usage"]))
+    check("面板能读到累计", _snap["total"]["calls"] >= 1, str(_snap["total"]))
 
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:

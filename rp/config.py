@@ -136,6 +136,51 @@ CREATIVITY_LABELS = {
     "creative": "创意 — 换一个角度接，愿意出点意外",
     "wild": "发散 — 允许节外生枝，可能跑偏",
 }
+# 每百万 token 的单价（输入, 输出, 命中缓存的输入），美元。
+# 只用来给上下文面板算个量级，不是计费凭证；对不上就显示“未配单价”。
+PRICES = {
+    "deepseek-chat": (0.27, 1.10, 0.07),
+    "deepseek-reasoner": (0.55, 2.19, 0.14),
+    "gpt-4o-mini": (0.15, 0.60, 0.075),
+    "gpt-4o": (2.50, 10.00, 1.25),
+    "claude-3-5-sonnet": (3.00, 15.00, 0.30),
+    "claude-3-5-haiku": (0.80, 4.00, 0.08),
+    "qwen-max": (1.60, 6.40, 0.80),
+}
+
+
+def price_of(model):
+    """按模型名前缀匹配单价；对不上返 None。"""
+    name = (model or "").strip().lower()
+    if not name:
+        return None
+    for key in sorted(PRICES, key=len, reverse=True):
+        if name.startswith(key):
+            return PRICES[key]
+    return None
+
+
+def estimate_cost(model, usage):
+    """把 usage 换成一个每百万 token 单价的估算。拿不到单价就返 None。"""
+    p = price_of(model)
+    if not p or not isinstance(usage, dict):
+        return None
+    pin, pout, pcache = p
+    hit = int(usage.get("prompt_cache_hit_tokens")
+              or (usage.get("prompt_tokens_details") or {}).get("cached_tokens") or 0)
+    in_tok = int(usage.get("prompt_tokens") or 0)
+    out_tok = int(usage.get("completion_tokens") or 0)
+    billed_in = max(0, in_tok - hit)
+    total = billed_in / 1e6 * pin + hit / 1e6 * pcache + out_tok / 1e6 * pout
+    return {
+        "in": round(billed_in / 1e6 * pin, 6),
+        "out": round(out_tok / 1e6 * pout, 6),
+        "cached": round(hit / 1e6 * pcache, 6),
+        "total": round(total, 6),
+        "currency": "USD",
+    }
+
+
 CREATIVITY_TEMP = {"standard": 0.75, "creative": 0.95, "wild": 1.1}
 _creativity = CREATIVITY_DEFAULT
 

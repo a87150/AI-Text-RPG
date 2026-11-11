@@ -1192,6 +1192,8 @@ def _stream_model(messages, speaker, temperature, max_attempts, use_rp):
         if ev["type"] == "delta":
             metrics.first_token()      # 用户感知的等待到此结束
         if ev["type"] == "final":
+            # 服务端报多少就记多少；报不出来就是空字典，面板显示—
+            metrics.record(ev.get("usage") or {}, current_target()[1])
             return ev["text"], ev["attempts"]
         if ev["type"] == "error":
             yield sse({"type": "error", "message": ev["message"] + "。请稍后手动重试。"})

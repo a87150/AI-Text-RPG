@@ -406,6 +406,40 @@ async function loadSnapshots(sid, box) {
   }
 }
 
+/* 用量那几行。服务端报不出来就是—，不拿字数估算冒充真实值 */
+function tokenRows(st) {
+  const u = st.usage || {};
+  const inTok = u.prompt_tokens || 0;
+  const outTok = u.completion_tokens || 0;
+  const hit = u.prompt_cache_hit_tokens
+    || ((u.prompt_tokens_details || {}).cached_tokens) || 0;
+  const tot = st.total || {};
+  const has = inTok || outTok;
+  const hitPct = inTok ? Math.round((hit / inTok) * 100) : 0;
+  const decodeMs = st.decode_ms || 0;
+  const speed = (decodeMs > 0 && outTok) ? (outTok / (decodeMs / 1000)) : 0;
+  const cost = st.cost;
+  const rows = [
+    ['上轮 tokens', has
+      ? fmtNumber(inTok) + ' 入 / ' + fmtNumber(outTok) + ' 出'
+        + (st.usage && st.usage.total_tokens ? ' · 共 ' + fmtNumber(st.usage.total_tokens) : '')
+      : '服务端没报'],
+    ['缓存命中', hit
+      ? fmtNumber(hit) + ' token（' + hitPct + '%）' : '无'],
+    ['生成速度', speed
+      ? Math.round(speed) + ' token/s（首字之后）' : '—'],
+    ['上轮费用', cost
+      ? '$' + cost.total.toFixed(6) + '（入 ' + cost.in.toFixed(6)
+        + ' / 出 ' + cost.out.toFixed(6) + '）'
+      : '未配单价'],
+    ['累计', tot.calls
+      ? tot.calls + ' 次 · ' + fmtNumber(tot.prompt_tokens) + ' 入 / '
+        + fmtNumber(tot.completion_tokens) + ' 出 · $' + (tot.cost || 0).toFixed(6)
+      : '—'],
+  ];
+  return rows;
+}
+
 export function renderContextDetail() {
   const box = $('#ctx-detail');
   if (!box) return;
@@ -452,6 +486,7 @@ export function renderContextDetail() {
       ? fmtNumber(c.stream.first_token_ms) + ' ms' : '—'],
     ['上轮总耗时', c.stream && c.stream.total_ms
       ? fmtNumber(c.stream.total_ms) + ' ms' : '—'],
+    ...tokenRows(c.stream || {}),
   ];
   for (const [k, v] of items) {
     const row = document.createElement('div');
@@ -551,17 +586,6 @@ export function renderContextDetail() {
     loadSnapshots(s.id, list);
   }
 
-  const chars = s.characters || [];
-  if (chars.length) {
-    const sub = document.createElement('div');
-    sub.className = 'ctx-sub';
-    sub.textContent = '在场角色 · ' + chars.length + ' 人';
-    box.appendChild(sub);
-    const list = document.createElement('div');
-    list.className = 'char-list';
-    renderCharacterCards(list, chars);
-    box.appendChild(list);
-  }
 }
 
 /* ------------------------------ 顶部信息 ------------------------------ */

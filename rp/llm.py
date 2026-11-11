@@ -13,6 +13,8 @@ from .config import (
 # 哪些提供方已经因为发了 reasoning_effort 而报错。
 # 只存内存：重启后重探一次，比把探测结果写进配置文件安全。
 _NO_REASONING = set()
+# 不认 stream_options（拿不到用量）的提供方，同样只记内存
+_NO_STREAM_USAGE = set()
 
 
 def reasoning_supported():
@@ -35,6 +37,10 @@ def model_call(messages, temperature=0.8, stream=False, extra=None, reasoning=No
     level = (reasoning or reasoning_effort() or "").strip()
     if level and level != "none" and provider not in _NO_REASONING:
         payload["reasoning_effort"] = level
+    # 流式默认不报用量，要主动要。不认这个参数的端点会 400，
+    # 所以下面还有一次去掉重发。
+    if stream and provider not in _NO_STREAM_USAGE:
+        payload["stream_options"] = {"include_usage": True}
     if extra:
         payload.update(extra)
 
@@ -53,11 +59,21 @@ def model_call(messages, temperature=0.8, stream=False, extra=None, reasoning=No
     # 服务端不认这个字段时会回 400。不能因为思考档位把正文请求带死，
     # 去掉重发一次，并记下来，下次直接不发。这就是能拿到的最强“探测”：
     # 没有任何云端提供方会告诉你它支持哪几个档位，但拒绝的方式是统一的。
-    if resp.status_code == 400 and "reasoning_effort" in payload:
+    if resp.status_code == 400:
         low = (resp.text or "").lower()
-        if "reasoning" in low or "unrecognized" in low or "unknown" in low or "extra" in low:
+        changed = False
+        if "reasoning_effort" in payload and (
+                "reasoning" in low or "unrecognized" in low or "unknown" in low or "extra" in low):
             payload.pop("reasoning_effort", None)
             _NO_REASONING.add(provider)
+            changed = True
+        if "stream_options" in payload and (
+                "stream_options" in low or "unrecognized" in low
+                or "unknown" in low or "extra" in low):
+            payload.pop("stream_options", None)
+            _NO_STREAM_USAGE.add(provider)
+            changed = True
+        if changed:
             resp = _post(payload)
     return resp
 
@@ -74,8 +90,12 @@ def model_text(messages, temperature=0.8, reasoning=None):
     return strip_thinking(content)
 
 
-def iter_sse_parts(resp):
-    """逐块解析 OpenAI 兼容流，产出 (content, reasoning)。"""
+def iter_sse_parts(resp, usage=None):
+    """逐块解析 OpenAI 兼容流，产出 (content, reasoning)。
+
+    usage 传一个 dict 进来就把服务端报的用量装回去。这个块往往
+    在最后一个 chunk（choices 为空），所以要在跳过 choices 之前取。
+    """
     for raw in resp.iter_lines(decode_unicode=True):
         if not raw:
             continue
@@ -89,6 +109,9 @@ def iter_sse_parts(resp):
             obj = json.loads(payload)
         except json.JSONDecodeError:
             continue
+        u = obj.get("usage")
+        if isinstance(u, dict) and u and usage is not None:
+            usage.update(u)
         choices = obj.get("choices") or []
         if not choices:
             continue
@@ -117,6 +140,7 @@ def completion_events(messages, base_temp, max_attempts, min_chars=0,
                    "max": max_attempts, "reason": last_error}
         collected = []
         reasonings = []
+        usage = {}
         think_chars = 0
         content_chars = 0
         try:
@@ -129,7 +153,7 @@ def completion_events(messages, base_temp, max_attempts, min_chars=0,
             if resp.status_code != 200:
                 last_error = "接口返回 %s" % resp.status_code
                 continue
-            for content, reasoning in iter_sse_parts(resp):
+            for content, reasoning in iter_sse_parts(resp, usage):
                 if reasoning:
                     reasonings.append(reasoning)
                     if with_reasoning:
@@ -163,7 +187,8 @@ def completion_events(messages, base_temp, max_attempts, min_chars=0,
             if problem:
                 last_error = problem
                 continue
-        yield {"type": "final", "text": last_raw, "attempts": attempts_used}
+        yield {"type": "final", "text": last_raw, "attempts": attempts_used,
+               "usage": usage}
         return
 
     yield {"type": "error", "attempts": attempts_used,
