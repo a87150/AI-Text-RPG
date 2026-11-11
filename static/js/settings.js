@@ -474,35 +474,92 @@ function stepLabel(step) {
   return STEP_LABEL[step.field] || step.field;
 }
 
-/** 拆成一项一项：名字、设定、每个角色、世界观、开场，各自一次调用。 */
-function buildSteps() {
+/** 勾选状态：默认全选，没记录的项视为勾上。 */
+let pickOn = null;
+
+function pickKey(step) {
+  return step.field === 'character' ? 'c' + step.index : step.field;
+}
+
+/** 全部可生成的项，不看勾选。 */
+function allSteps() {
   const steps = [];
   if (!val('#f-user-name').trim()) steps.push({ field: 'user_name' });
   steps.push({ field: 'user_role' });
 
-  const usable = draftChars
+  let usable = draftChars
     .map((c, index) => ({ c, index }))
     .filter(({ c }) => (c.name || '').trim() || (c.role || '').trim());
-
   if (!usable.length) {
-    draftChars.push({ name: '', role: '', state: '', history: [] });
-    steps.push({ field: 'character', index: draftChars.length - 1 });
-  } else {
-    // 名字缺失也由角色卡那一步顺带取名，少一次调用就少等一次
-    for (const { c, index } of usable) steps.push({ field: 'character', index });
+    // 一张卡都没有就留一张空卡给生成用；别每调一次多插一张
+    if (!draftChars.length) draftChars.push({ name: '', role: '', state: '', history: [] });
+    usable = [{ c: draftChars[0], index: 0 }];
   }
+  for (const { index } of usable) steps.push({ field: 'character', index });
   steps.push({ field: 'world' });
   steps.push({ field: 'opening' });
+  // 认人排最后：前面几项写完再认，能连刚生成的人一起认出来
+  steps.push({ field: 'cast' });
   return steps;
 }
 
-function applyStep(step, text) {
-  const body = (text || '').trim();
+/** 按勾选组装：勾了就生成、生成就覆盖，取消勾才保住原文。 */
+function buildSteps() {
+  const all = allSteps();
+  if (!pickOn) return all;
+  return all.filter((s) => pickOn[pickKey(s)] !== false);
+}
+
+/** 把勾选项画进弹窗：一项一行，默认全勾。 */
+function renderPick() {
+  const box = $('#idea-pick');
+  if (!box) return;
+  pickOn = pickOn || {};
+  box.innerHTML = '';
+  for (const step of allSteps()) {
+    const key = pickKey(step);
+    if (pickOn[key] === undefined) pickOn[key] = true;
+    const lab = document.createElement('label');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.dataset.pick = key;
+    cb.checked = pickOn[key];
+    cb.onchange = () => { pickOn[key] = cb.checked; };
+    lab.appendChild(cb);
+    lab.appendChild(document.createTextNode(' ' + stepLabel(step)));
+    box.appendChild(lab);
+  }
+}
+
+/** 生成结果里带了名单就补进角色表：只补缺的，不改已有角色的人设。 */
+function addCast(data) {
+  const found = (data && data.cast) || [];
+  let added = 0;
+  for (const person of found) {
+    const name = (person.name || '').trim();
+    if (!name) continue;
+    const have = draftChars.find((c) => (c.name || '').trim() === name);
+    if (have) {
+      if (!(have.role || '').trim() && person.role) have.role = person.role;
+      continue;
+    }
+    draftChars.push({ name, role: person.role || '', state: '', history: [] });
+    added += 1;
+  }
+  if (added) renderCharacterList();
+  return added;
+}
+
+function applyStep(step, data) {
+  // 认人只往表里补人：不删人，也不改已有角色的人设
+  if (step.field === 'cast') return addCast(data);
+  const body = ((data && data.text) || '').trim();
   if (!body) return;
   if (step.field === 'user_name') { $('#f-user-name').value = body; return; }
   if (step.field === 'user_role') { $('#f-user-role').value = body; return; }
-  if (step.field === 'world') { $('#f-world').value = body; return; }
-  if (step.field === 'opening') { $('#f-opening').value = body; return; }
+  // 世界观和开场白写完顺带收人：正文里提到的人自动进表
+  if (step.field === 'world') { $('#f-world').value = body; addCast(data); return; }
+  if (step.field === 'opening') { $('#f-opening').value = body; addCast(data); return; }
 
   const card = draftChars[step.index];
   if (!card) return;
@@ -549,6 +606,7 @@ export function popIdea(forceFull = false) {
   if (forceFull) failedSteps = [];
   const pop = $('#idea-pop');
   if (!pop) return;
+  renderPick();
   pop.classList.remove('hidden');
   const area = $('#f-rules');
   if (area) {
@@ -597,7 +655,7 @@ export async function enhance() {
     const label = stepLabel(step);
     try {
       const data = await runStep(step, label, i + 1, steps.length);
-      applyStep(step, data.text);
+      applyStep(step, data);
       done.push(label);
     } catch (e) {
       failed.push({ step, label });

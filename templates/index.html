@@ -183,6 +183,8 @@
       <label for="f-rules">先说说你想要什么故事</label>
       <div class="hint">一句就够：题材、基调、你不想要的东西。写下的会被揉进设定正文里。</div>
       <textarea id="f-rules" placeholder="例：日常向，别搞悬疑；对手嘴硬但心软；每轮别太长；不要出现超自然的东西"></textarea>
+      <div class="hint">勾掉的项不生成，已写的内容原样保留；勾上的项会被重写。想单独调某一项，用它旁边的 AI 按钮。</div>
+      <div class="idea-pick" id="idea-pick"></div>
       <div class="idea-actions">
         <button type="button" id="btn-idea-cancel">取消</button>
         <button type="button" id="btn-idea-start" class="primary">开始生成</button>
@@ -359,6 +361,10 @@
               <div class="grid2">
                 <div class="field"><label for="w-chars">角色上限（最多 10 个）</label><input id="w-chars" type="number" min="1" max="10"></div>
                 <div class="field"><label for="w-summary">剧情摘要字数</label><input id="w-summary" type="number" min="150" max="1200" step="50"></div>
+              </div>
+              <div class="grid2">
+                <div class="field"><label for="w-roles">AI 补设定时起几个角色（0 = 不起）</label><input id="w-roles" type="number" min="0" max="4"></div>
+                <div class="field"></div>
               </div>
         <div class="prefs-actions">
           <span class="prefs-note" data-note="writing"></span>

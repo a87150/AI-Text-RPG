@@ -72,6 +72,7 @@ WRITING_DEFAULTS = {
     "context_limit": 8000,
     "keep_recent": 16,
     "max_characters": 4,
+    "auto_roles": 1,        # AI 补设定时自己起几个角色；0 = 不起，用 {主角} 指代
     "summary_chars": 400,
 }
 WRITING_BOUNDS = {
@@ -82,6 +83,7 @@ WRITING_BOUNDS = {
     "context_limit": (2000, 60000),
     "keep_recent": (4, 60),
     "max_characters": (1, 10),
+    "auto_roles": (0, 4),
     "summary_chars": (150, 1200),
 }
 _writing = dict(WRITING_DEFAULTS)
@@ -299,9 +301,12 @@ def save_writing(data, persist=True):
                 number = int(value)
             except (TypeError, ValueError):
                 continue
-            if number <= 0:
-                continue
             lo, hi = WRITING_BOUNDS[key]
+            # 下限是 0 的参数（比如自动起角色数）0 是合法值，不能当“没填”跳过
+            if number < 0 and lo > 0:
+                continue
+            if number <= 0 and lo > 0:
+                continue
             _writing[key] = max(lo, min(hi, number))
         if _writing["narrator_min"] > _writing["narrator_max"]:
             _writing["narrator_max"] = _writing["narrator_min"]

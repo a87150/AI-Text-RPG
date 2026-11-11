@@ -12,7 +12,7 @@ from flask import Response, jsonify, render_template, request, send_file
 from .characters import (
     advance_turn, apply_change, ensure_characters,
     merge_facts, merge_status, next_speaker, parse_turn, role_labels,
-    looks_like_name, upsert_character,
+    looks_like_name, parse_cast, split_cast_line, upsert_character,
 )
 from . import backup
 from . import metrics
@@ -962,7 +962,7 @@ def api_enhance():
     )
 
     is_name = field in ("user_name", "ai_name")
-    min_len = 1 if is_name else 40
+    min_len = 1 if is_name else (3 if field == "cast" else 40)
     parsed = {}
 
     def validate(text):
@@ -1012,13 +1012,23 @@ def api_enhance():
             if keep:
                 text = ensure_original_kept(keep, text)
 
+        cast_names = []
+        if field in ("world", "opening"):
+            # 名单行是给代码看的，剥掉再存正文
+            text, cast_names = split_cast_line(text)
+        payload = {"field": field, "name": name, "text": text,
+                   "attempts": parsed.get("attempts", 1)}
+        if field == "cast":
+            # 名单直接解析成结构，前端拿去并入角色表
+            payload["cast"] = parse_cast(text)
+        elif cast_names:
+            payload["cast"] = [{"name": n, "role": ""} for n in cast_names]
         yield sse({
             "type": "result",
             "field": field,
             "name": name,
             "attempts": parsed.get("attempts", 1),
-            "data": {"field": field, "name": name, "text": text,
-                     "attempts": parsed.get("attempts", 1)},
+            "data": payload,
         })
 
     return Response(

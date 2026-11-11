@@ -448,6 +448,64 @@ def _sync_new_character(result):
         result["new_character"] = result["new_characters"][0]
 
 
+# 认人时要去掉的装饰符
+_TRIM = "「」【】\"' \u3000"
+
+
+def parse_cast(text):
+    """解析「认人」的输出：一行一人，名字在前、一句话设定在后。
+
+    这一步不受 max_characters 管：用户自己写在设定里的人，不能因为表满了
+    就丢掉。表满该管的是模型现编的人，不是用户写死的。
+    """
+    out = []
+    seen = set()
+    for raw in str(text or "").splitlines():
+        line = raw.strip().lstrip("-·*• 　")
+        if not line:
+            continue
+        name, role = line, ""
+        for sep in ("｜", "|", "：", ":"):
+            if sep in line:
+                name, _, role = line.partition(sep)
+                break
+        name = name.strip().strip(_TRIM)[:24]
+        # {主角} 是占位符，不是一个人名
+        if not name or len(name) > 12 or is_bad_name(name) or name in seen:
+            continue
+        if name in ("{主角}", "主角"):
+            continue
+        seen.add(name)
+        out.append({"name": name, "role": role.strip()[:400]})
+    return out
+
+
+_CAST_LINE = re.compile("^\\s*(?:\u89d2\u8272|\u4eba\u7269)[\uff1a:]\\s*(.+)$")
+
+
+def split_cast_line(text):
+    """把生成结果末尾的「角色：甲、乙」剥出来，返回 (正文, 名字列表)。
+
+    只认最后几行里的那一行；模型没按格式写就原样返回、不猜。
+    这一行是给代码看的，不能留在设定正文里。
+    """
+    body = str(text or "")
+    lines = body.splitlines()
+    lo = max(0, len(lines) - 4)
+    for i in range(len(lines) - 1, lo - 1, -1):
+        m = _CAST_LINE.match(lines[i])
+        if not m:
+            continue
+        names = []
+        for raw in re.split("[\u3001,\uff0c;\uff1b/|]", m.group(1)):
+            n = raw.strip().strip(_TRIM)[:24]
+            if n and len(n) <= 12 and not is_bad_name(n) and n not in names                     and n not in ("{\u4e3b\u89d2}", "\u4e3b\u89d2"):
+                names.append(n)
+        rest = "\n".join(lines[:i] + lines[i + 1:]).strip()
+        return rest, names
+    return body.strip(), []
+
+
 def parse_turn(text, speaker="", names=None):
     """拆出旁白和每个角色的发言。
 

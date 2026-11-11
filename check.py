@@ -1710,6 +1710,37 @@ def main():
     check("生成提示词里有占位符规则", "8. 主角一律写成 {主角}" in _fp)
     _fpc = rp_prompts.build_field_prompt("character", name="丙", ai_name="丙", ai_role="x")
     check("单张角色卡保留真名", "丙" in _fpc)
+    # 75. 认人：解析与生成项
+    _c1 = rp_characters.parse_cast("甲｜身份一" + chr(10)
+                                   + "- 乙：身份二" + chr(10)
+                                   + "无：没用" + chr(10)
+                                   + "众人｜不是人")
+    check("认人跳过占位词",
+          [x["name"] for x in _c1] == ["甲", "乙"], str(_c1))
+    check("认人能切出设定", _c1[0]["role"] == "身份一", str(_c1))
+    check("认人项在生成表里", "cast" in rp_prompts.FIELD_TASKS)
+    _c2 = rp_characters.parse_cast("{主角}｜占位符" + chr(10)
+                                   + "主角｜不是人名")
+    check("认人不把占位符当人", _c2 == [], str(_c2))
+    _c3 = rp_characters.parse_cast("「丙」｜带书名号")
+    check("认人去掉书名号", _c3 and _c3[0]["name"] == "丙", str(_c3))
+
+    # 76. 生成时附带的名单行：剥离与收人
+    _b1, _n1 = rp_characters.split_cast_line("甲推开门。" + chr(10) + chr(10)
+                                              + "角色：乙、丙")
+    check("名单行被剥掉", _b1 == "甲推开门。", repr(_b1))
+    check("名单行解析出人", _n1 == ["乙", "丙"], str(_n1))
+    _b2, _n2 = rp_characters.split_cast_line("只有正文。")
+    check("没有名单行时原样返回",
+          _b2 == "只有正文。" and _n2 == [], str((_b2, _n2)))
+    _b3, _n3 = rp_characters.split_cast_line("正文。" + chr(10) + "角色：无、众人")
+    check("名单行里的占位词被过滤", _n3 == [], str(_n3))
+    check("auto_roles 默认 1", rp_config.writing()["auto_roles"] == 1,
+          str(rp_config.writing()))
+    check("auto_roles 能存 0",
+          rp_config.save_writing({"auto_roles": 0}, persist=False)["auto_roles"] == 0)
+    rp_config.save_writing({"auto_roles": 1}, persist=False)
+
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")

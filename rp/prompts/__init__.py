@@ -497,10 +497,16 @@ def _others_block(characters, skip_first=True):
     return "\n".join(lines)
 
 
-def _ai_block(ai_name, ai_role, ai_state=""):
-    """AI 角色空着的时候别让模型自己乱编，先说清这是可以推断的。"""
+def _ai_block(ai_name, ai_role, ai_state="", auto_roles=1):
+    """AI 角色空着的时候别让模型自己乱编，先说清这是可以推断的。
+
+    auto_roles 是用户设的：0 表示这次不要替他起角色，全文用占位符就行。
+    """
     name = (ai_name or "").strip()
     role = (ai_role or "").strip()
+    if not auto_roles and not name:
+        return ("· AI 角色这次不用你定。正文里一律写 {主角}，不要自己发明名字，"
+                "也不要写“主角”以外的称呼。")
     if not name and not role:
         return ("· AI 角色还没定：从上面用户写的想法里推断一个最合适的对手或搭档，"
                 "再给他一个名字，写清他为什么和用户角色纠缠在一起。")
@@ -512,6 +518,11 @@ def _ai_block(ai_name, ai_role, ai_state=""):
     return "\n".join(lines)
 
 
+# 生成世界观和开场白时附一行名单，代码拿去补角色表，不留在正文里
+CAST_TAIL = ("如果这段里出现了「我」和 AI 角色之外的人物，"
+             "在最后另起一行写「角色：名字、名字」，只列真正露面的人；"
+             "整行不加修饰，不要写进正文段落里。没有就别写这行。")
+
 # 一次只写一个字段，输出短、失败只重试这一项
 FIELD_TASKS = {
     "user_name": "给「我扮演的角色」起一个名字：2~4 个汉字，贴合身份与时代。只输出名字，不要解释。",
@@ -520,9 +531,16 @@ FIELD_TASKS = {
     "ai_name": "给 AI 角色起一个名字：2~4 个汉字，贴合用户的想法。只输出名字，不要解释。",
     "world": ("把用户写的背景补全成 180~260 字的世界观：时代、地点、规则与禁忌、当前局势。"
               "已有背景里的事实全部保留，但要用连贯的写法重新组织成一段，"
-              "不要先照抄一遍再补一段。"),
+              "不要先照抄一遍再补一段。" + CAST_TAIL),
     "opening": ("写一段 150~220 字的开场：第二人称「你」，让 AI 角色登场，"
-                "与用户角色产生第一段互动，结尾留出接话余地。"),
+                "与用户角色产生第一段互动，结尾留出接话余地。" + CAST_TAIL),
+    # 不受角色上限管：设定里写死的人必须全认出来，否则剧情提到他们时模型不认识
+    "cast": (
+        "读上面所有设定（世界观、我扮演的角色、AI 角色、角色列表、开场白、世界书），"
+        "把里面真正出现过的具体人物全列出来，一人一行，格式："
+        "名字｜一句话（身份、跟我的关系、此刻在干什么）。只列有名有姓、"
+        "故事里露过面的人；不要“那个女孩”“众人”这种没名字的，"
+        "不要把我扮演的角色列进去，不要补充设定里没提过的人。最多 12 行。"),
     "lore": ("写一条世界书条目，用来在剧情提到它时给模型补设定。"
              "第一行只写触发关键词，2~4 个词，用中文逗号隔开（比如「某酒馆,城南」），"
              "第二行起写 60~120 字的设定：是什么、谁管着、有什么规矩或秘密。"
@@ -552,7 +570,7 @@ def build_field_prompt(field, name="", user_name="", ai_name="", user_role="",
         task=task,
         others_block=_others_block(characters),
         user_name=user_name or "（未填写）",
-        ai_block=_ai_block(ai_name, ai_role, ai_state),
+        ai_block=_ai_block(ai_name, ai_role, ai_state, writing()["auto_roles"]),
         user_role=(user_role or "").strip() or "（未填写，请合理创作）",
         world=(world or "").strip() or "（未填写，请合理创作）",
         extra=_extra_block(rules, user_name, ai_name),

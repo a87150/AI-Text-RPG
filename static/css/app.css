@@ -273,6 +273,17 @@ body.story-view .composer { display: none !important; }
   line-height: 1.7; outline: none; resize: vertical; min-height: 96px;
 }
 .idea-pop textarea:focus { border-color: var(--accent); }
+.idea-pop .idea-pick {
+  display: flex; flex-direction: column; gap: 7px;
+  max-height: 190px; overflow-y: auto;
+  padding: 10px 12px; border-radius: 10px;
+  background: var(--bg-input); border: 1px solid var(--border-strong);
+}
+.idea-pop .idea-pick label {
+  display: flex; align-items: center; gap: 8px;
+  font-size: .8125rem; font-weight: 500; color: var(--text); cursor: pointer;
+}
+.idea-pop .idea-pick input { margin: 0; accent-color: var(--accent); cursor: pointer; }
 .idea-pop .idea-actions { display: flex; justify-content: flex-end; gap: 10px; }
 .idea-pop .idea-actions button {
   padding: 9px 18px; border-radius: 10px; font-size: .8438rem; font-weight: 600;
