@@ -506,6 +506,30 @@ def split_cast_line(text):
     return body.strip(), []
 
 
+def parse_lore_batch(text):
+    """解析“一次写几条世界书”的输出：一行一条，关键词在前、内容在后。
+
+    关键词用全角或半角竖线分开；没分隔符的行当没看到。
+    """
+    out = []
+    for raw in str(text or "").splitlines():
+        line = raw.strip().lstrip("-·*• 　0123456789.、")
+        if not line:
+            continue
+        if "｜" in line:
+            keys, _, body = line.partition("｜")
+        elif "|" in line:
+            keys, _, body = line.partition("|")
+        else:
+            continue
+        keys = keys.strip().strip(_TRIM)[:60]
+        body = body.strip()[:400]
+        if not keys or not body:
+            continue
+        out.append({"keys": keys, "content": body})
+    return out
+
+
 def parse_turn(text, speaker="", names=None):
     """拆出旁白和每个角色的发言。
 

@@ -447,6 +447,8 @@ const STEP_LABEL = {
   ai_name: 'AI 角色名',
   world: '世界观',
   opening: '开场',
+  cast: '认出人物（读设定里出现过的人，补进角色表）',
+  lore_batch: '世界书（补 3 条新的，已有的不动）',
 };
 
 /** 每次取最新的界面内容：后一项要用到前一项刚生成的结果。 */
@@ -498,6 +500,8 @@ function allSteps() {
   for (const { index } of usable) steps.push({ field: 'character', index });
   steps.push({ field: 'world' });
   steps.push({ field: 'opening' });
+  // 世界书放在写完之后：条目要从成型的设定里挑，不能凭空编
+  steps.push({ field: 'lore_batch' });
   // 认人排最后：前面几项写完再认，能连刚生成的人一起认出来
   steps.push({ field: 'cast' });
   return steps;
@@ -553,6 +557,21 @@ function addCast(data) {
 function applyStep(step, data) {
   // 认人只往表里补人：不删人，也不改已有角色的人设
   if (step.field === 'cast') return addCast(data);
+  // 世界书只追加新条目：关键词撞了就不加，免得同一件事写两遍
+  if (step.field === 'lore_batch') {
+    const found = (data && data.lore) || [];
+    const have = new Set(draftLore.map((e) => (e.keys || '').trim()));
+    let added = 0;
+    for (const item of found) {
+      const keys = (item.keys || '').trim();
+      if (!keys || have.has(keys)) continue;
+      have.add(keys);
+      draftLore.push({ keys, content: item.content || '' });
+      added += 1;
+    }
+    if (added) renderLoreList();
+    return added;
+  }
   const body = ((data && data.text) || '').trim();
   if (!body) return;
   if (step.field === 'user_name') { $('#f-user-name').value = body; return; }

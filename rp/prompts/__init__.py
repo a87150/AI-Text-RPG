@@ -212,7 +212,8 @@ def build_system_prompt(sess, speaker=None):
         parts.append("你正在写一段沉浸式的长篇故事叙述，用第三人称旁白的口吻，"
                      "把场景、动作和在场角色的反应写出来。")
 
-    lead = chars[0]["name"] if chars else ""
+    # 主角 = 用户扮演的角色。不是角色表第一位（那是 AI 扮演的人）
+    lead = (sess.get("user_name") or "").strip()
     if sess.get("world"):
         parts.append("【故事背景与世界观】\n" + fill_names(sess["world"], lead))
     parts.append(build_character_block(chars, speaker, sess.get("status")))
@@ -271,8 +272,7 @@ def build_lore_block(sess, recent_text=""):
     hits = lore_hits(sess, recent_text)
     if not hits:
         return ""
-    chars = ensure_characters(sess)
-    lead = chars[0]["name"] if chars else ""
+    lead = (sess.get("user_name") or "").strip()
     return ("【世界书（本轮相关设定）】\n"
             + "\n".join("· " + fill_names(h["content"], lead) for h in hits))
 
@@ -541,6 +541,13 @@ FIELD_TASKS = {
         "名字｜一句话（身份、跟我的关系、此刻在干什么）。只列有名有姓、"
         "故事里露过面的人；不要“那个女孩”“众人”这种没名字的，"
         "不要把我扮演的角色列进去，不要补充设定里没提过的人。最多 12 行。"),
+    # 一次写几条：世界书单条写太慢，而且条目之间要能互相区分
+    "lore_batch": (
+        "读上面所有设定，找出模型容易写错、或需要额外说明的专有名词与设定点，"
+        "写 3 条世界书，一条一行，格式：关键词｜60~120 字设定。"
+        "关键词 2~4 个，用中文逗号隔开（比如「某酒馆,城南」）。"
+        "三条之间不要重复，不要写成角色卡，"
+        "不要把用户已经写清楚的东西再说一遍。只输出三行，不加前言后语。"),
     "lore": ("写一条世界书条目，用来在剧情提到它时给模型补设定。"
              "第一行只写触发关键词，2~4 个词，用中文逗号隔开（比如「某酒馆,城南」），"
              "第二行起写 60~120 字的设定：是什么、谁管着、有什么规矩或秘密。"
@@ -561,10 +568,11 @@ def build_field_prompt(field, name="", user_name="", ai_name="", user_role="",
             task += "\n这个角色还没有名字：第一行写「名字：XXX」，第二行起再写设定。"
     else:
         task = FIELD_TASKS.get(field) or FIELD_TASKS["world"]
-    if field != "character" and (ai_name or "").strip():
-        # 生成设定时主角只给占位符，不给真名；给了它就会照着写死
-        ai_role = (ai_role or "").replace(ai_name.strip(), PLACEHOLDER)
-        ai_name = PLACEHOLDER
+    if field != "character" and (user_name or "").strip():
+        # 生成设定时主角（= 用户扮演的角色）只给占位符。
+        # AI 扮演的人不是主角，他的名字该照常给。
+        user_role = (user_role or "").replace(user_name.strip(), PLACEHOLDER)
+        user_name = PLACEHOLDER
     return render(
         "field.md",
         task=task,

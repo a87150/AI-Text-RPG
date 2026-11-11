@@ -1681,33 +1681,41 @@ def main():
 
     _ph = client.post("/api/sessions", json={}).get_json()
     client.put("/api/sessions/" + _ph["id"], json={
+        "user_name": "甲",
         "world": "{主角}是守灯人，{主角}怕黑。",
         "rules": "不要让{主角}轻易妥协。",
-        "characters": [{"name": "甲", "role": "守灯人。"}],
+        "characters": [{"name": "丙", "role": "守灯人。"}],
     })
     _phs = rp_storage.load_session(_ph["id"])
     _sys = rp_prompts.build_system_prompt(_phs)
     check("系统提示里世界观已替换", "甲是守灯人，甲怕黑。" in _sys)
     check("系统提示里额外要求已替换", "不要让甲轻易妥协。" in _sys)
+    check("AI 角色按真名出现，不被占位符吃掉", "丙" in _sys)
     check("存下来的仍是占位符",
           _phs["world"] == "{主角}是守灯人，{主角}怕黑。", _phs.get("world"))
+    check("没定主角名就不替换",
+          "{主角}" in rp_prompts.build_system_prompt(
+              {"world": "{主角}是守灯人。", "user_name": ""}))
 
-    client.put("/api/sessions/" + _ph["id"], json={
-        "characters": [{"name": "顾辞", "role": "守灯人。"}],
-    })
+    client.put("/api/sessions/" + _ph["id"], json={"user_name": "顾辞"})
     _phs2 = rp_storage.load_session(_ph["id"])
     _sys2 = rp_prompts.build_system_prompt(_phs2)
-    check("改名后同一份设定自动跟上",
+    check("改主角名后同一份设定自动跟上",
           "顾辞是守灯人，顾辞怕黑。" in _sys2)
-    check("改名不动存下来的设定", _phs2["world"] == _phs["world"])
+    check("改主角名不动存下来的设定", _phs2["world"] == _phs["world"])
+    check("改 AI 角色名不影响占位符",
+          "顾辞是守灯人" in rp_prompts.build_system_prompt(
+              dict(_phs2, characters=[{"name": "丁", "role": "守灯人。"}])))
     check("按位置找出被改掉的名字",
           rp_api._renames([{"name": "甲"}], [{"name": "顾辞"}]) == {"甲": "顾辞"})
     # 74. 生成设定时主角给占位符
-    _fp = rp_prompts.build_field_prompt("world", ai_name="丙",
+    _fp = rp_prompts.build_field_prompt("world", user_name="甲", ai_name="丙",
                                           ai_role="丙是守夜的人。", world="旧城。")
     check("生成设定时主角换成占位符", "{主角}" in _fp)
-    check("生成设定时不给真名", "丙是守夜的人" not in _fp)
-    check("生成提示词里有占位符规则", "8. 主角一律写成 {主角}" in _fp)
+    check("生成设定时不给主角真名", "甲" not in _fp)
+    check("生成设定时 AI 角色照给真名", "丙是守夜的人" in _fp)
+    check("生成提示词里有占位符规则",
+          "7. 「我扮演的角色」" in _fp)
     _fpc = rp_prompts.build_field_prompt("character", name="丙", ai_name="丙", ai_role="x")
     check("单张角色卡保留真名", "丙" in _fpc)
     # 75. 认人：解析与生成项

@@ -12,7 +12,8 @@ from flask import Response, jsonify, render_template, request, send_file
 from .characters import (
     advance_turn, apply_change, ensure_characters,
     merge_facts, merge_status, next_speaker, parse_turn, role_labels,
-    looks_like_name, parse_cast, split_cast_line, upsert_character,
+    looks_like_name, parse_cast, parse_lore_batch, split_cast_line,
+    upsert_character,
 )
 from . import backup
 from . import metrics
@@ -221,7 +222,9 @@ def seed_opening(sess):
     """把设定里的开场白变成第一条消息；已经聊过就不动。"""
     chars = ensure_characters(sess)
     # 开场白里的 {主角} 换成真名；存的还是占位符，改名不用重写
-    text = fill_names((sess.get("opening") or "").strip(), chars[0]["name"])
+    # 主角是用户扮演的角色，不是角色表第一位
+    text = fill_names((sess.get("opening") or "").strip(),
+                      (sess.get("user_name") or "").strip())
     if sess.get("messages") or not text:
         return
     use_rp = mode_for(sess) == "rp"
@@ -962,7 +965,7 @@ def api_enhance():
     )
 
     is_name = field in ("user_name", "ai_name")
-    min_len = 1 if is_name else (3 if field == "cast" else 40)
+    min_len = 1 if is_name else (3 if field in ("cast", "lore_batch") else 40)
     parsed = {}
 
     def validate(text):
@@ -1023,6 +1026,8 @@ def api_enhance():
             payload["cast"] = parse_cast(text)
         elif cast_names:
             payload["cast"] = [{"name": n, "role": ""} for n in cast_names]
+        if field == "lore_batch":
+            payload["lore"] = parse_lore_batch(text)
         yield sse({
             "type": "result",
             "field": field,
