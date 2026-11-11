@@ -12,7 +12,7 @@ from .characters import (
     advance_turn, apply_change, ensure_characters,
     merge_facts, merge_status, next_speaker, parse_turn, role_labels,
     looks_like_name, parse_cast, parse_lore_batch, split_cast_line,
-    upsert_character, add_lore,
+    upsert_character, add_lore, parse_add_cast,
 )
 from . import backup
 from . import metrics
@@ -1313,6 +1313,9 @@ def api_chat():
                     return jsonify({"error": "上一条不是没写完的回复，无从接起"}), 400
             elif not (is_retry and last_is_same_user):
                 msgs.append({"role": "user", "content": text})
+            # 用户在这句里点了名要加人：直接建卡，不等模型写【新角色】
+            for _nm in parse_add_cast(text):
+                upsert_character(sess, {"name": _nm})
             if sess.get("title") in ("", DEFAULT_TITLE, "新对话"):
                 sess["title"] = text[:16]
             speaker = next_speaker(sess)      # 现在恒为空：一轮里在场角色各自发言

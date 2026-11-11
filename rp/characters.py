@@ -83,6 +83,26 @@ def looks_like_name(name):
     return not re.search(r"[，,。；;：:！？!?\s0-9]", text)
 
 
+# 用户在消息里直接点名要加的人。靠模型写【新角色】靠不住，
+# 它聊到后面就把规则当没看见，建卡这件事得自己做。
+_ADD_CAST_RE = re.compile(
+    r"(?:加入角色|新增角色|加个角色|加一个角色|新角色|加个人)"
+    r"[：: ]*【?([^\s，。；,;、【】\[\]]{1,10})")
+
+
+def parse_add_cast(text):
+    """从用户这句话里拿出要加的名字，不靠模型。
+
+    只认「加入角色：某某」这种明说带名字的写法；没名字就不猜，交回给模型去编。
+    """
+    out = []
+    for m in _ADD_CAST_RE.finditer(str(text or "")):
+        nm = re.sub(r"^[叫做是为]", "", m.group(1).strip())
+        if nm and looks_like_name(nm) and nm not in out:
+            out.append(nm)
+    return out
+
+
 def upsert_character(sess, data):
     """登记新角色 / 更新已有角色的设定与变化，返回 (名字, 是否新增)。"""
     if not isinstance(data, dict):

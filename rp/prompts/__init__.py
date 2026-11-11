@@ -36,6 +36,32 @@ TAIL_HINT = {
     "advanced": "（正文后另起一行写 [[地点：…|时间：…|关系：…|目标：…]]，没有的字段就不写）",
 }
 
+# 用户这一轮明说了要加人。光靠 rules 里那一条，聊久了模型就当没看见。
+_ADD_CAST_RE = re.compile(
+    r"加入角色|加个角色|加一个角色|加个新人|加个人|"
+    r"新增角色|新角色|来个角色|登场一个|"
+    r"多一个角色|加一个人")
+
+
+def cast_hint(sess):
+    """用户要求加人时把格式钉到他眼前。
+
+    平时不加：每轮都提醒这句，模型会硬塞一个不该出现的人。
+    """
+    last = ""
+    for m in reversed(sess.get("messages") or []):
+        if m.get("role") == "user":
+            last = str(m.get("content") or "")
+            break
+    if not last or not _ADD_CAST_RE.search(last):
+        return ""
+    names = [c.get("name") for c in ensure_characters(sess) if c.get("name")]
+    who = ("；已有的 " + "、".join(names) + " 不要重写") if names else ""
+    return ('（这一轮要登记新角色。正文之后另起一行写：'
+            '【新角色】{"name":"名字","role":"身份与性格","relation":"和在场角色的关系"}。'
+            '只写这一轮新出现的那个' + who + '。）')
+
+
 def clip(text, limit, tail="…"):
     """按字数截断，尽量断在句号上，别把人设砍成半句话。
 
@@ -429,7 +455,8 @@ def build_messages(sess, speaker=None):
     level, (tlo, thi) = input_density(sess)
     pace = "（这一轮最多 %d 字，写到 %d 字也够；宁短勿凑。）" % (thi, tlo)
     tail = (TAIL_HINT.get(tier(), "") + CREATIVE_HINT.get(creativity(), "")
-            + pace + DENSITY_HINT[level] + STEP_HINT + timeline_hint(sess))
+            + pace + DENSITY_HINT[level] + STEP_HINT + timeline_hint(sess)
+            + cast_hint(sess))
     if tail:
         # 格式要求写在 system 里离生成点太远，小模型容易忘；补在最后一条 user 尾巴上
         for item in reversed(messages):

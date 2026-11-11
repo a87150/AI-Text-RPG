@@ -1818,6 +1818,20 @@ def main():
                          json={"all": True}).get_json()
     check("再存一次不重复加", again3.get("added") == 0, str(again3)[:80])
 
+    # 80. 用户点名要加人：直接建卡，不等模型写【新角色】
+    _s80 = {"characters": [{"name": "甲", "role": "守灯人"}]}
+    _c80 = rp_characters.parse_add_cast("加入角色：乙")
+    check("点名加人能认出名字", _c80 == ["乙"], str(_c80))
+    check("没点名就不猜", rp_characters.parse_add_cast("你好呀") == [])
+    check("带「叫」字也能剥",
+          rp_characters.parse_add_cast("加个角色叫丙") == ["丙"],
+          str(rp_characters.parse_add_cast("加个角色叫丙")))
+    for _nm in _c80:
+        rp_characters.upsert_character(_s80, {"name": _nm})
+    check("点名后角色表里真有了",
+          [c["name"] for c in _s80["characters"]] == ["甲", "乙"],
+          str([c["name"] for c in _s80["characters"]]))
+
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")
