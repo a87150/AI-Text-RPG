@@ -744,7 +744,12 @@ def api_promote_lore(sid):
         if not story:
             return jsonify({"error": "这一局没有关联的故事模板"}), 404
         pool = [e for e in (sess.get("lore") or []) if isinstance(e, dict)]
-        if everything:
+        raw = data.get("entries")
+        if isinstance(raw, list):
+            # 面板传过来的草稿优先：用户可能改了还没点保存
+            picked = [e for e in raw
+                      if isinstance(e, dict) and str(e.get("keys") or "").strip()]
+        elif everything:
             picked = pool
         else:
             picked = [e for e in pool if (e.get("keys") or "").strip() == keys]

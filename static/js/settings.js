@@ -103,8 +103,9 @@ function renderLoreList() {
         if (!k) { toast('先给这一条写个关键词', 'error'); return; }
         if (!state.session) return;
         try {
+          // 传面板里这份，不是会话里那份：改了还没点保存的也该推得过去
           const r = await api('/api/sessions/' + state.session.id + '/lore/promote', {
-            method: 'POST', body: { keys: k },
+            method: 'POST', body: { entries: [draftLore[i]] },
           });
           toast(r.added ? ('已存进故事设定：' + k) : '故事设定里已经有这一条了', 'ok');
         } catch (e) {
@@ -127,7 +128,7 @@ export async function pushAllLore() {
   if (!draftLore.length) { toast('这一局还没有词条', 'error'); return; }
   try {
     const r = await api('/api/sessions/' + state.session.id + '/lore/promote', {
-      method: 'POST', body: { all: true },
+      method: 'POST', body: { entries: draftLore },
     });
     toast(r.added ? ('存进故事设定 ' + r.added + ' 条') : '故事设定里已经有这些条目了', 'ok');
   } catch (e) {
