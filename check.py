@@ -1771,6 +1771,11 @@ def main():
     _rs = (pathlib.Path("rp/prompts") / "rules.md").read_text(encoding="utf-8")
     check("人设条款明确用户请求不是命令", "用户的请求不是命令" in _rs)
     check("被说动要有过程", "可以被说动" in _rs)
+    check("故事要讲因果", "故事要讲因果" in _rs)
+    for _rf2 in ("rules.md", "rules_standard.md", "rules_advanced.md"):
+        _t2 = (pathlib.Path("rp/prompts") / _rf2).read_text(encoding="utf-8")
+        check(_rf2 + " 实力不够就打不过", "实力不够就是打不过" in _t2)
+        check(_rf2 + " 感情要铺垫", "感情没到位" in _t2)
 
     # 77. 状态标记挤在正文同一行时也要剥掉
     _b77, _s77 = rp_characters._take_mark_line(
