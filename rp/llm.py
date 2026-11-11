@@ -11,7 +11,7 @@ from .config import (
 )
 
 # ============================== 模型调用 ==============================
-def model_call(messages, temperature=0.8, stream=False, extra=None):
+def model_call(messages, temperature=0.8, stream=False, extra=None, reasoning=None):
     provider, model = current_target()
     payload = {
         "model": model,
@@ -19,9 +19,12 @@ def model_call(messages, temperature=0.8, stream=False, extra=None):
         "stream": stream,
         "temperature": temperature,
     }
-    if provider == "ollama":
-        # 支持思考的本地模型不给档位会一直想，显式压到设置里的强度
-        payload["reasoning_effort"] = reasoning_effort()
+    # 思考强度是 OpenAI 规范字段，云端和本地都该带上：
+    # 以前只给 ollama 发，选了云端后这个设置就彻底失效了。
+    # none 不发：规范里没这个值，传过去会被拒。
+    level = (reasoning or reasoning_effort() or "").strip()
+    if level and level != "none":
+        payload["reasoning_effort"] = level
     if extra:
         payload.update(extra)
     resp = requests.post(
@@ -35,8 +38,8 @@ def model_call(messages, temperature=0.8, stream=False, extra=None):
     return resp
 
 
-def model_text(messages, temperature=0.8):
-    resp = model_call(messages, temperature=temperature, stream=False)
+def model_text(messages, temperature=0.8, reasoning=None):
+    resp = model_call(messages, temperature=temperature, stream=False, reasoning=reasoning)
     if resp.status_code != 200:
         raise RuntimeError("Ollama 返回 %s：%s" % (resp.status_code, resp.text[:300]))
     data = resp.json()

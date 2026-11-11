@@ -176,7 +176,7 @@ def refresh_states(sess, text):
              + chr(10) + "【上一轮的场景】" + scene
              + chr(10) + "【现在的状态】" + chr(10) + now
              + chr(10) + "【这一轮正文】" + chr(10) + body[:4000]},
-        ], temperature=0.2)
+        ], temperature=0.2, reasoning="low")   # 这是判断活，不需要深度思考
     except Exception:
         return 0
     obj = extract_json(raw) or {}

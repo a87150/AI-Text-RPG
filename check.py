@@ -23,6 +23,7 @@ import rp.api as rp_api  # noqa: E402
 import rp.characters as rp_characters  # noqa: E402
 import rp.config as rp_config  # noqa: E402
 import rp.context as rp_context  # noqa: E402
+import rp.llm as rp_llm  # noqa: E402
 import rp.prompts as rp_prompts  # noqa: E402
 import rp.storage as rp_storage  # noqa: E402
 import rp.stories as rp_stories  # noqa: E402
@@ -59,7 +60,7 @@ def fake_completion_events(messages, base_temp=0.8, max_attempts=3, min_chars=0,
     yield {"type": "error", "attempts": 1, "message": "离线自检不调用模型", "raw": ""}
 
 
-def fake_model_text(messages, temperature=0.8):
+def fake_model_text(messages, temperature=0.8, **kw):
     """状态补全走的是 model_text 这条路，跟主生成不是同一个函数。
 
     不 patch 它，自检里每次落一回轮次都会真打一次外网。
@@ -1869,7 +1870,7 @@ def main():
 
     # 81. 状态补全：独立一次调用把正文里的处境写回角色卡
     _orig_text = rp_characters.model_text
-    def _fake(messages, temperature=0.8):
+    def _fake(messages, temperature=0.8, **kw):
         return '{"changes":[{"name":"甲","state":"被按在椅子上"},' \
                '{"name":"不存在的人","state":"x"}]}'
     _s81 = {"characters": [{"name": "甲", "role": "", "state": "", "history": []}]}
@@ -1886,14 +1887,14 @@ def main():
               str(_s81["characters"][0]["history"]))
         check("同一个状态不重复追加",
               rp_characters.refresh_states(_s81, "甲被按在椅子上。") == 0)
-        def _boom(messages, temperature=0.8):
+        def _boom(messages, temperature=0.8, **kw):
             raise RuntimeError("接口挂了")
         rp_characters.model_text = _boom
         check("模型失败不影响上一轮",
               rp_characters.refresh_states(_s81, "甲起身。") == 0)
 
         # 在场名单要跟着改，不能一直全员在场
-        def _scene(messages, temperature=0.8):
+        def _scene(messages, temperature=0.8, **kw):
             return ('{"changes":[],"present":["甲","不存在的人"],'
                     '"away":["乙"],"place":"某城·酒馆"}')
         _s81b = {"characters": [{"name": "甲", "state": "", "history": []},
@@ -1941,6 +1942,43 @@ def main():
               str(_after82.get("lore")))
     finally:
         MODE["lore"] = False
+
+    # 83. 思考强度要真的发出去：以前只给 ollama 发，选了云端就彻底失效
+    _cap = {}
+    class _FakeResp:
+        status_code = 200
+        text = "ok"
+        def json(self):
+            return {"choices": [{"message": {"content": "ok"}}]}
+    _orig_post = rp_llm.requests.post
+    def _fake_post(url, json=None, stream=False, headers=None, timeout=None):
+        _cap.clear()
+        _cap.update(json or {})
+        return _FakeResp()
+    rp_llm.requests.post = _fake_post
+    try:
+        _orig_provider = rp_config._model_state.get("provider")
+        _orig_custom = rp_config._provider_overrides.get("custom1")
+        rp_config._provider_overrides["custom1"] = {"label": "x", "base_url": "http://x/v1", "api_key": "k"}
+        rp_config._model_state["provider"] = "custom1"
+        rp_config._model_state.setdefault("model", "x")
+        rp_config.save_reasoning("high", persist=False)
+        rp_llm.model_text([{"role": "user", "content": "hi"}])
+        check("云端也会带上思考强度", _cap.get("reasoning_effort") == "high", str(_cap.get("reasoning_effort")))
+        rp_llm.model_text([{"role": "user", "content": "hi"}], reasoning="low")
+        check("单次调用可以压低强度", _cap.get("reasoning_effort") == "low")
+        rp_config.save_reasoning("none", persist=False)
+        rp_llm.model_text([{"role": "user", "content": "hi"}])
+        check("none 不发这个字段", "reasoning_effort" not in _cap, str(list(_cap)))
+        rp_config.save_reasoning("medium", persist=False)
+        if _orig_provider:
+            rp_config._model_state["provider"] = _orig_provider
+        if _orig_custom is None:
+            rp_config._provider_overrides.pop("custom1", None)
+        else:
+            rp_config._provider_overrides["custom1"] = _orig_custom
+    finally:
+        rp_llm.requests.post = _orig_post
 
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
