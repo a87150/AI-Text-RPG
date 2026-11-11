@@ -170,6 +170,9 @@ def list_sessions():
             "ai_name": s.get("ai_name") or "",
             "user_name": s.get("user_name") or "",
             "mode": mode_for(s),
+            # 列表里不再拆开显示名字，只给个人数就够了
+            "char_count": len([c for c in (s.get("characters") or [])
+                               if (c.get("name") or "").strip()]),
             "story_id": s.get("story_id") or "",
         })
     items.sort(key=lambda x: x["updated_at"], reverse=True)

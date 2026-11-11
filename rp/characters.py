@@ -149,6 +149,18 @@ STATE_SYSTEM = (
     'changes 只写状态真变了的人；没变化的人不要写；一条都没有就写 []。'
 )
 
+# 状态里的中文也要跟随语言设置，否则英文剧情里冒出中文状态
+STATE_SYSTEM_EN = (
+    'You are updating the state of a story. Read the text and output JSON only: '
+    '{"changes":[{"name":"name","state":"under 40 characters"}],'
+    '"present":["people in the same place as the protagonist right now"],'
+    '"away":["people who have left this scene"],'
+    '"place":"where this is happening, under 6 characters"}'
+    'Rules: only use names from the character list. '
+    'present and away must cover everyone exactly once. '
+    'If someone leaves, follows, splits off, or the location changes, say so.'
+)
+
 
 def refresh_states(sess, text):
     """正文写完之后再过一遍角色状态。
@@ -171,7 +183,7 @@ def refresh_states(sess, text):
         (st0.get("place") or "（未记录）"))
     try:
         raw = model_text([
-            {"role": "system", "content": STATE_SYSTEM},
+        {"role": "system", "content": STATE_SYSTEM_EN if writing().get("language") == "en" else STATE_SYSTEM},
             {"role": "user", "content": "【角色】%s" % "、".join(names)
              + chr(10) + "【上一轮的场景】" + scene
              + chr(10) + "【现在的状态】" + chr(10) + now

@@ -244,34 +244,11 @@ function currentTheme() {
   return document.documentElement.getAttribute('data-theme') || 'dark';
 }
 
-const MODE_HINTS = {
-  normal: '一般模式：系统用旁白口吻叙述场景与角色反应。只影响之后新建的对话。',
-  rp: '角色扮演：按角色表轮流发言，每轮只有一位角色说话。只影响之后新建的对话。',
-};
 
 function currentMode() {
   return (state.conf && state.conf.mode) || 'normal';
 }
 
-function syncModeSeg() {
-  const seg = $('#prefs-mode');
-  const mode = currentMode();
-  if (seg) {
-    for (const btn of seg.querySelectorAll('button')) {
-      btn.classList.toggle('active', btn.dataset.modeValue === mode);
-    }
-  }
-  const hint = $('#mode-hint');
-  if (hint) hint.textContent = MODE_HINTS[mode] || '';
-}
-
-function syncThemeSeg() {
-  const seg = $('#prefs-theme');
-  if (!seg) return;
-  for (const btn of seg.querySelectorAll('button')) {
-    btn.classList.toggle('active', btn.dataset.themeValue === currentTheme());
-  }
-}
 
 const FONT_KEY = 'rp-font';
 
@@ -288,6 +265,7 @@ function fillWritingForm() {
   }
   const font = $('#prefs-font');
   if (font) font.value = localStorage.getItem(FONT_KEY) || 'md';
+  syncLanguageSeg();
   syncReasoningSeg();
   syncTierSeg();
   syncCreativitySeg();
@@ -310,6 +288,19 @@ function syncReasoningSeg() {
   if (hint) {
     hint.textContent = ok ? '' : '当前提供方不认这个字段，请求里的档位已自动去掉';
     hint.hidden = ok;
+  }
+}
+
+function currentLanguage() {
+  return (state.conf && state.conf.writing && state.conf.writing.language) || 'zh';
+}
+
+function syncLanguageSeg() {
+  const seg = $('#language-seg');
+  if (!seg) return;
+  const lang = currentLanguage();
+  for (const btn of seg.querySelectorAll('button')) {
+    btn.classList.toggle('active', btn.dataset.lang === lang);
   }
 }
 
@@ -383,9 +374,10 @@ async function resetAll() {
     state.conf = await api('/api/config');
     applyFont('md');
     fillWritingForm();
-    syncModeSeg();
     syncTierSeg();
-    syncReasoningSeg();
+    syncLanguageSeg();
+    syncLanguageSeg();
+  syncReasoningSeg();
     syncCreativitySeg();
     toast('已恢复默认', 'ok');
   } catch (e) {
@@ -407,7 +399,7 @@ async function saveWriting(quiet = false) {
     const value = Number(raw);
     if (raw !== '' && Number.isFinite(value)) body[key] = value;
   }
-  body.mode = currentMode();
+  body.language = currentLanguage();
   body.reasoning_effort = currentReasoning();
   body.tier = currentTier();
   body.creativity = currentCreativity();
@@ -423,9 +415,10 @@ async function saveWriting(quiet = false) {
       creativity: res.creativity || currentCreativity(),
     });
     fillWritingForm();
-    syncModeSeg();
     syncTierSeg();
-    syncReasoningSeg();
+    syncLanguageSeg();
+    syncLanguageSeg();
+  syncReasoningSeg();
     syncCreativitySeg();
     if (!quiet) toast('设置已保存', 'ok');
     return true;
@@ -464,7 +457,6 @@ function openPrefs() {
   fillProviderForm();
   fillModelSelect();
   fillWritingForm();
-  syncModeSeg();
   syncThemeSeg();
   $('#prefs-modal').classList.remove('hidden');
 }
@@ -686,7 +678,9 @@ function bindUI() {
     const btn = e.target.closest('button[data-level]');
     if (!btn) return;
     state.conf = Object.assign({}, state.conf, { reasoning_effort: btn.dataset.level });
-    syncReasoningSeg();
+    syncLanguageSeg();
+    syncLanguageSeg();
+  syncReasoningSeg();
   };
   $('#creativity-seg').onclick = (e) => {
     const btn = e.target.closest('button[data-creativity]');
@@ -697,12 +691,20 @@ function bindUI() {
   $('#prefs-refresh').onclick = () => loadModels(true);
   $('#prefs-font').onchange = (e) => applyFont(e.target.value);
   $('#prefs-model').onchange = (e) => onModelChange(e.target);
-  $('#prefs-mode').onclick = (e) => {
-    const btn = e.target.closest('button[data-mode-value]');
-    if (!btn) return;
-    state.conf = Object.assign({}, state.conf, { mode: btn.dataset.modeValue });
-    syncModeSeg();
-  };
+  // 默认模式已从设置里去掉：建局时选，之后在各自的「设定」里切
+  const langSeg = $('#language-seg');
+  if (langSeg) {
+    langSeg.onclick = (e) => {
+      const btn = e.target.closest('button[data-lang]');
+      if (!btn || btn.dataset.lang === currentLanguage()) return;
+      state.conf = Object.assign({}, state.conf, {
+        writing: Object.assign({}, state.conf && state.conf.writing,
+          { language: btn.dataset.lang }),
+      });
+      syncLanguageSeg();
+      saveWriting(true);
+    };
+  }
   $('#prefs-theme').onclick = (e) => {
     const btn = e.target.closest('button[data-theme-value]');
     if (!btn || btn.dataset.themeValue === currentTheme()) return;

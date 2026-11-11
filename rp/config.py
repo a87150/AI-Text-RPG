@@ -77,7 +77,10 @@ WRITING_DEFAULTS = {
     "max_characters": 4,
     "auto_roles": 1,        # AI 补设定时自己起几个角色；0 = 不起，用 {主角} 指代
     "summary_chars": 400,
+    "language": "zh",       # 正文语言：zh 中文 / en English
 }
+LANGUAGES = ("zh", "en")
+LANGUAGE_LABELS = {"zh": "中文", "en": "English"}
 WRITING_BOUNDS = {
     "narrator_min": (10, 300),
     "narrator_max": (20, 600),
@@ -297,6 +300,9 @@ def writing():
 def save_writing(data, persist=True):
     """只改真的给了值的项；空串/0 视为「这次不动」，否则一次误传就把参数压到下限。"""
     with _model_lock:
+        lang = (data or {}).get("language")
+        if lang in LANGUAGES:
+            _writing["language"] = lang
         for key, value in (data or {}).items():
             if key not in WRITING_BOUNDS:
                 continue

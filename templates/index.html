@@ -233,23 +233,6 @@
     <h2>设置</h2>
     <div class="prefs-scroll">
 
-        <details class="prefs-sec" data-sec="mode">
-      <summary>新建对话的默认模式</summary>
-      <div class="prefs-body">
-        <div class="field">
-                <label>新对话默认由谁回复（已有对话在「设定」里各自切换）</label>
-                <div class="seg" id="prefs-mode">
-                  <button type="button" data-mode-value="normal">一般模式</button>
-                  <button type="button" data-mode-value="rp">角色扮演</button>
-                </div>
-              </div>
-              <div class="hint" id="mode-hint"></div>
-        <div class="prefs-actions">
-          <span class="prefs-note" data-note="mode"></span>
-          <button type="button" class="prefs-save" data-save="mode">保存模式</button>
-        </div>
-      </div>
-    </details>
     <details class="prefs-sec" data-sec="look">
       <summary>外观</summary>
       <div class="prefs-body">
@@ -281,6 +264,13 @@
                 <div class="model-row">
                   <select id="prefs-model"></select>
                   <button class="icon-btn" id="prefs-refresh" type="button" title="刷新模型列表">⟳</button>
+                </div>
+              </div>
+              <div class="field">
+                <label>正文语言（模型按这个语言写，不看你的输入语言）</label>
+                <div class="seg" id="language-seg">
+                  <button type="button" data-lang="zh">中文</button>
+                  <button type="button" data-lang="en">English</button>
                 </div>
               </div>
               <div class="field">

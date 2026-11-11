@@ -768,10 +768,14 @@ def main():
 
     # 33. 设置面板是折叠节，备份并进来了，不再有第二个弹窗
     _html = (pathlib.Path(__file__).parent / "templates" / "index.html").read_text(encoding="utf-8")
-    check("设置分成五个折叠节（云端并进模型）", _html.count('<details class="prefs-sec"') == 5,
+    # 默认模式那节已去掉：模式在建局和各自的「设定」里切
+    check("设置分成四个折叠节", _html.count('<details class="prefs-sec"') == 4,
           str(_html.count('<details class="prefs-sec"')))
     check("每节都有标题和内容",
-          _html.count("<summary>") == 5 and _html.count('class="prefs-body"') == 5)
+          _html.count("<summary>") == 4 and _html.count('class="prefs-body"') == 4)
+    check("不再有默认模式选择", 'data-sec="mode"' not in _html and 'id="prefs-mode"' not in _html)
+    check("设置里有正文语言选择", 'id="language-seg"' in _html)
+    check("语言只给中英两个", _html.count('data-lang=') == 2)
     check("云端控件并在模型节里",
           'data-sec="cloud"' not in _html and 'id="p-provider"' in _html)
     _bkjs = (pathlib.Path(__file__).parent / "static" / "js" / "backup.js").read_text(encoding="utf-8")
@@ -924,9 +928,9 @@ def main():
     _html = (pathlib.Path(__file__).parent / "templates" / "index.html").read_text(encoding="utf-8")
     check("底部统一保存按钮已删除", 'id="prefs-save"' not in _html)
     check("底部换成还原默认", 'id="prefs-reset"' in _html)
-    check("三节各有保存按钮", _html.count('class="prefs-save"') == 3,
+    check("两节各有保存按钮", _html.count('class="prefs-save"') == 2,
           str(_html.count('class="prefs-save"')))
-    check("三节保存按钮分别标注", all('data-save="%s"' % k in _html for k in ("mode", "model", "writing")))
+    check("保存按钮分别标注", all('data-save="%s"' % k in _html for k in ("model", "writing")))
     check("外观节没有多余保存按钮", 'data-save="look"' not in _html)
 
     # 遮罩关闭必须同时看按下点，否则从弹窗里拖到遮罩上松手会整窗消失
@@ -2046,6 +2050,18 @@ def main():
           _mx["lines"][0]["text"])
     check("漏写右括号也能认出是谁", _names86 == ["乙", "丙"], str(_names86))
     check("同一人不占两个气泡", len({x["speaker"] for x in _mx["lines"]}) == len(_mx["lines"]))
+
+    # 87. 语言设置：默认中文，能切英文，提示词里真的换了
+    check("默认中文", rp_config.writing().get("language") == "zh", str(rp_config.writing().get("language")))
+    check("中文提示里有中文要求", "正文一律用简体中文" in rp_prompts.LANGUAGE_LINES["zh"])
+    check("英文提示里有英文要求", "Write everything in English" in rp_prompts.LANGUAGE_LINES["en"])
+    _lw = rp_config.save_writing({"language": "en"}, persist=False)
+    check("能切到英文", rp_config.writing()["language"] == "en", str(rp_config.writing()["language"]))
+    check("保存后回包也是英文", _lw.get("language") == "en", str(_lw.get("language")))
+    rp_config.save_writing({"language": "zz"}, persist=False)
+    check("乱写的语言不生效", rp_config.writing()["language"] == "en")
+    rp_config.save_writing({"language": "zh"}, persist=False)
+    check("切回中文", rp_config.writing()["language"] == "zh")
 
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:

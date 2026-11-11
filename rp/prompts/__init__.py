@@ -217,6 +217,16 @@ def build_status_scene(sess):
     return "".join(bits)
 
 
+# 正文语言。这句必须每轮都在：模型不看这个就按自己的习惯走
+LANGUAGE_LINES = {
+    "zh": ("正文一律用简体中文写。不要夹整句外语，不要写成中英混排；"
+           "专有名词、术语、通讯里的英文原名可以保留，其余一律用中文。"),
+    "en": ("Write everything in English. Do not drop whole sentences in another language "
+           "and do not mix languages; proper nouns and technical terms may keep their "
+           "original spelling."),
+}
+
+
 def build_system_prompt(sess, speaker=None):
     user_name, _ = role_labels(sess)
     chars = ensure_characters(sess)
@@ -239,6 +249,9 @@ def build_system_prompt(sess, speaker=None):
     else:
         parts.append("你正在写一段沉浸式的长篇故事叙述，用第三人称旁白的口吻，"
                      "把场景、动作和在场角色的反应写出来。")
+
+    # 语言必须钉死。只靠用户输入带动的话，一遇上糊涂就开始夹英文句子。
+    parts.append(LANGUAGE_LINES.get(writing().get("language"), LANGUAGE_LINES["zh"]))
 
     # 主角 = 用户扮演的角色。不是角色表第一位（那是 AI 扮演的人）
     lead = (sess.get("user_name") or "").strip()
