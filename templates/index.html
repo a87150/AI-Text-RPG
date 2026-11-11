@@ -312,13 +312,6 @@ window.addEventListener('unhandledrejection', function (e) {
                 </div>
               </div>
               <div class="field">
-                <label>正文语言（模型按这个语言写，不看你的输入语言）</label>
-                <div class="seg" id="language-seg">
-                  <button type="button" data-lang="zh">中文</button>
-                  <button type="button" data-lang="en">English</button>
-                </div>
-              </div>
-              <div class="field">
                 <label>模型能力档位（决定状态行用多轻的格式）</label>
                 <div class="seg" id="tier-seg">
                   <button type="button" data-tier="basic">初级</button>
@@ -402,6 +395,13 @@ window.addEventListener('unhandledrejection', function (e) {
       <summary>写作</summary>
       <div class="prefs-body">
         <div class="hint">字数直接影响生成量与耗时；改完点这一节底部的「保存写作参数」。</div>
+              <div class="field">
+                <label>正文语言（模型按这个语言写，不看你的输入语言）</label>
+                <div class="seg" id="language-seg">
+                  <button type="button" data-lang="zh">中文</button>
+                  <button type="button" data-lang="en">English</button>
+                </div>
+              </div>
               <div class="grid2">
                 <div class="field"><label for="w-narrator-min">旁白最少字数（每轮场景描写，不足会自动重写）</label><input id="w-narrator-min" type="number" min="10" max="300"></div>
                 <div class="field"><label for="w-narrator-max">旁白最多字数</label><input id="w-narrator-max" type="number" min="20" max="600"></div>

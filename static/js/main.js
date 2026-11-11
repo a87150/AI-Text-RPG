@@ -700,9 +700,7 @@ function bindUI() {
     const btn = e.target.closest('button[data-level]');
     if (!btn) return;
     state.conf = Object.assign({}, state.conf, { reasoning_effort: btn.dataset.level });
-    syncLanguageSeg();
-    syncLanguageSeg();
-  syncReasoningSeg();
+    syncReasoningSeg();
   };
   $('#creativity-seg').onclick = (e) => {
     const btn = e.target.closest('button[data-creativity]');
