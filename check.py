@@ -1789,6 +1789,35 @@ def main():
           len(_rw["messages"]) == 3, str(len(_rw["messages"])))
     check("重写后轮次跟着退", _rw["turn"] == 2, str(_rw.get("turn")))
 
+    # 79. 对话里长出来的词条只进这一局，手动才进故事
+    _L, _R = "【", "】"
+    _turn = rp_characters.parse_turn(
+        "他推开门。" + chr(10) + _L + "新词条" + _R
+        + '{"keys":"旧钟楼,钟楼","content":"城里最高的建筑。"}')
+    check("新词条被解析出来", len(_turn["lore"]) == 1, str(_turn["lore"]))
+    check("标签不进正文", _turn["narrator"] == "他推开门。", repr(_turn["narrator"]))
+    _book = {"lore": []}
+    check("词条写进这一局", rp_characters.add_lore(_book, _turn["lore"][0]) is True)
+    check("同关键词不重复加",
+          rp_characters.add_lore(_book, _turn["lore"][0]) is False and len(_book["lore"]) == 1)
+
+    story3 = client.post("/api/stories", json={}).get_json()
+    sess3 = client.post("/api/sessions", json={"story_id": story3["id"]}).get_json()
+    live3 = rp_storage.load_session(sess3["id"])
+    live3["lore"] = [{"keys": "旧钟楼", "content": "城里最高的建筑。"}]
+    rp_storage.save_session(live3)
+    check("对话里的词条不动故事模板",
+          not (client.get("/api/stories/" + story3["id"]).get_json().get("lore") or []))
+    got3 = client.post("/api/sessions/" + sess3["id"] + "/lore/promote",
+                       json={"keys": "旧钟楼"}).get_json()
+    check("手动存进故事成功", got3.get("added") == 1, str(got3)[:80])
+    check("故事里查得到这一条",
+          any((e.get("keys") or "") == "旧钟楼"
+              for e in (client.get("/api/stories/" + story3["id"]).get_json().get("lore") or [])))
+    again3 = client.post("/api/sessions/" + sess3["id"] + "/lore/promote",
+                         json={"all": True}).get_json()
+    check("再存一次不重复加", again3.get("added") == 0, str(again3)[:80])
+
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")

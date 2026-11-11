@@ -19,7 +19,7 @@ import { bindMessageActions } from './msgops.js';
 import { bindSearch } from './search.js';
 import {
   openSettings, closeSettings, saveSettings, enhance, regenOpening,
-  newRunFromSettings, setDraftMode, addLoreEntry, popIdea, closeIdea, startEnhance,
+  newRunFromSettings, setDraftMode, addLoreEntry, pushAllLore, popIdea, closeIdea, startEnhance,
   openAsk, closeAsk, runAsk,
 } from './settings.js';
 
@@ -727,6 +727,7 @@ function bindUI() {
     if (btn) switchSideView(btn.dataset.view);
   };
   $('#btn-add-lore').onclick = addLoreEntry;
+  $('#btn-push-lore').onclick = pushAllLore;
   $('#f-mode').onclick = (e) => {
     const btn = e.target.closest('button[data-mode-value]');
     if (!btn) return;

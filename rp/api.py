@@ -12,7 +12,7 @@ from .characters import (
     advance_turn, apply_change, ensure_characters,
     merge_facts, merge_status, next_speaker, parse_turn, role_labels,
     looks_like_name, parse_cast, parse_lore_batch, split_cast_line,
-    upsert_character,
+    upsert_character, add_lore,
 )
 from . import backup
 from . import metrics
@@ -727,6 +727,47 @@ def _rewind_to(sess, index):
     return sess
 
 
+@app.post("/api/sessions/<sid>/lore/promote")
+def api_promote_lore(sid):
+    """把这一局攒的词条存进故事模板。
+
+    只在你点的时候发生，不会自动回写。只增不改：模板里已有同名 keys 的跳过。
+    """
+    data = request.get_json(silent=True) or {}
+    keys = str(data.get("keys") or "").strip()
+    everything = bool(data.get("all"))
+    with get_session_lock(sid):
+        sess = load_session(sid)
+        if not sess:
+            return jsonify({"error": "会话不存在"}), 404
+        story = load_story(sess.get("story_id") or "")
+        if not story:
+            return jsonify({"error": "这一局没有关联的故事模板"}), 404
+        pool = [e for e in (sess.get("lore") or []) if isinstance(e, dict)]
+        if everything:
+            picked = pool
+        else:
+            picked = [e for e in pool if (e.get("keys") or "").strip() == keys]
+        if not picked:
+            return jsonify({"error": "没找到要存的词条"}), 404
+        cards = story.get("lore")
+        if not isinstance(cards, list):
+            cards = story["lore"] = []
+        known = {(c.get("keys") or "").strip().lower()
+                 for c in cards if isinstance(c, dict)}
+        added = 0
+        for e in picked:
+            k = (e.get("keys") or "").strip()
+            if not k or k.lower() in known:
+                continue
+            cards.append({"keys": k[:120], "content": str(e.get("content") or "")[:2000]})
+            known.add(k.lower())
+            added += 1
+        if added:
+            save_story(story)
+        return jsonify({"ok": True, "added": added, "story_lore": cards})
+
+
 @app.post("/api/sessions/<sid>/rewind")
 def api_rewind(sid):
     """删掉 index 起的消息，用来重写。ponytail: 前情提要不动，压缩是单向的。"""
@@ -1184,6 +1225,9 @@ def _commit_turn(s2, turn, use_rp, resume=False):
         if turn.get("status"):
             s2["status"] = merge_status(s2.get("status"), turn["status"])
         merge_facts(s2, turn.get("facts"), s2.get("turn"))
+    # 对话里新长出来的词条只进这一局的世界书，不碰故事模板
+    for entry in turn.get("lore") or []:
+        add_lore(s2, entry)
         save_session(s2)
         return tail
     if use_rp:

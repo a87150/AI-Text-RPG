@@ -333,12 +333,20 @@ body.story-view .composer { display: none !important; }
 }
 .lore-item .lore-undo.hidden { display: none; }
 .lore-item .field-ai { height: 26px; }
+.lore-actions { display: flex; gap: 8px; margin-top: 8px; }
 .lore-add {
-  margin-top: 8px; border: 1px dashed var(--border-strong); background: transparent;
+  border: 1px dashed var(--border-strong); background: transparent;
   color: var(--text-mute); border-radius: 9px; padding: 6px 12px;
-  font-size: .7813rem; cursor: pointer; width: 100%;
+  font-size: .7813rem; cursor: pointer; flex: 1;
 }
 .lore-add:hover { color: var(--text); border-color: var(--accent); }
+.lore-add.hidden { display: none; }
+.lore-item .lore-push {
+  border: 1px solid var(--border-strong);
+  background: transparent; color: var(--accent); border-radius: 7px;
+  width: 26px; height: 26px; cursor: pointer; line-height: 1;
+}
+.lore-item .lore-push:hover { border-color: var(--accent); background: var(--bg-hover); }
 
 .char-card {
   border: 1px solid var(--border);

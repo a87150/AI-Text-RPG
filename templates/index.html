@@ -144,13 +144,16 @@
         <button type="button" class="field-ai" data-field="world" title="只重写这一项">✦ AI</button>
         <button type="button" class="field-undo hidden" data-undo-slot="world">↺ 撤销</button>
       </div>
-      <textarea id="f-world" placeholder="时代、地点、势力、规则禁忌、当前局势、故事开始时各自的处境…。主角本人写 {主角}，运行时会换成角色表第一位的名字。"></textarea>
+      <textarea id="f-world" placeholder="时代、地点、势力、规则禁忌、当前局势、故事开始时各自的处境…。你扮演的那个角色写 {主角}，运行时会换成「我的角色」里填的名字。"></textarea>
     </div>
 
     <div class="field">
       <label>世界书（只有对话里提到关键词才注入，设定再多也不稀释人设）</label>
       <div class="lore-list" id="lore-list"></div>
-      <button type="button" class="lore-add" id="btn-add-lore">＋ 添加条目</button>
+      <div class="lore-actions">
+        <button type="button" class="lore-add" id="btn-add-lore">＋ 添加条目</button>
+        <button type="button" class="lore-add hidden" id="btn-push-lore">↑ 这一局攒的条目存进故事设定</button>
+      </div>
     </div>
 
     <div class="field">

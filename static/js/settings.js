@@ -23,6 +23,8 @@ let editingStory = null;   // 非空 = 这次改的是故事本身，而不是�
 function renderLoreList() {
   const box = $('#lore-list');
   if (!box) return;
+  const bulk = $('#btn-push-lore');
+  if (bulk) bulk.classList.toggle('hidden', !!editingStory || !draftLore.length);
   box.innerHTML = '';
   if (!draftLore.length) {
     const empty = document.createElement('div');
@@ -89,11 +91,48 @@ function renderLoreList() {
     del.title = '删除这一条';
     del.onclick = () => { draftLore.splice(i, 1); renderLoreList(); };
 
+    if (!editingStory) {
+      // 只在对话里才给：写故事模板的手动路径在「故事」视图，不走这个按钮
+      const push = document.createElement('button');
+      push.type = 'button';
+      push.className = 'lore-push';
+      push.textContent = '↑';
+      push.title = '把这一条存进故事设定（以后新开的局才有）';
+      push.onclick = async () => {
+        const k = (draftLore[i].keys || '').trim();
+        if (!k) { toast('先给这一条写个关键词', 'error'); return; }
+        if (!state.session) return;
+        try {
+          const r = await api('/api/sessions/' + state.session.id + '/lore/promote', {
+            method: 'POST', body: { keys: k },
+          });
+          toast(r.added ? ('已存进故事设定：' + k) : '故事设定里已经有这一条了', 'ok');
+        } catch (e) {
+          toast('存失败：' + e.message, 'error');
+        }
+      };
+      head.prepend(push);
+    }
+
     head.append(ai, undo, del);
     card.append(head, keys, body);
     box.appendChild(card);
   });
   syncUndoButtons();
+}
+
+/** 这一局攒的条目整本存进故事模板：只在点的时候写，且只增不改。 */
+export async function pushAllLore() {
+  if (!state.session) return;
+  if (!draftLore.length) { toast('这一局还没有词条', 'error'); return; }
+  try {
+    const r = await api('/api/sessions/' + state.session.id + '/lore/promote', {
+      method: 'POST', body: { all: true },
+    });
+    toast(r.added ? ('存进故事设定 ' + r.added + ' 条') : '故事设定里已经有这些条目了', 'ok');
+  } catch (e) {
+    toast('存失败：' + e.message, 'error');
+  }
 }
 
 export function addLoreEntry() {

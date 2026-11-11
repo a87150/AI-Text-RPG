@@ -435,6 +435,33 @@ def merge_facts(sess, new_facts, turn=None):
     return fresh
 
 
+# 跟设定面板那条手动编辑的上限对齐
+LORE_MAX = 40
+
+
+def add_lore(sess, entry):
+    """对话里攒出来的词条：按 keys 去重，满了就不加。只写这一局，不碰故事模板。"""
+    if not isinstance(entry, dict):
+        return False
+    raw_keys = str(entry.get("keys") or "").replace("，", ",")
+    keys = ",".join(k.strip() for k in raw_keys.split(",") if k.strip())
+    body = str(entry.get("content") or "").strip()[:2000]
+    if not keys or not body:
+        return False
+    book = sess.setdefault("lore", [])
+    if not isinstance(book, list):
+        book = sess["lore"] = []
+    low = keys.lower()
+    for old in book:
+        if isinstance(old, dict) and (old.get("keys") or "").strip().lower() == low:
+            old["content"] = body        # 同一条：以这一轮的为准
+            return False
+    if len(book) >= LORE_MAX:
+        return False
+    book.append({"keys": keys[:120], "content": body})
+    return True
+
+
 def _fact_subject(text):
     """拿句子开头当主体，够用来分组，不用做分词。"""
     head = re.split(r"[，,。；;：:！？!?\s]", text.strip(), maxsplit=1)[0]
@@ -555,7 +582,7 @@ def parse_turn(text, speaker="", names=None):
     result = {"narrator": "", "speaker": speaker, "line": "", "lines": [],
               "new_character": None, "new_characters": [],
               "updates": [], "status": status,
-              "facts": facts}
+              "facts": facts, "lore": []}
     if not text:
         return result
 
@@ -585,6 +612,10 @@ def parse_turn(text, speaker="", names=None):
         elif tag in ("新角色", "新增角色", "角色"):
             result["new_characters"].extend(
                 o for o in extract_json_all(body) if (o.get("name") or "").strip())
+        elif tag in ("新词条", "新设定", "世界书"):
+            result["lore"].extend(
+                o for o in extract_json_all(body)
+                if (o.get("keys") or "").strip() and (o.get("content") or "").strip())
         elif tag in ("变化", "状态", "设定变化"):
             result["updates"].extend(
                 o for o in extract_json_all(body)
