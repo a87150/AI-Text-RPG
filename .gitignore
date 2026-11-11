@@ -14,3 +14,5 @@ _*.py
 _*.txt
 i.py
 cm.txt
+mk_*.py
+mk_*.txt
