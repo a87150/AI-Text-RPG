@@ -84,11 +84,16 @@ export function renderSessionList() {
     const title = document.createElement('div');
     title.className = 'si-title';
     title.textContent = s.title || '未命名故事';
+    // 条数贴着标题走，第二行只留模式和状态
+    const count = document.createElement('span');
+    count.className = 'si-count';
+    count.textContent = s.message_count + ' 条';
+    title.appendChild(count);
     const meta = document.createElement('div');
     meta.className = 'si-meta';
-    meta.textContent = (s.mode === 'rp' ? '扮演' : '一般') + ' · '
-      + (s.ai_name ? s.ai_name + ' · ' : '')
-      + s.message_count + ' 条' + (s.has_summary ? ' · 已压缩' : '');
+    meta.textContent = (s.mode === 'rp' ? '扮演' : '一般')
+      + (s.ai_name ? ' · ' + s.ai_name : '')
+      + (s.has_summary ? ' · 已压缩' : '');
     body.append(title, meta);
 
     const del = document.createElement('button');

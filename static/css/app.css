@@ -1082,3 +1082,12 @@ body.story-view .io-wrap { display: none; }
   0% { background: rgba(120, 160, 255, .35); }
   100% { background: transparent; }
 }
+
+/* 会话条数：贴在标题后面，不占第二行 */
+.si-title .si-count {
+  margin-left: 6px;
+  font-size: .6875rem;
+  font-weight: 400;
+  color: var(--text-dim);
+  opacity: .75;
+}

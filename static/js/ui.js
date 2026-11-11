@@ -917,7 +917,8 @@ export function narratorNode(text, tag = '') {
 export function buildTurn(narrator, speaker, line, lines) {
   const el = document.createElement('div');
   el.className = 'turn';
-  if (narrator) el.appendChild(narratorNode(narrator));
+  // 旁白块一律带上故事名：多角色模式以前只有一般模式才有这个标签
+  if (narrator) el.appendChild(narratorNode(narrator, storyName()));
   const many = (lines || []).filter((x) => x && x.text);
   if (many.length) {
     let last = null;
@@ -936,8 +937,7 @@ export function buildTurn(narrator, speaker, line, lines) {
 export function renderTurn(container, turn) {
   if (!container) return null;
   container.innerHTML = '';
-  const storyTag = turn.speaker ? '' : storyName();
-  if (turn.narrator) container.appendChild(narratorNode(turn.narrator, storyTag));
+  if (turn.narrator) container.appendChild(narratorNode(turn.narrator, storyName()));
   const lines = (turn.lines || []).filter((x) => x && x.text);
   if (lines.length) {
     // 圆桌式：旁白之后一人一个气泡，按发言顺序排
