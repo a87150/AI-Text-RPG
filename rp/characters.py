@@ -180,7 +180,7 @@ def refresh_states(sess, text):
     st0 = sess.get("status") or {}
     scene = "%s；地点：%s" % (
         "、".join(str(x) for x in (st0.get("present") or [])) or "（未记录）",
-        (st0.get("place") or "（未记录）"))
+        (st0.get("location") or st0.get("place") or "（未记录）"))
     try:
         raw = model_text([
         {"role": "system", "content": STATE_SYSTEM_EN if writing().get("language") == "en" else STATE_SYSTEM},
@@ -226,9 +226,12 @@ def refresh_states(sess, text):
             if (st.get("away") or []) != off:
                 st["away"] = off
                 n += 1
+        # 写 location，不写 place：界面、导出、下一轮 prompt 全都只认 location，
+        # 写进 place 等于把地点丢到一个无人读的键里。
+        # 已有 location 就不覆盖：[[地点：X]] 是模型直接标的，比这一步更可信。
         place = (obj.get("place") or "").strip()[:12]
-        if place and place != (st.get("place") or ""):
-            st["place"] = place
+        if place and not (st.get("location") or "").strip():
+            st["location"] = place
             n += 1
     rows = obj.get("changes")
     if not isinstance(rows, list):

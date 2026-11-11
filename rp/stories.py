@@ -100,15 +100,6 @@ def delete_story(sid):
             return False
     return True
 
-
-def snapshot_from(sess):
-    """把会话当前的设定写成一份故事模板（不含对话内容）。"""
-    story = new_story((sess.get("title") or DEFAULT_TITLE).strip() or DEFAULT_TITLE)
-    story["id"] = sess.get("story_id") or story["id"]
-    update_from(story, sess)
-    return story
-
-
 def update_from(story, sess):
     for key in STORY_FIELDS:
         story[key] = sess.get(key) or ""

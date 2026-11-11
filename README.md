@@ -36,7 +36,13 @@ pip install -r requirements.txt
 python lt.py
 ```
 
-打开 http://127.0.0.1:5000 。换端口用环境变量：`PORT=8080 python lt.py`。
+打开 http://127.0.0.1:5000 。换端口用环境变量，PowerShell 写法：
+
+```powershell
+$env:PORT=8080; python lt.py
+```
+
+cmd 写法是 `set PORT=8080 && python lt.py`。
 
 连云端也行：设置 → 模型里填 OpenAI 兼容的 base_url 和 Key。DeepSeek 填 `https://api.deepseek.com/v1` + `deepseek-chat`，两者都是 OpenAI 兼容协议，不需要额外代码。
 

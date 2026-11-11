@@ -925,7 +925,6 @@ def main():
           _after["model"])
 
     # 弹窗结构：底部不再有统一保存，三节各有自己的保存按钮
-    import re as _re
     _html = (pathlib.Path(__file__).parent / "templates" / "index.html").read_text(encoding="utf-8")
     check("底部统一保存按钮已删除", 'id="prefs-save"' not in _html)
     check("底部换成还原默认", 'id="prefs-reset"' in _html)
@@ -1918,7 +1917,7 @@ def main():
         _st81 = _s81b["status"]
         check("在场名单被更新", _st81.get("present") == ["我", "甲"], str(_st81))
         check("离场名单被更新", _st81.get("away") == ["乙"], str(_st81))
-        check("地点被更新", _st81.get("place") == "某城·酒馆", str(_st81))
+        check("地点被更新", _st81.get("location") == "某城·酒馆", str(_st81))
         check("名单外的人不会混进在场", "不存在的人" not in _st81.get("present", []))
         rp_characters.model_text = _fake
         rp_characters.refresh_states(_s81b, "甲坐下。")
@@ -2198,6 +2197,32 @@ def main():
           _ps.read_bytes()[:3] == b"\xef\xbb\xbf")
     check("启动脚本不传 py -3",
           "'-3'" not in _pst)
+
+    # 93. 安全基线：跨站、Host、体积、CVE 下限
+    _api = (pathlib.Path(__file__).parent / "rp" / "api.py").read_text(encoding="utf-8")
+    _cfg = (pathlib.Path(__file__).parent / "rp" / "config.py").read_text(encoding="utf-8")
+    _req = (pathlib.Path(__file__).parent / "requirements.txt").read_text(encoding="utf-8")
+    check("写请求有跨站守卫", "before_request" in _api and "拒绝跨站请求" in _api)
+    check("Host 白名单已配", "TRUSTED_HOSTS" in _cfg)
+    check("请求体有上限", "MAX_CONTENT_LENGTH" in _cfg)
+    check("安全响应头已注入", "X-Content-Type-Options" in _api)
+    check("urllib3 下限跟上 CVE", "urllib3>=2.6.3" in _req)
+    check("入参不再直接 .strip()", '(data.get("message") or "").strip()' not in _api)
+    check("日志不写剧情原文", "raw=answer[" not in _api)
+
+    # 地点只走 location：写进 place 等于丢到无人读的键
+    _ch = (pathlib.Path(__file__).parent / "rp" / "characters.py").read_text(encoding="utf-8")
+    check("地点统一写 location", 'st["place"]' not in _ch and 'st["location"] = place' in _ch)
+
+    # 文档与实现的路由数对得上
+    _doc = (pathlib.Path(__file__).parent / "docs" / "DATA.md").read_text(encoding="utf-8")
+    _routes = len([1 for ln in _api.split(chr(10))
+                   if ln.startswith(("@app.get", "@app.post", "@app.put", "@app.delete"))])
+    _rows = len([1 for ln in _doc.split(chr(10))
+                 if ln.startswith("    GET ") or ln.startswith("    POST ")
+                 or ln.startswith("    PUT ") or ln.startswith("    DELETE ")])
+    check("路由表与实现同数", _routes == _rows, "%d vs %d" % (_routes, _rows))
+    check("SSE 文档写对字段名", '"content": "正文增量"' in _doc)
 
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:

@@ -16,3 +16,9 @@ i.py
 cm.txt
 mk_*.py
 mk_*.txt
+
+# 工具产物，接入 pytest/ruff/coverage 后不该脏仓库
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/

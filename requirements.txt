@@ -1,2 +1,6 @@
-flask>=3.1
-requests>=2.31
+# 下界写死：上个版本的 Flask 4 / requests 3 会改接口，不能让一次 pip install 把环境换成另一套。
+# urllib3 下限是因为 2.6.3 之前有 CVE-2026-21441（重定向 + 压缩弹），
+# 而 llm.py 恰好走 stream=True + 默认跟随重定向。
+flask>=3.1,<4
+requests>=2.32.5,<3
+urllib3>=2.6.3,<3

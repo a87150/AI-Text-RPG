@@ -7,6 +7,7 @@ import uuid
 
 import requests
 from flask import Response, jsonify, render_template, request, send_file
+from urllib.parse import quote as url_quote, urlsplit
 
 from .characters import (
     advance_turn, apply_change, ensure_characters,
@@ -50,6 +51,46 @@ from .storage import (
 )
 
 load_settings()
+
+def _str(data, key, limit=0):
+    """取一个去空白的字符串入参。
+
+    直接 (data.get(k) or "").strip() 遇到数字会抛 AttributeError，
+    而 Flask 没有错误处理器时会返回 HTML 错误页，前端读不到 error 字段。
+    类型不对当空处理，由各路由自己的必填判断去报 400。
+    """
+    val = data.get(key) if isinstance(data, dict) else None
+    text = val.strip() if isinstance(val, str) else ""
+    return text[:limit] if limit else text
+
+
+# ============================== 入口守卫 ==============================
+# 本机应用没有登录，一个跨站 <form method=post> 就能替用户改写设置、
+# 反复建备份把历史包挤出保留份数。写请求只接受本机来源。
+_SAFE_METHODS = frozenset(("GET", "HEAD", "OPTIONS"))
+_LOCAL_HOSTS = frozenset(("127.0.0.1", "localhost", "::1"))
+
+
+@app.before_request
+def _reject_cross_site():
+    if request.method in _SAFE_METHODS:
+        return None
+    origin = request.headers.get("Origin") or request.headers.get("Referer") or ""
+    if not origin:
+        return None          # 本机脚本 / curl 不带这个头，不能把它们挡在外面
+    host = (urlsplit(origin).hostname or "").lower()
+    if host not in _LOCAL_HOSTS:
+        return jsonify({"error": "拒绝跨站请求"}), 403
+    return None
+
+
+@app.after_request
+def _security_headers(resp):
+    # 不放 CSP：现有页面用了内联 style 和内联事件，上 CSP 会直接白屏。
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("Referrer-Policy", "no-referrer")
+    return resp
+
 
 # ============================== 路由 ==============================
 @app.get("/")
@@ -365,7 +406,7 @@ def api_get_story(story_sid):
 @app.post("/api/stories")
 def api_create_story():
     data = request.get_json(silent=True) or {}
-    story = new_story((data.get("title") or "").strip() or DEFAULT_TITLE)
+    story = new_story(_str(data, "title") or DEFAULT_TITLE)
     save_story(story)
     return jsonify(story), 201
 
@@ -476,7 +517,7 @@ def api_export_markdown(sid):
     name = "".join(ch for ch in (sess.get("title") or "story")
                    if ch.strip() and ch not in '\\/:*?"<>|') or "story"
     resp = app.response_class(text, mimetype="text/markdown; charset=utf-8")
-    resp.headers["Content-Disposition"] = "attachment; filename*=UTF-8''%s.md" % requests.utils.quote(name)
+    resp.headers["Content-Disposition"] = "attachment; filename*=UTF-8''%s.md" % url_quote(name)
     return resp
 
 
@@ -788,7 +829,7 @@ def api_promote_lore(sid):
     只在你点的时候发生，不会自动回写。只增不改：模板里已有同名 keys 的跳过。
     """
     data = request.get_json(silent=True) or {}
-    keys = str(data.get("keys") or "").strip()
+    keys = _str(data, "keys")
     everything = bool(data.get("all"))
     with get_session_lock(sid):
         sess = load_session(sid)
@@ -886,47 +927,50 @@ def api_commit_partial(sid):
     停止时后端那一轮已经被掐断，不会自己写盘，所以这里补一条；
     之后用户接着写，上下文里就有这段。
     """
-    sess = load_session(sid)
-    if not sess:
-        return jsonify({"error": "会话不存在"}), 404
     data = request.get_json(silent=True) or {}
-    content = str(data.get("content") or "").strip()
+    content = _str(data, "content")
     if not content:
         return jsonify({"error": "没有内容可存"}), 400
-    speaker = str(data.get("speaker") or "").strip()
-    # 赛跑：用户点停止的同时后端也可能把完整回复写进去了。
-    # 已经有一条 assistant 把这段包含进去了就不再重复存，否则一轮会变成两条。
-    msgs = sess.setdefault("messages", [])
-    last = msgs[-1] if msgs else None
-    if last and last.get("role") == "assistant":
-        existing = (last.get("content") or "").strip()
-        if existing and (existing.startswith(content) or content.startswith(existing)):
-            out = dict(sess)
-            out["context_chars"] = context_chars(sess)
-            out["context"] = context_info(sess)
-            return jsonify(out)
-    msg = {"role": "assistant", "content": content, "partial": True}
-    if speaker:
-        msg["speaker"] = speaker
-    msg["turn"] = sess.get("turn") or 0
-    msgs.append(msg)
-    try:
-        save_session(sess, expect=data.get("updated_at"))
-    except StaleSession as exc:
-        metrics.note("session.stale", sid=sid, expected=exc.expected, actual=exc.actual, path="commit_partial")
-        return jsonify({"error": "这个对话在别处更新过，已重新读取",
-                        "conflict": True}), 409
-    out = dict(sess)
-    out["context_chars"] = context_chars(sess)
-    out["context"] = context_info(sess)
-    return jsonify(out)
+    speaker = _str(data, "speaker")
+    # 整段进锁：读-改-写分开做的话，这里添的草稿会和
+    # /api/chat 提交的完整回复互相覆盖。
+    with get_session_lock(sid):
+        sess = load_session(sid)
+        if not sess:
+            return jsonify({"error": "会话不存在"}), 404
+        # 赛跑：用户点停止的同时后端也可能把完整回复写进去了。
+        # 已经有一条 assistant 把这段包含进去了就不再重复存，否则一轮会变成两条。
+        msgs = sess.setdefault("messages", [])
+        last = msgs[-1] if msgs else None
+        if last and last.get("role") == "assistant":
+            existing = (last.get("content") or "").strip()
+            if existing and (existing.startswith(content) or content.startswith(existing)):
+                out = dict(sess)
+                out["context_chars"] = context_chars(sess)
+                out["context"] = context_info(sess)
+                return jsonify(out)
+        msg = {"role": "assistant", "content": content, "partial": True}
+        if speaker:
+            msg["speaker"] = speaker
+        msg["turn"] = sess.get("turn") or 0
+        msgs.append(msg)
+        try:
+            save_session(sess, expect=data.get("updated_at"))
+        except StaleSession as exc:
+            metrics.note("session.stale", sid=sid, expected=exc.expected, actual=exc.actual, path="commit_partial")
+            return jsonify({"error": "这个对话在别处更新过，已重新读取",
+                            "conflict": True}), 409
+        out = dict(sess)
+        out["context_chars"] = context_chars(sess)
+        out["context"] = context_info(sess)
+        return jsonify(out)
 
 
 @app.put("/api/sessions/<sid>/message")
 def api_edit_message(sid):
     """就地改一条消息的文本。"""
     data = request.get_json(silent=True) or {}
-    text = (data.get("content") or "").strip()
+    text = _str(data, "content")
     try:
         index = int(data.get("index"))
     except (TypeError, ValueError):
@@ -981,7 +1025,7 @@ def api_clear_session(sid):
 def api_character_pick(sid):
     """角色满了以后用户的选择：drop 传名字就踢掉那个人换新的，传空就不要新角色。"""
     data = request.get_json(silent=True) or {}
-    drop = str(data.get("drop") or "").strip()
+    drop = _str(data, "drop")
     with get_session_lock(sid):
         sess = load_session(sid)
         if not sess:
@@ -1025,23 +1069,23 @@ def api_compress_session(sid):
 def api_enhance():
     """一次只生成一个字段：输出短、失败只重试这一项。"""
     data = request.get_json(silent=True) or {}
-    field = (data.get("field") or "").strip()
-    name = (data.get("name") or "").strip()
+    field = _str(data, "field")
+    name = _str(data, "name")
 
-    user_role = (data.get("user_role") or "").strip()
-    ai_role = (data.get("ai_role") or "").strip()
-    world = (data.get("world") or "").strip()
-    rules = (data.get("rules") or "").strip()
-    user_name = (data.get("user_name") or "").strip()
-    ai_name = (data.get("ai_name") or "").strip()
+    user_role = _str(data, "user_role")
+    ai_role = _str(data, "ai_role")
+    world = _str(data, "world")
+    rules = _str(data, "rules")
+    user_name = _str(data, "user_name")
+    ai_name = _str(data, "ai_name")
     characters = data.get("characters")
     if not isinstance(characters, list):
         characters = []
-    opening = (data.get("opening") or "").strip()
+    opening = _str(data, "opening")
     lore = data.get("lore")
     if not isinstance(lore, list):
         lore = []
-    mode = (data.get("mode") or "").strip()
+    mode = _str(data, "mode")
 
     if field == "ai_role":      # 老前端调用的名字，统一成 character
         field = "character"
@@ -1346,7 +1390,7 @@ def _commit_turn(s2, turn, use_rp, resume=False):
 def api_chat():
     data = request.get_json(silent=True) or {}
     sid = data.get("session_id")
-    text = (data.get("message") or "").strip()
+    text = _str(data, "message")
     is_retry = bool(data.get("retry"))
     is_continue = bool(data.get("continue"))
 
@@ -1406,7 +1450,9 @@ def api_chat():
     except Exception as exc:
         release_busy(sid)
         app.logger.exception("追加用户消息失败：%s", exc)
-        return jsonify({"error": "保存消息失败：%s" % exc}), 500
+        # 异常串里带着路径和 JSON 结构，只进日志不进响应
+        metrics.note("session.save_fail", sid=sid, error=str(exc)[:300])
+        return jsonify({"error": "保存消息失败，详情见后端日志"}), 500
 
     # 前端不再传温度，改成创意档位；显式传的 temperature 仍然优先（兼容旧页面）
     try:
@@ -1434,8 +1480,9 @@ def api_chat():
 
             turn = parse_turn(answer, speaker, cast if use_rp else None)
             if not turn.get("status") and ("[[" in answer or "【地点" in answer):
+                # 只记长度和指纹：原文是私人剧情，落进日志就是长期可 grep
                 metrics.note("status.parse_fail", sid=sid, mode="rp" if use_rp else "normal",
-                             raw=answer[-300:])
+                             raw_len=len(answer), raw_tail=answer[-40:].replace(chr(10), " "))
             if use_rp and not (turn["lines"] or turn["narrator"]):
                 yield sse({"type": "error",
                            "message": "模型这一轮没写出内容（旁白和角色发言都空），请重试。"})

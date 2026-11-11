@@ -27,7 +27,7 @@
 
 ### 项目结构概览（限深 3 层）
 
-`
+```
 lt/
 ├── lt.py              入口：注册 rp.api.app，启动 Flask（127.0.0.1:5000）
 ├── check.py           唯一自检入口，2200 行，89 个编号分组，605 处 check()
@@ -49,7 +49,7 @@ lt/
 ├── docs/              8 份文档：架构/功能/配置/提示词/数据/开发/设计/更新记录
 ├── data/              会话、故事、快照、settings.json（含明文 Key，已 gitignore）
 ├── backups/  logs/    备份包与按日 JSON 事件日志（均已 gitignore）
-`
+```
 
 **关键外部依赖与配置项**：Ollama（默认 `OLLAMA_HOST`，本机）；任意 OpenAI 兼容 `base_url` + `api_key`（存 `data/settings.json`）；环境变量 `PORT`、`LT_DATA_DIR`、`LT_BACKUP_DIR`、`LT_LOG_DIR`（后三者供自检隔离用）。
 
@@ -286,7 +286,7 @@ lt/
 
 ### 已执行的检查命令与结果摘要
 
-`
+```
 git log --oneline -8 / rev-list --count HEAD   → HEAD c21ea29，137 commits，单分支 main，无 tag
 git status --short                              → 空（工作区干净）
 python check.py                                 → EXIT=0，ALL CHECKS PASSED，约 1s
@@ -310,7 +310,7 @@ curl api.osv.dev/v1/vulns/GHSA-38jv-5279-wg99   → HTTP 200，aliases 含 CVE-2
 curl pypi.org/pypi/urllib3/json                 → 最新 2.8.0（2.6.3 之后已有 2.7.0、2.8.0）
 实测 list_sessions()                            → 4.5 ms / 17 会话
 实测 load_session(108KB)                        → 0.5 ms
-`
+```
 
 ### 未能覆盖的范围及原因
 
@@ -333,7 +333,7 @@ curl pypi.org/pypi/urllib3/json                 → 最新 2.8.0（2.6.3 之后�
 
 ### 复现步骤（针对关键 P1）
 
-`
+```
 # P1-01 依赖漏洞
 python -c "import urllib3; print(urllib3.__version__)"   # 2.5.0（< 2.6.3）
 curl -s https://api.osv.dev/v1/vulns/GHSA-38jv-5279-wg99 | findstr CVE-2026-21441
@@ -349,7 +349,7 @@ findstr /n "STATUS_FIELDS" rp\characters.py    # 409 只含 location
 # P1-09 测试形态
 python -m pytest check.py --collect-only -q    # no tests collected
 findstr /c:"assert " check.py                  # 0 命中
-`
+```
 
 ---
 
@@ -397,11 +397,11 @@ SQLite 的引入门槛是"并发写 + 复杂查询 + 数据量超内存"，本�
 
 `completion_events` 用同一个循环同时处理"内容太短要重试"与"接口返回非 200"，且 `continue` 前没有任何退避：
 
-`python
+```python
 if resp.status_code != 200:
     last_error = "接口返回 %s" % resp.status_code
     continue        # 立即重试，温度 +0.1
-`
+```
 
 两个问题叠加：模型服务挂掉或返回 429 时，会在几毫秒内连打满 `MAX_CHAT_ATTEMPTS = 3` 次；而 5xx 属传输故障，提温度（`base_temp + RETRY_TEMP_STEP * (attempt - 1)`，`llm.py:149`）对它毫无意义——升温只对"生成质量不达标"有效。
 
@@ -415,9 +415,9 @@ if resp.status_code != 200:
 修复：在 `_stream_model` 内套 `try/finally: resp.close()`。影响很小（本地、单用户、连接池会回收），属正确性问题而非性能问题。
 **未验证**：未构造断连场景实测 CLOSE_WAIT 是否堆积，此条为静态推演。
 
-**（3）@settings.json@ 缺整体 schema 版本**（`rp/config.py`）
+**（3）`settings.json` 缺整体 schema 版本**（`rp/config.py`）
 
-@writing_version` 的存在说明已有迁移意识（写作参数可演进），但 settings 整体没有版本字段。加一个 `settings_version`，将来改结构时才有据可依，否则只能靠键名嗅探判断。验收：`load_settings` 能按版本号分支处理旧格式。
+`writing_version` 的存在说明已有迁移意识（写作参数可演进），但 settings 整体没有版本字段。加一个 `settings_version`，将来改结构时才有据可依，否则只能靠键名嗅探判断。验收：`load_settings` 能按版本号分支处理旧格式。
 
 ### 6.4 值得引入的开源项目：只有四个，且都已在环境里
 
@@ -436,7 +436,6 @@ if resp.status_code != 200:
 |---|---|
 | SQLAlchemy 或任何 ORM | 把可读可手改的 JSON 变成不可读库文件，换来用不到的查询能力 |
 | FastAPI + Pydantic | 41 个只跑在 `127.0.0.1` 的路由不需要整套校验框架；`request.get_json` 加十几个 `isinstance` 即可 |
-| Celery / Redis | 后台压缩现用 `threading.Thread` + 5 分钟失败退避（`context.py:148-164`）已够；引入队列是为想象中的负载付费 |
 | 前端框架（Vue/React） | 4436 行原生 ES Module 已在跑，`mdToHtml` 的转义顺序还是对的；重写是净损失 |
 | Alembic 等迁移工具 | 没有 schema 就没有迁移（若按 6.1 维持 JSON 存储） |
 
@@ -451,7 +450,6 @@ if resp.status_code != 200:
 前四项都不需要新增任何第三方依赖。这个项目的真正短板不是"缺工具"，而是**没有闸门**——所以补工具的重点应是让已有的 605 条断言和 41 个路由无法被悄悄绕过，而不是引入更多能力。
 
 ---
-
 
 ## 审查结论
 

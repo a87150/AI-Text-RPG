@@ -42,6 +42,11 @@ app = Flask(
 # 本地小应用：改模板不该还要重启，模板缓存会让人以为是"代码没生效"
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 app.jinja_env.auto_reload = True
+# 只服务本机。不限 Host 的话，外部域名指向 127.0.0.1 就能以
+# 同源身份读完所有会话正文。
+app.config["TRUSTED_HOSTS"] = ["127.0.0.1", "localhost", "::1"]
+# 一份会话 JSON 再大也不该碰这个数；超了直接 413，不让它整份进内存
+app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024
 
 SETTINGS_PATH = os.path.join(DATA_DIR, "settings.json")
 _model_lock = threading.Lock()
@@ -327,15 +332,6 @@ def save_mode(value, persist=True):
     if persist:
         persist_settings()
     return value
-
-
-def _clamp(key, value):
-    lo, hi = WRITING_BOUNDS[key]
-    try:
-        return max(lo, min(hi, int(value)))
-    except (TypeError, ValueError):
-        return WRITING_DEFAULTS[key]
-
 
 def writing():
     with _model_lock:

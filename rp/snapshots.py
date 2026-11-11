@@ -12,7 +12,6 @@ from .config import DATA_DIR
 
 SNAP_DIR = os.path.join(DATA_DIR, "snapshots")
 KEEP = 10
-_lock_reasons = ("compress", "settings", "turn", "manual", "restore")
 
 import threading
 _lock = threading.RLock()

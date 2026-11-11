@@ -83,12 +83,19 @@ function setActive(n) {
   rows[active].scrollIntoView({ block: 'nearest' });
 }
 
-/** 占位提示：这些文案都是写死的，不带用户输入。 */
-function say(html) {
+/** 占位提示：只写文字。不走 innerHTML 是因为下面的失败文案带 e.message，
+ *  它可能含服务端回显的任意字符串。 */
+function say(text) {
   const list = $('#search-hits');
   const count = $('#search-count');
   if (count) count.textContent = '';
-  if (list) list.innerHTML = html;
+  if (list) {
+    list.innerHTML = '';
+    const row = document.createElement('div');
+    row.className = 'hint';
+    row.textContent = text;
+    list.appendChild(row);
+  }
   rows = [];
   active = -1;
 }
@@ -96,7 +103,7 @@ function say(html) {
 async function runQuery(text) {
   const q = (text || '').trim();
   if (q.length < 2) {
-    say('<div class="hint">至少输入两个字。</div>');
+    say('至少输入两个字。');
     return;
   }
   const mine = ++seq;
@@ -107,7 +114,7 @@ async function runQuery(text) {
     if (mine !== seq) return;
     const hits = got.hits || [];
     if (!hits.length) {
-      say('<div class="hint">没有命中。</div>');
+      say('没有命中。');
       return;
     }
     const list = $('#search-hits');
@@ -122,7 +129,7 @@ async function runQuery(text) {
     setActive(0);
   } catch (e) {
     if (mine !== seq) return;
-    say('<div class="hint">搜索失败：' + (e.message || e) + '</div>');
+    say('搜索失败：' + (e.message || e));
   }
 }
 

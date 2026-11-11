@@ -63,14 +63,17 @@ pending_character 是角色数满时暂存的新人 {"name", "role"}，等用户
 
 POST /api/sessions/<sid>/branch {"index": n}
 
-深拷贝原会话，换新 id，标题加「（分支）」，messages 只留 [:n+1]，原会话不动。含 n 那一这条，所以两种落点都对：在你的话上分叉，新会话等一条回复；在 AI 的话上分叉，接着往下写。
+深拷贝原会话，换新 id，标题加「（分支）」，messages 只留 [:n+1]，原会话不动。含 n 那一条，所以两种落点都对：在你的话上分叉，新会话等一条回复；在 AI 的话上分叉，接着往下写。
 
 分叉点之后的东西不能带过去，否则新对话会"剧透"：
 
 - turn 退回到分叉那条消息记录的轮次（每条 assistant 消息带 turn 字段）
-- facts 只留 turn 小于该轮次的（facts 的 turn 记在本轮开始前，比消息的 turn 小 1）
-- summary 保留，因为压缩掉的都是分叉点之前的内容
-- status 与 characters[].state/history 不回滚。要精确回滚得给每条消息存完整快照，代价是整个会话文件翻几倍；而地点、在场这些会随剧情自然纠正，账本才是真正会造成矛盾的东西
+- facts 只留 turn 严格小于该轮次的（facts 的 turn 记在本轮开始前，比消息的 turn 小 1）
+- lore 只留 turn 小于该轮次的；没有 turn 字段的老条目保留
+- summary 清空、compressed_upto 归零：摘要写的是已经被撤销的剧情，留着模型会接着它往下写
+- status 与 characters[].state 按消息快照恢复。每条 assistant 消息带一份 snap（当时的 status 与每人 state），
+  回滚取剩下消息里最新的那份；一份都没有就清空。不这么做的话，场景和状态都是增量叠加的，重发后会停在
+  被撤销那一轮
 
 ## 故事 JSON
 
@@ -118,6 +121,7 @@ POST /api/sessions/<sid>/branch {"index": n}
     POST   /api/sessions/<sid>/rewind     从某条消息重写
     PUT    /api/sessions/<sid>/message    就地编辑某条消息
     POST   /api/sessions/<sid>/branch     从某条分叉出新会话
+    POST   /api/sessions/<sid>/commit_partial   把停下来的半段当正式回复存下
 
 流式生成（SSE）：
 
@@ -136,6 +140,11 @@ POST /api/sessions/<sid>/branch {"index": n}
     POST   /api/providers/<pid>           保存提供方配置
     GET    /api/sessions/<sid>/snapshots  存档点列表
     POST   /api/sessions/<sid>/snapshots/<name>/restore   回滚到某个存档点
+    DELETE /api/providers/<pid>           删掉一个自建提供方
+    POST   /api/writing/reset             写作参数恢复默认
+    GET    /api/sessions/<sid>/export.md  导出成 Markdown
+    POST   /api/sessions/import           把导出的 JSON 装回来，开一份新会话
+    POST   /api/sessions/<sid>/lore/promote   把这一局的词条固化到故事模板
     GET    /api/backups                   备份列表与定时配置
     POST   /api/backups                    立即备份
     GET    /api/backups/<name>            下载备份
@@ -163,9 +172,18 @@ POST /api/sessions/<sid>/branch {"index": n}
 ## SSE 事件
 
     {"type": "speaker", "name": "甲"}
-    {"type": "thinking", "delta": "..."}
-    {"type": "delta", "delta": "正文增量"}
+    {"type": "thinking", "chars": 128}
+    {"type": "delta", "content": "正文增量", "chars": 42}
     {"type": "retry", "attempt": 2, "max": 3, "reason": "内容太短"}
-    {"type": "result", "text": "..."}
-    {"type": "done", "message_count": 4, "context_chars": 1830, "characters": [...]}
-    {"type": "error", "message": "生成失败"}
+    {"type": "done", "attempts": 1, "context_chars": 1830, "context": {...},
+     "message_count": 4, "turn": 3, "characters": [...]}
+    {"type": "error", "message": "生成失败", "attempts": 3, "raw": "..."}
+
+delta 事件的字段名是 content，不叫 delta；thinking 只带累计字数 chars，不带原文。
+final 是内部事件，不会出现在 SSE 里。
+
+/api/enhance 走另一条流，事件只有这三种：
+
+    {"type": "delta", "content": "增量", "chars": 12}
+    {"type": "result", "field": "world", "name": "", "attempts": 1, "data": {...}}
+    {"type": "error", "message": "生成失败", "attempts": 3, "raw": "..."}
