@@ -10,6 +10,17 @@ import {
 import { loadSessions, refreshCurrentSession } from './sessions.js';
 import { api } from './api.js';
 
+/** 续写拼接：模型常把上一句末尾重复一遍，能对上就切掉。跟后端 _join_text 同一套规则。 */
+function joinText(prev, extra) {
+  if (!extra) return prev || '';
+  if (!prev) return extra;
+  for (const n of [6, 4, 2, 1]) {
+    const head = extra.slice(0, n);
+    if (head && prev.endsWith(head)) return prev + extra.slice(n);
+  }
+  return prev + extra;
+}
+
 const TICK_MS = 1000;          // 状态栏按整秒走
 const WAIT_MS = 240000;        // 单次等待上限 240 秒
 const STATUS_KEEP_MS = 4000;   // 「完成」状态保留时长
@@ -297,15 +308,31 @@ async function sendMessage(text, { isRetry, isContinue }) {
             ? { narrator: acc, speaker: '', line: '' }
             : { narrator: '', speaker: speaker || aiLabel, line: longestAcc || acc }) : null);
           if (turn && (turn.line || turn.narrator || (turn.lines || []).length)) {
-            // 完成后重排：先画外音，再按发言顺序排角色气泡
-            current = renderTurn(turnBox, turn) || current;
-            if (!s.messages) s.messages = [];
-            const msg = { role: 'assistant', content: turn.line || '' };
-            if (turn.narrator) msg.narrator = turn.narrator;
-            if (turn.speaker) msg.speaker = turn.speaker;
-            if ((turn.lines || []).length) msg.lines = turn.lines;
-            // 续写是拼到原来那条上面的，不是新增一条
-            if (!isContinue) s.messages.push(msg);
+            if (isContinue) {
+              // 续写：本地也拼到上一条上，然后整块重绘。
+              // 只把增量渲染进 turnBox 的话，s.messages 里还是拼接前的旧内容，
+              // 一重绘就凭空多出一条只含增量的气泡。
+              const tail = (s.messages && s.messages.length)
+                ? s.messages[s.messages.length - 1] : null;
+              if (tail && tail.role === 'assistant') {
+                tail.narrator = joinText(tail.narrator || '', turn.narrator || '');
+                tail.content = joinText(tail.content || '', turn.line || '');
+                if ((turn.lines || []).length) {
+                  tail.lines = (tail.lines || []).concat(turn.lines);
+                }
+              }
+              if (turnBox.parentNode) turnBox.remove();
+              renderMessages();
+            } else {
+              // 完成后重排：先画外音，再按发言顺序排角色气泡
+              current = renderTurn(turnBox, turn) || current;
+              if (!s.messages) s.messages = [];
+              const msg = { role: 'assistant', content: turn.line || '' };
+              if (turn.narrator) msg.narrator = turn.narrator;
+              if (turn.speaker) msg.speaker = turn.speaker;
+              if ((turn.lines || []).length) msg.lines = turn.lines;
+              s.messages.push(msg);
+            }
           }
           if (ev.characters) s.characters = ev.characters;
           if (ev.pending_character && ev.pending_character.name) {

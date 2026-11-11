@@ -47,10 +47,14 @@ TURN_TEXT = (
 )
 
 
+TURN_LORE = TURN_TEXT + chr(10) +     '【新词条】{"keys":"旧钟楼","content":"城里的钟楼。"}'
+
+
 def fake_completion_events(messages, base_temp=0.8, max_attempts=3, min_chars=0,
                            extra=None, validate=None, with_reasoning=False, **kw):
     if MODE["kind"] == "final":
-        yield {"type": "final", "text": TURN_TEXT, "attempts": 1}
+        text = TURN_LORE if MODE.get("lore") else TURN_TEXT
+        yield {"type": "final", "text": text, "attempts": 1}
         return
     yield {"type": "error", "attempts": 1, "message": "离线自检不调用模型", "raw": ""}
 
@@ -1593,7 +1597,8 @@ def main():
     check("形参里声明了 isContinue", bool(_sig70) and "isContinue" in _sig70[0])
     check("形参里声明了 isRetry", bool(_sig70) and "isRetry" in _sig70[0])
     check("续写请求体真的带了 continue", "continue: !!isContinue" in _chat70)
-    check("续写不重复往本地列表塞消息", "if (!isContinue) s.messages.push" in _chat70)
+    check("续写走本地拼接而不新增一条",
+          "tail.narrator = joinText(" in _chat70 and "return prev + extra" in _chat70)
     check("续写不画用户气泡", "!isRetry && !isContinue" in _chat70)
     _ui70 = (pathlib.Path(__file__).parent / "static" / "js" / "ui.js").read_text(encoding="utf-8")
     check("只有最后一条回复能续写", "index === msgs.length - 1" in _ui70)
@@ -1867,6 +1872,34 @@ def main():
               rp_characters.refresh_states(_s81, "甲起身。") == 0)
     finally:
         rp_characters.model_text = _orig_text
+
+    # 82. 续写不能新增一条：之前 add_lore 的插入把 return 吞进了 for 循环
+    sid82 = client.post("/api/sessions", json={}).get_json()["id"]
+    client.put("/api/sessions/" + sid82, json={"ai_name": "甲", "ai_role": "警察"})
+    _live82 = rp_storage.load_session(sid82)
+    _live82["messages"] = [
+        {"role": "user", "content": "他推门。", "turn": 1},
+        {"role": "assistant", "content": "", "narrator": "雨还在下。", "turn": 1},
+    ]
+    rp_storage.save_session(_live82)
+    MODE["kind"] = "final"
+    MODE["lore"] = True          # 这一轮还要长出一条词条
+    try:
+        # 必须把响应体读完：SSE 是生成器，不读就不执行，落库也不会发生
+        client.post("/api/chat", json={"session_id": sid82, "continue": True}).get_data(as_text=True)
+        _after82 = rp_storage.load_session(sid82)
+        check("续写不新增消息",
+              len(_after82["messages"]) == 2, str(len(_after82["messages"])))
+        check("续写拼到原来那条上",
+              _after82["messages"][-1]["role"] == "assistant", str(_after82["messages"][-1])[:60])
+        check("续写的正文真拼上了",
+              len(_after82["messages"][-1].get("narrator") or "") > len("雨还在下。"),
+              repr((_after82["messages"][-1].get("narrator") or "")[:60]))
+        check("续写那一轮也能长词条",
+              any((e.get("keys") or "") == "旧钟楼" for e in (_after82.get("lore") or [])),
+              str(_after82.get("lore")))
+    finally:
+        MODE["lore"] = False
 
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:

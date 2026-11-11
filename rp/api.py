@@ -1230,9 +1230,9 @@ def _commit_turn(s2, turn, use_rp, resume=False):
         if turn.get("status"):
             s2["status"] = merge_status(s2.get("status"), turn["status"])
         merge_facts(s2, turn.get("facts"), s2.get("turn"))
-    # 对话里新长出来的词条只进这一局的世界书，不碰故事模板
-    for entry in turn.get("lore") or []:
-        add_lore(s2, entry)
+        # 对话里新长出来的词条只进这一局的世界书，不碰故事模板
+        for entry in turn.get("lore") or []:
+            add_lore(s2, entry)
         save_session(s2)
         return tail
     if use_rp:
@@ -1248,6 +1248,8 @@ def _commit_turn(s2, turn, use_rp, resume=False):
     if turn.get("status"):
         s2["status"] = merge_status(s2.get("status"), turn["status"])
     merge_facts(s2, turn.get("facts"), s2.get("turn"))
+    for entry in turn.get("lore") or []:
+        add_lore(s2, entry)
     # 一轮里模型可能一次加好几个人（【新角色】后面连写几行 JSON）
     fresh = turn.get("new_characters") or ([turn["new_character"]] if turn["new_character"] else [])
     for item in fresh:
