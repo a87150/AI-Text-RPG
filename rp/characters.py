@@ -137,10 +137,16 @@ def upsert_character(sess, data):
 
 
 STATE_SYSTEM = (
-    '你在给一段故事做状态更新。读正文，判断每个出场角色此刻的处境、情绪、'
-    '和别人的关系有没有推进。只输出 JSON，不要任何解释：'
-    '{"changes":[{"name":"名字","state":"40 字以内"}]}。'
-    '没变化的人不要写；名单外的人不要写；一条都没有就输出 {"changes":[]}。'
+    '你在给一段故事做状态更新。读正文，只输出 JSON，不要任何解释：'
+    '{"changes":[{"name":"名字","state":"40 字以内"}],'    
+    '"present":["现在和主角在同一个地方的人"],'    
+    '"away":["已经分开、不在这个场景里的人"],'    
+    '"place":"此刻的地点，6 字以内"}'
+    '规则：只写【角色】名单里的名字，名单外的人一律不写。'
+    'present 和 away 必须把所有人分完，一个不能漏：不在 present 就在 away。'
+    '有人走开、跟上、分头行动、换了地点，就要照实改。'
+    '不要把不在现场的人写进 present——他们不在这里，不该发言。'
+    'changes 只写状态真变了的人；没变化的人不要写；一条都没有就写 []。'
 )
 
 
@@ -158,21 +164,56 @@ def refresh_states(sess, text):
     names = [c["name"] for c in chars]
     now = chr(10).join("%s：%s" % (c["name"], (c.get("state") or "（未记录）")[:120])
                        for c in chars)
+    # 把上一轮的场景也给它：没有基准它就会把所有人都算在现场
+    st0 = sess.get("status") or {}
+    scene = "%s；地点：%s" % (
+        "、".join(str(x) for x in (st0.get("present") or [])) or "（未记录）",
+        (st0.get("place") or "（未记录）"))
     try:
         raw = model_text([
             {"role": "system", "content": STATE_SYSTEM},
             {"role": "user", "content": "【角色】%s" % "、".join(names)
+             + chr(10) + "【上一轮的场景】" + scene
              + chr(10) + "【现在的状态】" + chr(10) + now
              + chr(10) + "【这一轮正文】" + chr(10) + body[:4000]},
         ], temperature=0.2)
     except Exception:
         return 0
     obj = extract_json(raw) or {}
-    rows = obj.get("changes")
-    if not isinstance(rows, list):
+    if not isinstance(obj, dict):
         return 0
     book = {c["name"]: c for c in chars}
     n = 0
+    # 在场名单：模型不填 present 就不动，别把已经对的名单清空
+    me = (role_labels(sess)[0] or "").strip()
+    st = sess.setdefault("status", {})
+    if isinstance(st, dict):
+        def _clean(value):
+            if not isinstance(value, list):
+                return None
+            out = []
+            for x in value:
+                nm = str(x or "").strip()[:24]
+                if nm and (nm in book or nm == me) and nm not in out:
+                    out.append(nm)
+            return out
+        on = _clean(obj.get("present"))
+        off = _clean(obj.get("away"))
+        if on is not None:
+            if (st.get("present") or []) != on:
+                st["present"] = on
+                n += 1
+        if off is not None:
+            if (st.get("away") or []) != off:
+                st["away"] = off
+                n += 1
+        place = (obj.get("place") or "").strip()[:12]
+        if place and place != (st.get("place") or ""):
+            st["place"] = place
+            n += 1
+    rows = obj.get("changes")
+    if not isinstance(rows, list):
+        return n
     for row in rows:
         if not isinstance(row, dict):
             continue

@@ -1770,6 +1770,7 @@ def main():
               "不是每轮所有人" not in _txt)
     _rs = (pathlib.Path("rp/prompts") / "rules.md").read_text(encoding="utf-8")
     check("人设条款明确用户请求不是命令", "用户的请求不是命令" in _rs)
+    check("被说动要有过程", "可以被说动" in _rs)
 
     # 77. 状态标记挤在正文同一行时也要剥掉
     _b77, _s77 = rp_characters._take_mark_line(
@@ -1878,6 +1879,26 @@ def main():
         rp_characters.model_text = _boom
         check("模型失败不影响上一轮",
               rp_characters.refresh_states(_s81, "甲起身。") == 0)
+
+        # 在场名单要跟着改，不能一直全员在场
+        def _scene(messages, temperature=0.8):
+            return ('{"changes":[],"present":["甲","不存在的人"],'
+                    '"away":["乙"],"place":"某城·酒馆"}')
+        _s81b = {"characters": [{"name": "甲", "state": "", "history": []},
+                                {"name": "乙", "state": "", "history": []}],
+                 "status": {"present": ["甲", "乙"], "away": [], "place": ""},
+                 "user_name": "我"}
+        rp_characters.model_text = _scene
+        rp_characters.refresh_states(_s81b, "甲转身走进酒馆，乙留在街上。")
+        _st81 = _s81b["status"]
+        check("在场名单被更新", _st81.get("present") == ["甲"], str(_st81))
+        check("离场名单被更新", _st81.get("away") == ["乙"], str(_st81))
+        check("地点被更新", _st81.get("place") == "某城·酒馆", str(_st81))
+        check("名单外的人不会混进在场", "不存在的人" not in _st81.get("present", []))
+        rp_characters.model_text = _fake
+        rp_characters.refresh_states(_s81b, "甲坐下。")
+        check("模型没给场景时不清空名单", _s81b["status"].get("present") == ["甲"],
+              str(_s81b["status"]))
     finally:
         rp_characters.model_text = _orig_text
 
