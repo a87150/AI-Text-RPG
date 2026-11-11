@@ -1749,6 +1749,28 @@ def main():
           rp_config.save_writing({"auto_roles": 0}, persist=False)["auto_roles"] == 0)
     rp_config.save_writing({"auto_roles": 1}, persist=False)
 
+    # 77. 状态标记挤在正文同一行时也要剥掉
+    _b77, _s77 = rp_characters._take_mark_line(
+        "甲笑了。[[地点：某酒馆|时间：深夜]]说完就走")
+    check("行内状态被剥掉、正文留着",
+          _b77 == "甲笑了。说完就走", repr(_b77))
+    check("行内状态被解析出来",
+          _s77.get("location") == "某酒馆" and _s77.get("time") == "深夜",
+          str(_s77))
+    _b77b, _s77b = rp_characters._take_mark_line("[[地点：某酒馆|时间：深夜]]")
+    check("独占一行照旧能剥",
+          _b77b == "" and _s77b.get("location") == "某酒馆", repr(_b77b))
+    _b77c, _s77c = rp_characters._take_mark_line("甲说[[这不是状态]]完了")
+    check("不是状态键的方括号不动",
+          _b77c == "甲说[[这不是状态]]完了" and _s77c == {},
+          repr(_b77c))
+    check("兜底清理也不误伤",
+          rp_characters.strip_status_leaks("甲说[[这不是状态]]完了")
+          == "甲说[[这不是状态]]完了")
+    check("兜底清理行内残渣",
+          rp_characters.strip_status_leaks("甲笑了。[[地点：某酒馆]]说完就走")
+          == "甲笑了。说完就走")
+
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")

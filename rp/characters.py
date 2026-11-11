@@ -143,6 +143,11 @@ STATUS_RE = re.compile(r"<StatusBlock>(.*?)</StatusBlock>", re.S | re.I)
 # 单行写法：[[地点：某酒馆|时间：深夜|关系：戒备|物品：湿伞|目标：等对方开口|事实：甲；乙]]
 MARK_KEYS_RX = "在场|离场|退场|地点|位置|场景|时间|关系|人物|物品|携带|目标|意图|事实"
 # 模型常常把 [[…]] 写成【…】，两个竖线还在；不认这种写法的话整行状态就丢了
+# 模型常把状态跟正文挤在一行：「她笑了。[[地点：某酒馆|时间：深夜]]」
+# 整行锚定的规则吃不到这种，状态就整段漏进正文。下面这条只认带状态键的方括号。
+INLINE_MARK_RE = re.compile(
+    r"\[\[((?:" + MARK_KEYS_RX + r")[:：][^\[\]]{0,400})\]\]"
+)
 MARK_RE = re.compile(
     r"^[ \t]*\[\[([^\[\]]{2,400})\]\][ \t]*$"
     r"|^[ \t]*【((?:" + MARK_KEYS_RX + r")[：:][^【】]{0,380})】[ \t]*$",
@@ -165,11 +170,17 @@ def _take_mark_line(text):
     """剥掉 [[…]] 状态行并解析成 status；格式不对就整行丢弃。"""
     src = text or ""
     match = MARK_RE.search(src)
-    if not match:
-        return src, {}
-    src = (src[:match.start()] + src[match.end():]).strip()
+    if match:
+        src = (src[:match.start()] + src[match.end():]).strip()
+        body = match.group(1) or match.group(2) or ""
+    else:
+        inline = INLINE_MARK_RE.search(src)
+        if not inline:
+            return src, {}
+        src = (src[:inline.start()] + src[inline.end():]).strip()
+        body = inline.group(1)
     status = {}
-    for chunk in re.split(r"[|｜]", match.group(1) or match.group(2) or ""):
+    for chunk in re.split(r"[|｜]", body):
         if "：" in chunk:
             key, value = chunk.split("：", 1)
         elif ":" in chunk:

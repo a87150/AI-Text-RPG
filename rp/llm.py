@@ -167,6 +167,13 @@ _LEAK_JSON = re.compile(
     r'|地点|时间|关系|物品|目标|事实)"(?:[^{}]|\{[^{}]*\})*\}',
     re.S | re.I,
 )
+# 正文后面紧跟的 [[地点：…]]：_LEAK_LINE 是整行锚定的，挤在同一行就吃不到。
+# 只认带状态键的，正文里偶然出现的其他方括号不动（键名跟 characters.MARK_KEYS 一致，
+# 那边是从这里导入的，不能反过来）。
+_LEAK_MARK = re.compile(
+    r"[ \t]*\[\[(?:在场|离场|退场|地点|位置|场景|时间|关系|人物|物品|携带|目标|意图|事实)"
+    r"[：:][^\[\]]{0,400}\]\][ \t]*"
+)
 # 状态块前后常带的分隔线与空字段名，本身没有意义
 _LEAK_LINE = re.compile(
     r"^[ 	]*(?:-{2,}|={2,}|新事实[：:]?|事实[：:]?|状态[：:]?|当前状态[：:]?"
@@ -187,6 +194,7 @@ def strip_status_leaks(text):
     body = _LEAK_BLOCK.sub("", body)
     body = _LEAK_TAG.sub("", body)
     body = _LEAK_JSON.sub("", body)
+    body = _LEAK_MARK.sub("", body)
     body = body.replace("\x60\x60\x60json", "").replace("\x60\x60\x60", "")
     body = _LEAK_LINE.sub("", body)
     body = re.sub(r"\n{3,}", "\n\n", body)
