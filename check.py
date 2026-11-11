@@ -2186,6 +2186,19 @@ def main():
     check("侧栏品牌是代面", "🎭 代面<span class=\"ver\"" in _tpl)
     check("旧名不残留", "灵枢" not in _tpl)
 
+    # 92. 一键启动脚本：该跳的跳，不该跳的不能跳
+    _ps = pathlib.Path(__file__).parent / "start.ps1"
+    check("启动脚本在根目录", _ps.exists())
+    _pst = _ps.read_text(encoding="utf-8-sig")
+    check("脚本用 venv", "-m venv" in _pst and ".venv" in _pst)
+    check("脚本记住依赖指纹", ".requirements.hash" in _pst)
+    check("指纹不依赖 Get-FileHash（部分机器没这个模块）",
+          "(Get-FileHash" not in _pst and "SHA256" in _pst)
+    check("启动脚本带着中文，读时要 UTF-8 BOM",
+          _ps.read_bytes()[:3] == b"\xef\xbb\xbf")
+    check("启动脚本不传 py -3",
+          "'-3'" not in _pst)
+
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")

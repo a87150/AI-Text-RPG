@@ -15,7 +15,21 @@ ollama serve
 ollama pull dmtx/qwen3.5-9b-abliterated
 ```
 
-然后：
+然后起服务。Windows 一键起（自动建 `.venv`、装依赖，都齐了就直接起）：
+
+```powershell
+.\start.ps1
+```
+
+头一次跑如果提示脚本被禁止执行，套一层：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\start.ps1
+```
+
+常用参数：`-Port 5001` 换端口，`-Stop` 先干掉占着端口的旧进程，`-Reinstall` 强制重装依赖。
+
+不想用脚本就手动来：
 
 ```bash
 pip install -r requirements.txt

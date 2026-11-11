@@ -1,0 +1,14 @@
+
+  代面 · 启动
+
+  .venv 已就绪，跳过创建
+  依赖没变，跳过安装
+  已结束占用 5000 的进程 44264
+
+  地址：http://127.0.0.1:5000
+  按 Ctrl+C 停
+
+代面 0.60 已启动：http://127.0.0.1:5000
+Ollama：http://127.0.0.1:11434
+ * Serving Flask app 'rp.config'
+ * Debug mode: off
