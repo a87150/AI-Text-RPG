@@ -225,6 +225,8 @@ button.ghost.wide { width: 100%; }
 /* 故事视图里不聊天：把消息区和输入框让给设定面板 */
 body.story-view .messages,
 body.story-view .composer { display: none !important; }
+/* 全文搜索扫的是对话消息，故事视图里没有可搜的东西 */
+body.story-view #btn-search { display: none; }
 
 /* 侧栏：对话 / 故事 两个视图 */
 .side-seg { display: flex; gap: 4px; padding: 8px 12px 4px; }
