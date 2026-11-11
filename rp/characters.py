@@ -199,6 +199,13 @@ def refresh_states(sess, text):
             return out
         on = _clean(obj.get("present"))
         off = _clean(obj.get("away"))
+        # 主角永远在场：他去哪儿由自己定，不能被这份名单判离场。
+        # 只在真填了名字时才补，不把「用户角色」这种占位词写进去
+        _me_name = (sess.get("user_name") or "").strip()
+        if on is not None and _me_name and _me_name not in on:
+            on = [_me_name] + on
+        if off is not None and _me_name and _me_name in off:
+            off = [x for x in off if x != _me_name]
         if on is not None:
             if (st.get("present") or []) != on:
                 st["present"] = on

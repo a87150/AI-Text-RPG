@@ -608,8 +608,9 @@ export function updateSub() {
   const present = status.present || [];
   const away = status.away || [];
   const me = s.user_name || '我';
-  const isLeft = (name) => away.includes(name)
-    || (present.length > 0 && !present.includes(name));
+  // 主角永远不算离场：他去哪儿由他自己决定，不由这份名单判定
+  const isLeft = (name) => name === me ? false
+    : (away.includes(name) || (present.length > 0 && !present.includes(name)));
   const chip = (name) => {
     const btn = document.createElement('button');
     btn.type = 'button';
@@ -770,8 +771,10 @@ export function toggleCharPop(name, anchor) {
     pop.appendChild(row);
   }
   const status2 = s.status || {};
-  const left = (status2.away || []).includes(name)
-    || ((status2.present || []).length > 0 && !(status2.present || []).includes(name));
+  const isMe = name === (s.user_name || '我');
+  const left = isMe ? false
+    : ((status2.away || []).includes(name)
+      || ((status2.present || []).length > 0 && !(status2.present || []).includes(name)));
   const toggle = document.createElement('button');
   toggle.type = 'button';
   toggle.className = 'cp-act';
@@ -779,7 +782,7 @@ export function toggleCharPop(name, anchor) {
   toggle.onclick = () => setCharScene(name, left).catch((e) => {
     toast('改不动：' + e.message, 'error');
   });
-  pop.appendChild(toggle);
+  if (!isMe) pop.appendChild(toggle);   // 主角没有「离场」这回事
   pop.classList.remove('hidden');
 
   const box = anchor ? anchor.getBoundingClientRect() : null;

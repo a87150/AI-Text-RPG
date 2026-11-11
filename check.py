@@ -1898,13 +1898,13 @@ def main():
         rp_characters.model_text = _scene
         rp_characters.refresh_states(_s81b, "甲转身走进酒馆，乙留在街上。")
         _st81 = _s81b["status"]
-        check("在场名单被更新", _st81.get("present") == ["甲"], str(_st81))
+        check("在场名单被更新", _st81.get("present") == ["我", "甲"], str(_st81))
         check("离场名单被更新", _st81.get("away") == ["乙"], str(_st81))
         check("地点被更新", _st81.get("place") == "某城·酒馆", str(_st81))
         check("名单外的人不会混进在场", "不存在的人" not in _st81.get("present", []))
         rp_characters.model_text = _fake
         rp_characters.refresh_states(_s81b, "甲坐下。")
-        check("模型没给场景时不清空名单", _s81b["status"].get("present") == ["甲"],
+        check("模型没给场景时不清空名单", _s81b["status"].get("present") == ["我", "甲"],
               str(_s81b["status"]))
     finally:
         rp_characters.model_text = _orig_text
