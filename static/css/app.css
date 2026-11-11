@@ -1100,3 +1100,6 @@ body.story-view .io-wrap { display: none; }
   color: var(--text-dim);
   opacity: .75;
 }
+
+/* 思考档位被服务端拒绝时的提示 */
+.hint#reasoning-hint { color: var(--warn, #b8860b); }
