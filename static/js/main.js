@@ -303,6 +303,14 @@ function syncReasoningSeg() {
   for (const btn of seg.querySelectorAll('button')) {
     btn.classList.toggle('active', btn.dataset.level === currentReasoning());
   }
+  // 服务端拒过这个字段就别再假装它生效了，说清楚发生了什么事
+  const ok = !state.conf || state.conf.reasoning_supported !== false;
+  seg.classList.toggle('unsupported', !ok);
+  const hint = $('#reasoning-hint');
+  if (hint) {
+    hint.textContent = ok ? '' : '当前提供方不认这个字段，请求里的档位已自动去掉';
+    hint.hidden = ok;
+  }
 }
 
 function currentCreativity() {
@@ -409,6 +417,8 @@ async function saveWriting(quiet = false) {
       writing: res.writing || state.conf.writing,
       mode: res.mode || currentMode(),
       reasoning_effort: res.reasoning_effort || currentReasoning(),
+      reasoning_supported: res.reasoning_supported !== undefined
+        ? res.reasoning_supported : (state.conf && state.conf.reasoning_supported),
       tier: res.tier || currentTier(),
       creativity: res.creativity || currentCreativity(),
     });

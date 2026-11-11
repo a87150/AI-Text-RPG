@@ -10,6 +10,16 @@ from .config import (
     current_target, provider_endpoint, provider_headers, reasoning_effort,
 )
 
+# 哪些提供方已经因为发了 reasoning_effort 而报错。
+# 只存内存：重启后重探一次，比把探测结果写进配置文件安全。
+_NO_REASONING = set()
+
+
+def reasoning_supported():
+    """当前提供方是否还应当发思考档位。供设置界面提示用。"""
+    return current_target()[0] not in _NO_REASONING
+
+
 # ============================== 模型调用 ==============================
 def model_call(messages, temperature=0.8, stream=False, extra=None, reasoning=None):
     provider, model = current_target()
@@ -23,18 +33,32 @@ def model_call(messages, temperature=0.8, stream=False, extra=None, reasoning=No
     # 以前只给 ollama 发，选了云端后这个设置就彻底失效了。
     # none 不发：规范里没这个值，传过去会被拒。
     level = (reasoning or reasoning_effort() or "").strip()
-    if level and level != "none":
+    if level and level != "none" and provider not in _NO_REASONING:
         payload["reasoning_effort"] = level
     if extra:
         payload.update(extra)
-    resp = requests.post(
-        provider_endpoint(provider),
-        json=payload,
-        stream=stream,
-        headers=provider_headers(provider),
-        timeout=REQUEST_TIMEOUT,
-    )
-    resp.encoding = "utf-8"
+
+    def _post(body):
+        r = requests.post(
+            provider_endpoint(provider),
+            json=body,
+            stream=stream,
+            headers=provider_headers(provider),
+            timeout=REQUEST_TIMEOUT,
+        )
+        r.encoding = "utf-8"
+        return r
+
+    resp = _post(payload)
+    # 服务端不认这个字段时会回 400。不能因为思考档位把正文请求带死，
+    # 去掉重发一次，并记下来，下次直接不发。这就是能拿到的最强“探测”：
+    # 没有任何云端提供方会告诉你它支持哪几个档位，但拒绝的方式是统一的。
+    if resp.status_code == 400 and "reasoning_effort" in payload:
+        low = (resp.text or "").lower()
+        if "reasoning" in low or "unrecognized" in low or "unknown" in low or "extra" in low:
+            payload.pop("reasoning_effort", None)
+            _NO_REASONING.add(provider)
+            resp = _post(payload)
     return resp
 
 

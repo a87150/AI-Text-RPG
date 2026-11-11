@@ -1172,8 +1172,9 @@ export function renderMessages() {
     let host;
     if (m.role === 'user') {
       host = buildMessage('user', m.content, userLabel, m.edited).el;
-    } else if (m.speaker) {
-      host = buildTurn(m.narrator || '', m.speaker, m.content).el;
+    } else if (m.speaker || (m.lines || []).length) {
+      // 多角色一轮里每人一段，全在 lines 里；漏传就只剩第一个人的台词
+      host = buildTurn(m.narrator || '', m.speaker, m.content, m.lines).el;
     } else {
       // 一般模式：系统叙述，没有角色名
       host = document.createElement('div');

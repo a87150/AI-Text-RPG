@@ -450,6 +450,8 @@ def main():
           rp_prompt.startswith("你这一轮就是【庚】本人"), rp_prompt[:30])
 
     # 15. 思考强度（Ollama 的 reasoning_effort）
+    check("/api/config 下发是否支持思考强度",
+          "reasoning_supported" in client.get("/api/config").get_json())
     check("默认思考强度是中等", rp_config.reasoning_effort() == "medium",
           rp_config.reasoning_effort())
     rp_config.save_reasoning("high", persist=False)
@@ -1606,6 +1608,10 @@ def main():
     check("操作条有 continue 动作", "'continue'" in _ui70)
     _mo70 = (pathlib.Path(__file__).parent / "static" / "js" / "msgops.js").read_text(encoding="utf-8")
     check("continue 动作真的被接住", "act === 'continue'" in _mo70)
+    # 历史回放要把一轮里的多个气泡一起交给 buildTurn，
+    # 少传 lines 就只剩第一个人的台词
+    check("历史消息把 lines 也传给了",
+          "m.content, m.lines)" in _ui70)
 
     # 71. 续写拼接、分叉不动原会话、并发写
     _j71 = rp_api._join_text
@@ -1970,6 +1976,32 @@ def main():
         rp_config.save_reasoning("none", persist=False)
         rp_llm.model_text([{"role": "user", "content": "hi"}])
         check("none 不发这个字段", "reasoning_effort" not in _cap, str(list(_cap)))
+        rp_config.save_reasoning("high", persist=False)
+
+        # 服务端回 400 不认这个字段：要自动去掉重发，不能把正文请求带死
+        _seen = []
+        class _RejectResp:
+            status_code = 400
+            text = '{"error":"Unrecognized request argument: reasoning_effort"}'
+            def json(self):
+                return {}
+        def _reject_first(url, json=None, stream=False, headers=None, timeout=None):
+            body = dict(json or {})
+            _seen.append("reasoning_effort" in body)
+            if len(_seen) == 1:
+                return _RejectResp()
+            return _FakeResp()
+        rp_llm.requests.post = _reject_first
+        rp_llm._NO_REASONING.discard("custom1")
+        _r83 = rp_llm.model_text([{"role": "user", "content": "hi"}])
+        check("拒绝后自动去掉字段重发", _seen == [True, False], str(_seen))
+        check("降级后照常拿到正文", _r83 == "ok", repr(_r83))
+        check("降级结果被记住", rp_llm.reasoning_supported() is False)
+        rp_llm.model_text([{"role": "user", "content": "hi"}])
+        check("下次直接不发", _seen[-1] is False, str(_seen))
+        rp_llm._NO_REASONING.discard("custom1")
+        rp_llm.requests.post = _fake_post
+
         rp_config.save_reasoning("medium", persist=False)
         if _orig_provider:
             rp_config._model_state["provider"] = _orig_provider

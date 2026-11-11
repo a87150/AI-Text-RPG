@@ -16,6 +16,7 @@ from .characters import (
 )
 from . import backup
 from . import metrics
+from .llm import reasoning_supported
 from .config import (
     DEFAULT_MODEL, DEFAULT_PROVIDER, MAX_CHAT_ATTEMPTS, MAX_ENHANCE_ATTEMPTS,
     MAX_OPENING_ATTEMPTS, MIN_CHAT_CHARS, MODES, PROVIDERS,
@@ -71,6 +72,7 @@ def api_config():
         "max_chat_attempts": MAX_CHAT_ATTEMPTS,
         "max_enhance_attempts": MAX_ENHANCE_ATTEMPTS,
         "reasoning_effort": reasoning_effort(),
+        "reasoning_supported": reasoning_supported(),
         "reasoning_levels": REASONING_LEVELS,
         "tier": tier(),
         "tiers": TIERS,
