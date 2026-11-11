@@ -47,7 +47,7 @@ from .snapshots import list_snapshots, load_snapshot, snapshot
 from .storage import (
     DEFAULT_TITLE, TEXT_FIELDS, StaleSession, get_session_lock, list_sessions,
     load_session, new_session, release_busy, save_session, session_path,
-    try_acquire_busy,
+    try_acquire_busy, is_busy,
 )
 
 load_settings()
@@ -592,7 +592,9 @@ def api_restore_snapshot(sid, name):
     current = load_session(sid)
     if not current:
         return jsonify({"error": "会话不存在"}), 404
-    if current.get("busy"):
+    # 原来读的是 current.get("busy")，而这个键从来没有人写进去，
+    # 这个防护一直是空的。真实状态在存储层的内存集合里。
+    if is_busy(sid):
         return jsonify({"error": "这一轮还在生成，等它写完再回滚"}), 409
     saved = load_snapshot(sid, name)
     if not saved:
@@ -613,6 +615,9 @@ def api_get_session(sid):
     if sess.get("story_id"):
         sess["story"] = load_story(sess["story_id"])
     sess["status"] = sess.get("status") or {}
+    # 不落盘，现取内存。界面刷新后看到最后一条是用户消息时，
+    # 靠这个字段分辨是"后端还在写"还是"真没答上"。
+    sess["busy"] = is_busy(sid)
     return jsonify(sess)
 
 

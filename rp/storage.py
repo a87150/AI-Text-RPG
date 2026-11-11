@@ -46,6 +46,16 @@ def release_busy(sid):
         _busy_sessions.discard(sid)
 
 
+def is_busy(sid):
+    """这个会话现在有没有一轮在生成。
+
+    全程只存内存：进程重启后没有任何东西在跑，落盘反而会把"生成中"
+    永久留在文件里。界面刷新后要知道该不该等，就靠它。
+    """
+    with _busy_guard:
+        return sid in _busy_sessions
+
+
 # ============================== 存储层 ==============================
 SID_RE = re.compile(r"[0-9a-f]{12}")
 

@@ -2296,6 +2296,19 @@ def main():
               rp_config.WRITING_BOUNDS["summary_chars"][0] <= _lim["summary"]
               <= rp_config.WRITING_BOUNDS["summary_chars"][1], str(_lim["summary"]))
 
+    # 95. busy 要能被读到：界面刷新后靠它分辨"还在写"还是"没答上"
+    _bs = client.post("/api/sessions", json={}).get_json()
+    _bsid = _bs["id"]
+    check("平时 busy 是假", client.get("/api/sessions/" + _bsid).get_json().get("busy") is False)
+    rp_storage.try_acquire_busy(_bsid)
+    check("生成中 busy 是真", client.get("/api/sessions/" + _bsid).get_json().get("busy") is True)
+    check("生成中不让回滚快照",
+          client.post("/api/sessions/" + _bsid + "/snapshots/x/restore").status_code == 409)
+    rp_storage.release_busy(_bsid)
+    check("写完 busy 变回假", client.get("/api/sessions/" + _bsid).get_json().get("busy") is False)
+    check("busy 不落盘", "busy" not in (rp_storage.load_session(_bsid) or {}))
+    client.delete("/api/sessions/" + _bsid)
+
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")
