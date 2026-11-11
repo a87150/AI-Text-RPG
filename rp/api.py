@@ -75,12 +75,19 @@ _LOCAL_HOSTS = frozenset(("127.0.0.1", "localhost", "::1"))
 def _reject_cross_site():
     if request.method in _SAFE_METHODS:
         return None
+    # 靠 Content-Type 判，不靠 Origin/Referer。跨站 <form> 本来就不发 Origin，
+    # 再加一行 <meta name="referrer" content="no-referrer"> 就两个头都没了。
+    # 而表单只能发 safelisted 的三种类型，发不出 application/json；
+    # 真要发 JSON 就得过预检，而预检过不了。
+    ctype = (request.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+    if ctype != "application/json":
+        return jsonify({"error": "拒绝非 JSON 写请求"}), 403
+    # 有来源头的话再校一层，作为纵深
     origin = request.headers.get("Origin") or request.headers.get("Referer") or ""
-    if not origin:
-        return None          # 本机脚本 / curl 不带这个头，不能把它们挡在外面
-    host = (urlsplit(origin).hostname or "").lower()
-    if host not in _LOCAL_HOSTS:
-        return jsonify({"error": "拒绝跨站请求"}), 403
+    if origin:
+        host = (urlsplit(origin).hostname or "").lower()
+        if host not in _LOCAL_HOSTS:
+            return jsonify({"error": "拒绝跨站请求"}), 403
     return None
 
 

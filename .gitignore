@@ -22,3 +22,7 @@ mk_*.txt
 .ruff_cache/
 .coverage
 htmlcov/
+
+# 本地跑脚本时重定向出来的日志
+_*.log
+_*.log.*

@@ -75,6 +75,9 @@ def main():
     lt.completion_events = fake_completion_events
     rp_characters.model_text = fake_model_text
     client = lt.app.test_client()
+    # 写接口只收 application/json（防跨站表单）。测试里嵌一个默认头，
+    # 省得三四十处 client.delete(...) / client.post(url) 逐个补 json。
+    client.environ_base = {"CONTENT_TYPE": "application/json"}
 
     # 0. 模式与可配参数
     check("默认是一般模式", rp_config.mode_of() == "normal", rp_config.mode_of())
@@ -2207,6 +2210,11 @@ def main():
     check("请求体有上限", "MAX_CONTENT_LENGTH" in _cfg)
     check("安全响应头已注入", "X-Content-Type-Options" in _api)
     check("urllib3 下限跟上 CVE", "urllib3>=2.6.3" in _req)
+    # 光看 requirements 是假绿：声明改了、环境没动，自检也会过。
+    # CVE-2026-21441 的触发条件就在 llm.py 的 stream=True 里。
+    import urllib3 as _urllib3
+    _uv = tuple(int(x) for x in _urllib3.__version__.split(".")[:3])
+    check("urllib3 实装版本已过 CVE 线", _uv >= (2, 6, 3), _urllib3.__version__)
     check("入参不再直接 .strip()", '(data.get("message") or "").strip()' not in _api)
     check("日志不写剧情原文", "raw=answer[" not in _api)
 

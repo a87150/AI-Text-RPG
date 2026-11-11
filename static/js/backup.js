@@ -102,7 +102,12 @@ export async function runBackup() {
   setMsg('正在打包…');
   try {
     // 数据多的时候打包会久一点，比通用接口的 20 秒宽一些
-    const resp = await fetch('/api/backups', { method: 'POST' });
+    // 写接口只收 application/json，这里没走 api() 就得自己带上
+    const resp = await fetch('/api/backups', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
     if (!resp.ok) {
       const info = await resp.json().catch(() => ({}));
       throw new Error(info.error || ('HTTP ' + resp.status));

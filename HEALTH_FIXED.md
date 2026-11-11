@@ -55,3 +55,21 @@
 ## 顺带发现（报告没提）
 
 `_rewind_to` 里 `facts` 的过滤原本是 `turn < max(mark, 1)`，那个 `max(mark, 1)` 会让"退到开头"时保留第一轮的全部事实——正是被撤销那一轮产生的。已在 `3a9d200` 一并改成严格比较，这里记一笔因为报告只写了 surface 症状没点到根因。
+
+## 复审后补修（3 条，2026-11-12）
+
+上一版的 CSRF 守卫留了 no-referrer 绕过：跨站 `<form>` 本来就不发 `Origin`，只有 `Referer`；
+攻击页加一行 `<meta name="referrer" content="no-referrer">` 两个头就都没了，`if not origin: return None`
+直接放行。改成不依赖任何请求头：写方法必须 `Content-Type: application/json`，跨站表单发不出这个类型
+（发得出就要过预检，预检过不了）。`Origin`/`Referer` 校验保留作为纵深。前端 `api.js` 全带这个头，
+只有 `backup.js` 一处裸 `fetch` 补了头，`check.py` 的 client 用 `environ_base` 统一带上。
+
+urllib3 那条之前是假绿：断言查的是 `requirements.txt` 文本，环境里还跑着 2.5.0。已 `pip install -U`
+到 **2.8.0**，断言改成读 `urllib3.__version__` 比对 `(2, 6, 3)`。
+
+`_r5.log` / `_r5.log.err` 确实被提交进去了（`.gitignore` 只盖 `_*.py`、`_*.txt`）。已 `git rm --cached`
+并从磁盘删除；`.gitignore` 补 `_*.log`、`_*.log.*`。查过内容：只有 Flask 开发服务器访问日志和一个
+会话 id，没有 Key、没有路径、没有正文。
+
+复审提出的另一个知情项保留原样：`status.parse_fail` 记的 `raw_tail` 是 40 字剧情，仍是正文。
+本地临时排障够用；哪天日志要当长期资产再换哈希。
