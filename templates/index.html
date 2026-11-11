@@ -23,9 +23,6 @@
     </div>
     <div class="side-block hidden" id="session-block">
       <button class="side-btn" id="btn-new-session" type="button">＋ 新对话</button>
-      <button class="side-btn ghost sm" id="btn-import-session" type="button"
-              title="把导出的会话 JSON 装回来">⤓ 导入对话</button>
-      <input type="file" id="import-file" accept=".json,application/json" hidden>
       <div class="session-list" id="session-list"></div>
       <div class="pager hidden" id="session-pager"></div>
     </div>
@@ -51,7 +48,9 @@
         <button id="btn-settings" type="button" disabled>⚙ 设定</button>
         <button id="btn-compress" type="button" disabled>🗜 压缩</button>
         <button id="btn-clear" type="button" disabled>🧹 清空</button>
+        <button id="btn-import-session" type="button" title="把导出的会话 JSON 装回来">📥 导入</button>
         <button id="btn-export" type="button" disabled title="导出成 Markdown，可以直接存档或分享">📤 导出</button>
+        <input type="file" id="import-file" accept=".json,application/json" hidden>
         <button id="btn-theme" type="button" title="切换亮色 / 暗色模式">🌙</button>
       </div>
     </header>
