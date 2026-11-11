@@ -8,3 +8,8 @@ __pycache__/
 *.py[cod]
 .venv/
 logs/
+
+# 临时脚本与调试输出，不入库
+_*.py
+_*.txt
+i.py
