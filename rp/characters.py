@@ -5,7 +5,7 @@ from difflib import SequenceMatcher
 
 from . import metrics
 from .config import mode_for, writing
-from .llm import (extract_json, extract_json_all, loose_status_json,
+from .llm import (extract_json, extract_json_all, loose_status_json, model_text,
                   strip_status_leaks, strip_thinking)
 
 # ============================== 提示词构造 ==============================
@@ -134,6 +134,57 @@ def upsert_character(sess, data):
         "history": [],
     })
     return (name, True)
+
+
+STATE_SYSTEM = (
+    '你在给一段故事做状态更新。读正文，判断每个出场角色此刻的处境、情绪、'
+    '和别人的关系有没有推进。只输出 JSON，不要任何解释：'
+    '{"changes":[{"name":"名字","state":"40 字以内"}]}。'
+    '没变化的人不要写；名单外的人不要写；一条都没有就输出 {"changes":[]}。'
+)
+
+
+def refresh_states(sess, text):
+    """正文写完之后再过一遍角色状态。
+
+    指望模型自己在正文里补【变化】靠不住：实测二十几个角色只写了两三个。
+    主输出要顾文笔，这件事单独给它一次调用，只做这一件。
+    失败了就当没发生：状态是锦上添花，不能因为它弄丢这一轮正文。
+    """
+    chars = [c for c in ensure_characters(sess) if (c.get("name") or "").strip()]
+    body = (text or "").strip()
+    if not chars or not body:
+        return 0
+    names = [c["name"] for c in chars]
+    now = chr(10).join("%s：%s" % (c["name"], (c.get("state") or "（未记录）")[:120])
+                       for c in chars)
+    try:
+        raw = model_text([
+            {"role": "system", "content": STATE_SYSTEM},
+            {"role": "user", "content": "【角色】%s" % "、".join(names)
+             + chr(10) + "【现在的状态】" + chr(10) + now
+             + chr(10) + "【这一轮正文】" + chr(10) + body[:4000]},
+        ], temperature=0.2)
+    except Exception:
+        return 0
+    obj = extract_json(raw) or {}
+    rows = obj.get("changes")
+    if not isinstance(rows, list):
+        return 0
+    book = {c["name"]: c for c in chars}
+    n = 0
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        nm = (row.get("name") or "").strip()
+        st = (row.get("state") or "").strip()[:120]
+        c = book.get(nm)
+        if not c or not st or st == (c.get("state") or "").strip():
+            continue
+        c["state"] = st
+        c["history"] = ((c.get("history") or []) + [st])[-CHARACTER_HISTORY_KEEP:]
+        n += 1
+    return n
 
 
 def apply_change(sess, data):

@@ -12,7 +12,7 @@ from .characters import (
     advance_turn, apply_change, ensure_characters,
     merge_facts, merge_status, next_speaker, parse_turn, role_labels,
     looks_like_name, parse_cast, parse_lore_batch, split_cast_line,
-    upsert_character, add_lore, parse_add_cast,
+    upsert_character, add_lore, parse_add_cast, refresh_states,
 )
 from . import backup
 from . import metrics
@@ -1271,6 +1271,11 @@ def _commit_turn(s2, turn, use_rp, resume=False):
     msg["turn"] = turn_no             # 分叉要靠它把账本和轮次退回去
     if turn_no > 0 and turn_no % 15 == 0:
         snapshot(s2, "turn")
+    # 正文写完了，再单独过一次角色状态。
+    # 指望模型在正文里自己补【变化】靠不住：29 个角色里只有 7 个有 state。
+    # 续写跳过：那只是一截增量，拿它判状态会误判。失败就当没发生。
+    if not resume:
+        refresh_states(s2, (turn.get("narrator") or "") + chr(10) + (turn.get("line") or ""))
     save_session(s2)
     return msg
 

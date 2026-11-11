@@ -55,10 +55,19 @@ def fake_completion_events(messages, base_temp=0.8, max_attempts=3, min_chars=0,
     yield {"type": "error", "attempts": 1, "message": "离线自检不调用模型", "raw": ""}
 
 
+def fake_model_text(messages, temperature=0.8):
+    """状态补全走的是 model_text 这条路，跟主生成不是同一个函数。
+
+    不 patch 它，自检里每次落一回轮次都会真打一次外网。
+    """
+    return '{"changes":[]}'
+
+
 def main():
     # 路由模块用的是自己命名空间里的名字，patch 在这一层才生效
     rp_api.completion_events = fake_completion_events
     lt.completion_events = fake_completion_events
+    rp_characters.model_text = fake_model_text
     client = lt.app.test_client()
 
     # 0. 模式与可配参数
@@ -1831,6 +1840,33 @@ def main():
     check("点名后角色表里真有了",
           [c["name"] for c in _s80["characters"]] == ["甲", "乙"],
           str([c["name"] for c in _s80["characters"]]))
+
+    # 81. 状态补全：独立一次调用把正文里的处境写回角色卡
+    _orig_text = rp_characters.model_text
+    def _fake(messages, temperature=0.8):
+        return '{"changes":[{"name":"甲","state":"被按在椅子上"},' \
+               '{"name":"不存在的人","state":"x"}]}'
+    _s81 = {"characters": [{"name": "甲", "role": "", "state": "", "history": []}]}
+    try:
+        rp_characters.model_text = _fake
+        _n81 = rp_characters.refresh_states(_s81, "甲被按在椅子上。")
+        check("状态补全写进角色卡",
+              _n81 == 1 and _s81["characters"][0]["state"] == "被按在椅子上",
+              repr(_s81["characters"][0]["state"]))
+        check("名单外的人不会被建卡",
+              len(_s81["characters"]) == 1, str(len(_s81["characters"])))
+        check("状态变化记进履历",
+              _s81["characters"][0]["history"] == ["被按在椅子上"],
+              str(_s81["characters"][0]["history"]))
+        check("同一个状态不重复追加",
+              rp_characters.refresh_states(_s81, "甲被按在椅子上。") == 0)
+        def _boom(messages, temperature=0.8):
+            raise RuntimeError("接口挂了")
+        rp_characters.model_text = _boom
+        check("模型失败不影响上一轮",
+              rp_characters.refresh_states(_s81, "甲起身。") == 0)
+    finally:
+        rp_characters.model_text = _orig_text
 
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
