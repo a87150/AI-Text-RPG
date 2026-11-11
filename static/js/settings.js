@@ -682,6 +682,26 @@ export async function enhance() {
     }
   }
 
+  // 认人是最后一步，它加进来的人只有名字、没有设定。
+  // 这里顺手补写，省得再点一次按钮——但只在勾了认人时做，手动留的空卡不强写。
+  if (steps.some((s) => s.field === 'cast')) {
+    const bare = draftChars
+      .map((c, index) => ({ c, index }))
+      .filter(({ c }) => (c.name || '').trim() && !(c.role || '').trim());
+    for (let j = 0; j < bare.length; j += 1) {
+      const step = { field: 'character', index: bare[j].index };
+      const label = stepLabel(step);
+      setStatus('补写 ' + label + ' 的设定（' + (j + 1) + '/' + bare.length + '）…');
+      try {
+        const data = await runStep(step, label, j + 1, bare.length);
+        applyStep(step, data);
+        done.push(label);
+      } catch (e) {
+        failed.push({ step, label });
+      }
+    }
+  }
+
   failedSteps = failed.map((f) => f.step);
   if (!failed.length) {
     setStatus('✅ 全部完成（共 ' + done.length + ' 项），可继续手动微调，然后点「保存」。', 'ok');
