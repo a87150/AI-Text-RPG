@@ -442,7 +442,6 @@ export async function saveSettings() {
 }
 
 const STEP_LABEL = {
-  user_name: '我的角色名',
   user_role: '我的角色设定',
   ai_name: 'AI 角色名',
   world: '世界观',
@@ -486,7 +485,6 @@ function pickKey(step) {
 /** 全部可生成的项，不看勾选。 */
 function allSteps() {
   const steps = [];
-  if (!val('#f-user-name').trim()) steps.push({ field: 'user_name' });
   steps.push({ field: 'user_role' });
 
   let usable = draftChars
@@ -519,6 +517,23 @@ function renderPick() {
   const box = $('#idea-pick');
   if (!box) return;
   pickOn = pickOn || {};
+  // 全选/全不选/反选：只改勾选，不动已写的内容
+  const bar = $('#idea-pick-bar');
+  if (bar && !bar.dataset.bound) {
+    bar.dataset.bound = '1';
+    bar.onclick = (e) => {
+      const hit = e.target.closest('button[data-pick]');
+      if (!hit) return;
+      const mode = hit.dataset.pick;
+      for (const step of allSteps()) {
+        const key = pickKey(step);
+        if (mode === 'all') pickOn[key] = true;
+        else if (mode === 'none') pickOn[key] = false;
+        else pickOn[key] = pickOn[key] === false;
+      }
+      renderPick();
+    };
+  }
   box.innerHTML = '';
   for (const step of allSteps()) {
     const key = pickKey(step);
@@ -574,7 +589,6 @@ function applyStep(step, data) {
   }
   const body = ((data && data.text) || '').trim();
   if (!body) return;
-  if (step.field === 'user_name') { $('#f-user-name').value = body; return; }
   if (step.field === 'user_role') { $('#f-user-role').value = body; return; }
   // 世界观和开场白写完顺带收人：正文里提到的人自动进表
   if (step.field === 'world') { $('#f-world').value = body; addCast(data); return; }
