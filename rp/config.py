@@ -81,7 +81,7 @@ WRITING_DEFAULTS = {
     "keep_recent": 16,
     "max_characters": 4,
     "auto_roles": 1,        # AI 补设定时自己起几个角色；0 = 不起，用 {主角} 指代
-    "summary_chars": 300,
+    "summary_chars": 400,
     "language": "zh",       # 正文语言：zh 中文 / en English
 }
 LANGUAGES = ("zh", "en")
@@ -95,7 +95,7 @@ WRITING_BOUNDS = {
     "keep_recent": (4, 60),
     "max_characters": (1, 10),
     "auto_roles": (0, 4),
-    "summary_chars": (150, 1200),
+    "summary_chars": (150, 2000),
 }
 _writing = dict(WRITING_DEFAULTS)
 
@@ -105,14 +105,14 @@ _writing = dict(WRITING_DEFAULTS)
 # 0 表示不限（history_msgs）或不截断（role_chars）。
 # summary：每次压缩要把一大段剧情压成一段提要。上下文越大，
 # 触发得越晚、一次压掉的量越多，提要还是 400 字就装不下了。
-# 大致按上下文的 2.5%–4% 取。
+# 按上下文的 5% 取：3% 在高级档上是 800 字压三万，37:1，细节会掉。
 TIER_LIMITS = {
     "basic": {"context": 8000, "history_msgs": 16, "role_chars": 200,
-              "facts": 6, "anchor_every": 8, "attempts": 3, "summary": 300},
+              "facts": 6, "anchor_every": 8, "attempts": 3, "summary": 400},
     "standard": {"context": 16000, "history_msgs": 40, "role_chars": 400,
-                 "facts": 12, "anchor_every": 15, "attempts": 3, "summary": 500},
+                 "facts": 12, "anchor_every": 15, "attempts": 3, "summary": 800},
     "advanced": {"context": 32000, "history_msgs": 0, "role_chars": 0,
-                 "facts": 24, "anchor_every": 24, "attempts": 2, "summary": 800},
+                 "facts": 24, "anchor_every": 24, "attempts": 2, "summary": 1600},
 }
 TIER_CONTEXT = {k: v["context"] for k, v in TIER_LIMITS.items()}
 

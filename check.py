@@ -2285,6 +2285,16 @@ def main():
     check("摘要字数随档位递增", _sz == sorted(_sz) and len(set(_sz)) == 3, str(_sz))
     check("默认摘要字数与初级档一致",
           rp_config.WRITING_DEFAULTS["summary_chars"] == rp_config.TIER_LIMITS["basic"]["summary"])
+    # 5% 是经验值：3% 在高级档上是 800 字压三万，细节掉得太多；
+    # 大了又挤占每轮预算（摘要是每轮都注入的）。
+    for _lv in ("basic", "standard", "advanced"):
+        _lim = rp_config.TIER_LIMITS[_lv]
+        _ratio = _lim["summary"] / _lim["context"]
+        check("档位 %s 摘要占上下文 5%%" % _lv,
+              abs(_ratio - 0.05) < 0.005, "%.3f" % _ratio)
+        check("档位 %s 摘要在合法范围内" % _lv,
+              rp_config.WRITING_BOUNDS["summary_chars"][0] <= _lim["summary"]
+              <= rp_config.WRITING_BOUNDS["summary_chars"][1], str(_lim["summary"]))
 
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
