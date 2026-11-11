@@ -680,6 +680,12 @@ export function popIdea(forceFull = false) {
   const pop = $('#idea-pop');
   if (!pop) return;
   renderPick();
+  const roles = $('#f-roles');
+  if (roles) {
+    const saved = state.conf && state.conf.writing && state.conf.writing.auto_roles;
+    roles.value = saved == null ? 1 : saved;
+    roles.dataset.saved = String(roles.value);
+  }
   pop.classList.remove('hidden');
   const area = $('#f-rules');
   if (area) {
@@ -696,6 +702,20 @@ export function closeIdea() {
 
 /** 弹出层里点「开始生成」。 */
 export async function startEnhance() {
+  // 弹窗里的角色数改了就顺手存下来，不用再去设置面板改一遍
+  const roles = $('#f-roles');
+  const want = roles ? String(roles.value || '').trim() : '';
+  if (want !== '' && want !== (roles.dataset.saved || '')) {
+    const n = Number(want);
+    if (Number.isFinite(n)) {
+      try {
+        const res = await api('/api/writing', { method: 'POST', body: { auto_roles: n } });
+        if (res && res.writing) state.conf = { ...state.conf, writing: res.writing };
+      } catch (e) {
+        setStatus('保存角色数失败：' + e.message, 'error');
+      }
+    }
+  }
   closeIdea();
   await enhance();
 }

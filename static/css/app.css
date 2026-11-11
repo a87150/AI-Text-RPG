@@ -1028,6 +1028,9 @@ body.story-view #btn-search { display: none; }
   box-shadow: var(--shadow);
 }
 .io-menu.hidden { display: none; }
+/* 补全弹窗里的角色数：跟勾选区分开，别挤在一起 */
+.idea-pop .idea-roles { margin-top: 10px; }
+.idea-pop .idea-roles input { width: 96px; }
 .io-menu button {
   text-align: left; padding: 7px 10px; border-radius: 7px; width: 100%;
   border: none; background: transparent; color: var(--text);

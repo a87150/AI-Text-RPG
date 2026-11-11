@@ -200,6 +200,11 @@
         <button type="button" data-pick="flip">反选</button>
       </div>
       <div class="idea-pick" id="idea-pick"></div>
+      <div class="field idea-roles">
+        <label for="f-roles">顺手再起几个角色（0 = 不起，人全部由你自己安排）</label>
+        <input id="f-roles" type="number" min="0" max="4">
+        <div class="hint">填 1 就是让 AI 按你的想法配一个对手或搭档，连身份和名字一起写；填 0 则正文里一律写你现在演的角色，不自动添人。</div>
+      </div>
       <div class="idea-actions">
         <button type="button" id="btn-idea-cancel">取消</button>
         <button type="button" id="btn-idea-start" class="primary">开始生成</button>
@@ -362,7 +367,7 @@
       <div class="prefs-body">
         <div class="hint">字数直接影响生成量与耗时；改完点这一节底部的「保存写作参数」。</div>
               <div class="grid2">
-                <div class="field"><label for="w-narrator-min">旁白最少字数</label><input id="w-narrator-min" type="number" min="10" max="300"></div>
+                <div class="field"><label for="w-narrator-min">旁白最少字数（每轮场景描写，不足会自动重写）</label><input id="w-narrator-min" type="number" min="10" max="300"></div>
                 <div class="field"><label for="w-narrator-max">旁白最多字数</label><input id="w-narrator-max" type="number" min="20" max="600"></div>
               </div>
               <div class="grid2">
@@ -370,15 +375,14 @@
                 <div class="field"><label for="w-line-max">角色言行最多字数</label><input id="w-line-max" type="number" min="60" max="2000"></div>
               </div>
               <div class="grid2">
-                <div class="field"><label for="w-context">上下文上限（字数）</label><input id="w-context" type="number" min="2000" max="60000" step="500"></div>
-                <div class="field"><label for="w-keep">压缩后保留最近消息数</label><input id="w-keep" type="number" min="4" max="60"></div>
+                <div class="field"><label for="w-context">上下文上限（超过就自动压缩，单位字）</label><input id="w-context" type="number" min="2000" max="60000" step="500"></div>
+                <div class="field"><label for="w-keep">压缩后保留最近消息数（越新的越原样保留，更早的压成摘要）</label><input id="w-keep" type="number" min="4" max="60"></div>
               </div>
               <div class="grid2">
-                <div class="field"><label for="w-chars">角色上限（最多 10 个）</label><input id="w-chars" type="number" min="1" max="10"></div>
-                <div class="field"><label for="w-summary">剧情摘要字数</label><input id="w-summary" type="number" min="150" max="1200" step="50"></div>
+                <div class="field"><label for="w-chars">角色上限（同时在场最多几个，超出的模型不再登记）</label><input id="w-chars" type="number" min="1" max="10"></div>
+                <div class="field"><label for="w-summary">剧情摘要字数（压缩时生成，越长越细但越费 token）</label><input id="w-summary" type="number" min="150" max="1200" step="50"></div>
               </div>
               <div class="grid2">
-                <div class="field"><label for="w-roles">AI 补设定时起几个角色（0 = 不起）</label><input id="w-roles" type="number" min="0" max="4"></div>
                 <div class="field"></div>
               </div>
         <div class="prefs-actions">

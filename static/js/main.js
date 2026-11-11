@@ -282,7 +282,6 @@ function fillWritingForm() {
     ['#w-line-min', 'line_min'], ['#w-line-max', 'line_max'],
     ['#w-context', 'context_limit'], ['#w-keep', 'keep_recent'],
     ['#w-chars', 'max_characters'], ['#w-summary', 'summary_chars'],
-    ['#w-roles', 'auto_roles'],
   ]) {
     const el = $(id);
     if (el) el.value = w[key] == null ? '' : w[key];
@@ -394,7 +393,6 @@ async function saveWriting(quiet = false) {
     ['#w-line-min', 'line_min'], ['#w-line-max', 'line_max'],
     ['#w-context', 'context_limit'], ['#w-keep', 'keep_recent'],
     ['#w-chars', 'max_characters'], ['#w-summary', 'summary_chars'],
-    ['#w-roles', 'auto_roles'],
   ]) {
     const el = $(id);
     const raw = el ? String(el.value || '').trim() : '';
