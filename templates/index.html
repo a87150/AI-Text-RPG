@@ -48,9 +48,14 @@
         <button id="btn-settings" type="button" disabled>⚙ 设定</button>
         <button id="btn-compress" type="button" disabled>🗜 压缩</button>
         <button id="btn-clear" type="button" disabled>🧹 清空</button>
-        <button id="btn-import-session" type="button" title="把导出的会话 JSON 装回来">📥 导入</button>
-        <button id="btn-export" type="button" disabled title="导出成 Markdown，可以直接存档或分享">📤 导出</button>
-        <input type="file" id="import-file" accept=".json,application/json" hidden>
+        <div class="io-wrap">
+          <button id="btn-io" type="button" title="导入或导出这份对话">📂</button>
+          <div class="io-menu hidden" id="io-menu">
+            <button type="button" id="btn-import-session" title="把导出的会话 JSON 装回来">📥 导入对话</button>
+            <button type="button" id="btn-export" disabled title="导出成 Markdown，可以直接存档或分享">📤 导出 Markdown</button>
+          </div>
+          <input type="file" id="import-file" accept=".json,application/json" hidden>
+        </div>
         <button id="btn-theme" type="button" title="切换亮色 / 暗色模式">🌙</button>
       </div>
     </header>

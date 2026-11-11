@@ -1018,6 +1018,26 @@ body.story-view #btn-search { display: none; }
 .conflict-tip button.ghost { color: var(--text-dim); }
 .conflict-tip button:hover { border-color: var(--accent); }
 
+/* 导入 / 导出：顶栏按钮多，合成一个入口 */
+.io-wrap { position: relative; display: inline-flex; }
+.io-menu {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 40;
+  display: flex; flex-direction: column; gap: 2px; min-width: 148px;
+  padding: 6px; border-radius: 10px;
+  background: var(--bg-elev); border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow);
+}
+.io-menu.hidden { display: none; }
+.io-menu button {
+  text-align: left; padding: 7px 10px; border-radius: 7px; width: 100%;
+  border: none; background: transparent; color: var(--text);
+  font-family: inherit; font-size: .7813rem; cursor: pointer;
+}
+.io-menu button:hover:not(:disabled) { background: var(--bg-hover); }
+.io-menu button:disabled { opacity: .45; cursor: default; }
+/* 故事视图里没有可导入导出的对话 */
+body.story-view .io-wrap { display: none; }
+
 /* 全文搜索 */
 #search-modal .modal-box.search-box { width: min(820px, 94vw); max-width: none; }
 #search-modal .search-bar { display: flex; align-items: center; gap: 12px; }
