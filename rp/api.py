@@ -2,7 +2,6 @@
 """HTTP 路由。"""
 import json
 import os
-import threading
 import time
 import uuid
 
@@ -27,7 +26,7 @@ from .config import (
     CREATIVITY_LABELS, CREATIVITY_LEVELS, CREATIVITY_TEMP,
     MODE_DEFAULT, creativity, creativity_temp, delete_provider, provider_ids,
     reset_settings, save_creativity,
-    tier, tier_context, tier_keep, tier_limits, writing,
+    tier, tier_context, tier_keep, tier_limits, writing, VERSION,
 )
 from .context import (
     background_compress, build_summary_prompt, compress_session, context_chars,
@@ -63,6 +62,7 @@ def api_config():
     conf = writing()
     return jsonify({
         "provider": provider,
+        "version": VERSION,
         "model": model,
         "mode": mode_of(),
         "writing": conf,

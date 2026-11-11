@@ -2,7 +2,6 @@
 """故事：可复用的设定模板，一个故事能开多个对话。"""
 import json
 import os
-import re
 import threading
 import time
 import uuid

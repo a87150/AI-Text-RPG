@@ -555,6 +555,8 @@ async function refreshBackendStatus() {
   if (btn) btn.disabled = true;
   try {
     state.conf = await api('/api/config');
+    const ver = $('#app-ver');
+    if (ver) ver.textContent = state.conf.version ? 'v' + state.conf.version : '';
     setConnectionBanner('');
     await loadModels(false);
   } catch (e) {

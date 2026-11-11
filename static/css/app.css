@@ -273,6 +273,10 @@ body.story-view .composer { display: none !important; }
   line-height: 1.7; outline: none; resize: vertical; min-height: 96px;
 }
 .idea-pop textarea:focus { border-color: var(--accent); }
+.brand .ver {
+  margin-left: 6px; font-size: .6875rem; font-weight: 400;
+  color: var(--text-mute); letter-spacing: .02em;
+}
 .idea-pop .idea-pick-bar {
   display: flex; gap: 8px; margin: 4px 0 -2px;
 }

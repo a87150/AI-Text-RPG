@@ -6,7 +6,6 @@ settings.json 里的 API Key 一律抹掉再写进包，备份文件因此可以
 """
 import json
 import os
-import shutil
 import threading
 import time
 import zipfile

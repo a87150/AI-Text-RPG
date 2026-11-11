@@ -6,7 +6,7 @@ import re
 import requests
 
 from .config import (
-    MAX_CHAT_ATTEMPTS, OLLAMA_API_URL, REQUEST_TIMEOUT, RETRY_TEMP_STEP,
+    REQUEST_TIMEOUT, RETRY_TEMP_STEP,
     current_target, provider_endpoint, provider_headers, reasoning_effort,
 )
 
