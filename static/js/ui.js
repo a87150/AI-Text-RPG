@@ -587,6 +587,15 @@ export function syncHeader() {
       title.textContent = picked ? (picked.title || '未命名故事') : '故事设定';
     } else {
       title.textContent = state.session ? (state.session.title || '未命名故事') : '未选择故事';
+      if (state.session) {
+        // 条数贴着标题走，跟左侧列表一致
+        const sess = state.session;
+        const n = sess.context ? sess.context.messages : (sess.messages || []).length;
+        const count = document.createElement('span');
+        count.className = 'chat-count';
+        count.textContent = (n || 0) + ' 条';
+        title.appendChild(count);
+      }
     }
   }
   updateSub();
@@ -636,7 +645,6 @@ export function updateSub() {
   group(' 在场：', others.filter((c) => !isLeft(c.name)));
   group(' 不在场：', others.filter((c) => isLeft(c.name)));
   if (!chars.length) put(' AI = ' + (s.ai_name || 'AI'));
-  put('· ' + ((s.context ? s.context.messages : (s.messages || []).length) || 0) + ' 条');
 
   // 当前状态单独占一行：地点、时间、关系、目标、物品都记在状态块里，
   // 挤在同一行会把上面的在场名单顶散

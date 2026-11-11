@@ -1091,3 +1091,12 @@ body.story-view .io-wrap { display: none; }
   color: var(--text-dim);
   opacity: .75;
 }
+
+/* 对话标题后面的条数 */
+#chat-title .chat-count {
+  margin-left: 8px;
+  font-size: .6875rem;
+  font-weight: 400;
+  color: var(--text-dim);
+  opacity: .75;
+}

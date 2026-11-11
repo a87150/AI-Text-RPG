@@ -133,8 +133,10 @@ def build_rules(user_name, mode=None, names=""):
     status_block = status_prompt()
     # 四个字数设置合成一轮的总量：旁白那份 + 台词那份。
     # 一般模式整段都是叙述，用总量；rp 模式拆开写，但也要给出合计上限
-    total_min = w["narrator_min"] + w["line_min"]
-    total_max = w["narrator_max"] + w["line_max"]
+    # 总量要按在场人数算：只算一个人的话，旁白一长模型就把其他角色段砍了
+    headcount = max(1, len([x for x in (names or "").split("、") if x.strip()]))
+    total_min = w["narrator_min"] + w["line_min"] * headcount
+    total_max = w["narrator_max"] + w["line_max"] * headcount
     if mode == "normal":
         return render(
             "normal.md",
