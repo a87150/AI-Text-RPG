@@ -48,8 +48,8 @@ def ensure_characters(sess):
                 "history": [h for h in (item.get("history") or [])
                             if isinstance(h, str)][-CHARACTER_HISTORY_KEEP:],
             })
-    if not cleaned:
-        cleaned = [default_character(sess)]
+    # 不再兜底造一个。角色表空就是空：以前删完下一次读取又长回来，
+    # 用户永远删不掉一个没建过的角色。新建会话时由 create 那边自己准备好。
     sess["characters"] = cleaned
     return cleaned
 

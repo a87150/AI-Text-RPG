@@ -2068,6 +2068,20 @@ def main():
     check("故事列表没有主角姓名", "story.user_name" not in _sj)
     check("故事列表还显示局数和角色数", "' 局 · '" in _sj and "character_count" in _sj)
 
+    # 88. 角色表可以真的是空的：没配就没配，不能删了又长回来
+    _z = client.post("/api/sessions", json={"mode": "rp"}).get_json()
+    check("新建时没配角色就是空表", _z.get("characters") == [], str(_z.get("characters")))
+    _z2 = client.put("/api/sessions/" + _z["id"], json={"characters": []}).get_json()
+    check("把人全删了也能存", _z2.get("characters") == [], str(_z2.get("characters")))
+    _z3 = client.get("/api/sessions/" + _z["id"]).get_json()
+    check("重读不会凭空长出一个", _z3.get("characters") == [], str(_z3.get("characters")))
+    check("空表时也没有 AI 名字", not (_z3.get("ai_name") or "").strip(), str(_z3.get("ai_name")))
+    # 但用户自己填了名字，就该建一个
+    _z4 = client.put("/api/sessions/" + _z["id"], json={"ai_name": "丙", "ai_role": "守门人"}).get_json()
+    check("填了名字就建", [c["name"] for c in _z4.get("characters") or []] == ["丙"],
+          str([c["name"] for c in _z4.get("characters") or []]))
+    client.delete("/api/sessions/" + _z["id"])
+
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")

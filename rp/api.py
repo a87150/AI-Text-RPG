@@ -230,7 +230,7 @@ def seed_opening(sess):
     if sess.get("messages") or not text:
         return
     use_rp = mode_for(sess) == "rp"
-    turn = parse_turn(text, chars[0]["name"] if use_rp else "",
+    turn = parse_turn(text, (chars[0]["name"] if chars else "") if use_rp else "",
                       [c["name"] for c in chars] if use_rp else None)
     if not (turn["line"] or turn["narrator"]):
         return
@@ -327,9 +327,10 @@ def api_create_session():
              "state": str(c.get("state") or ""), "history": c.get("history") or []}
             for c in data["characters"] if isinstance(c, dict)
         ][:writing()["max_characters"]]
+    # 角色表可以是空的（用户没配就是没配），不能当它一定有人
     chars = ensure_characters(sess)
-    sess["ai_name"] = chars[0]["name"]
-    sess["ai_role"] = chars[0]["role"]
+    sess["ai_name"] = chars[0]["name"] if chars else ""
+    sess["ai_role"] = chars[0]["role"] if chars else ""
     _bind_story(sess, story)
     seed_opening(sess)
     save_session(sess)
@@ -674,19 +675,29 @@ def api_update_session(sid):
             ][:writing()["max_characters"]]
         chars = ensure_characters(sess)
         if custom_chars:
-            # 角色表是唯一来源：第一个角色就是「AI 角色」，兼容旧字段
-            sess["ai_name"] = chars[0]["name"]
-            sess["ai_role"] = chars[0]["role"]
+            # 角色表是唯一来源：第一个角色就是「AI 角色」，兼容旧字段。
+            # 空表也要能存：用户把人全删了就是不想有人
+            sess["ai_name"] = chars[0]["name"] if chars else ""
+            sess["ai_role"] = chars[0]["role"] if chars else ""
             _rename_all(sess, _renames(_old_chars, sess["characters"]))
-            if sess.get("title") in ("", DEFAULT_TITLE, "新对话"):
+            if chars and sess.get("title") in ("", DEFAULT_TITLE, "新对话"):
                 sess["title"] = "与%s的故事" % chars[0]["name"]
-        elif len(chars) == 1:
-            # 只有一个角色时，设定面板里的名字/人设就是它的
+        elif len(chars) <= 1:
+            # 设定面板里填的名字/人设就是那个角色的。
+            # 一个都没有但填了名字：那是用户自己写的，建一个。
+            # 名字也没填：就是不想有人，不要凭空造
             name = (sess.get("ai_name") or "").strip()
-            if name:
-                chars[0]["name"] = name[:24]
-            if (sess.get("ai_role") or "").strip():
-                chars[0]["role"] = sess["ai_role"].strip()[:400]
+            role = (sess.get("ai_role") or "").strip()
+            if not chars:
+                if name:
+                    chars = [{"name": name[:24], "role": role[:400],
+                              "state": "", "history": []}]
+                    sess["characters"] = chars
+            else:
+                if name:
+                    chars[0]["name"] = name[:24]
+                if role:
+                    chars[0]["role"] = role[:400]
         seed_opening(sess)
         save_session(sess)
         sess["context_chars"] = context_chars(sess)

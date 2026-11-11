@@ -231,9 +231,10 @@ def build_system_prompt(sess, speaker=None):
     user_name, _ = role_labels(sess)
     chars = ensure_characters(sess)
     mode = mode_for(sess)
-    if mode == "rp" and not speaker:
+    # 没配角色就没人说话，退回叙台口吻，不要硬造一个名字出来
+    if mode == "rp" and not speaker and chars:
         speaker = chars[0]["name"]
-    if mode == "normal":
+    if mode == "normal" or not chars:
         speaker = ""
     names = "、".join(c["name"] for c in chars)
 
