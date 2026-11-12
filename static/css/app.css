@@ -1139,13 +1139,17 @@ body.story-view #btn-io { display: none; }
 }
 
 /* ---------- 故事封面 ---------- */
-.pane-head { display: flex; align-items: flex-start; gap: 12px; }
-.pane-head h2 { flex: 1; min-width: 0; }
+/* 标题和说明在左边竖排，封面靠右。说明文字紧跟在标题下面，
+   不再被图片挤到下一行去 */
+.pane-head { display: flex; align-items: flex-start; gap: 16px; }
+.pane-head-text { flex: 1; min-width: 0; }
+.pane-head-text h2 { margin-bottom: 2px; }
+.pane-head-text #story-meta { margin: 0; }
 
-/* 标题右边那个框：没图时是个虚线空位，有图就是缩略图 */
+/* 标题右侧那个框：没图时是虚线空位，有图就是缩略图 */
 .cover-slot {
-  flex: none; width: 64px; height: 88px; padding: 0; overflow: hidden;
-  border: 1px dashed var(--border-strong); border-radius: 9px;
+  flex: none; width: 128px; height: 176px; padding: 0; overflow: hidden;
+  border: 1px dashed var(--border-strong); border-radius: 12px;
   background: var(--bg-input); color: var(--text-mute);
   cursor: pointer; display: flex; align-items: center; justify-content: center;
   transition: border-color .12s ease, color .12s ease;
@@ -1153,17 +1157,18 @@ body.story-view #btn-io { display: none; }
 .cover-slot:hover:not(:disabled) { border-color: var(--accent); color: var(--text); }
 .cover-slot:disabled { cursor: default; opacity: .45; }
 .cover-thumb { width: 100%; height: 100%; object-fit: cover; display: block; }
-.cover-empty { font-size: .6875rem; line-height: 1.4; text-align: center; padding: 0 4px; }
+.cover-empty { font-size: .75rem; line-height: 1.5; text-align: center; padding: 0 6px; }
 
-/* 列表里标题左侧的小图 */
-.si-body { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
+/* 两个列表共用：小图 + 文字块两栏。文字块里面自己竖排，
+   不能让 flex 把标题和副标题拉成一行 */
+.si-body { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; }
+.si-text { flex: 1; min-width: 0; display: block; }
 .si-cover {
-  flex: none; width: 30px; height: 30px; border-radius: 6px;
+  flex: none; width: 48px; height: 48px; border-radius: 8px;
   object-fit: cover; background: var(--bg-input);
 }
-.si-body > div { min-width: 0; }
 
-/* 居中弹窗 */
+/* 层弹窗 */
 .cover-box { width: min(560px, 94vw); }
 .cover-stage {
   margin: 10px 0 12px; border-radius: 10px; background: var(--bg-input);

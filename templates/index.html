@@ -135,13 +135,15 @@ window.addEventListener('unhandledrejection', function (e) {
   <div class="modal-box">
     <div id="settings-form">
     <div class="pane-head">
-      <h2 id="settings-title">故事设定</h2>
+      <div class="pane-head-text">
+        <h2 id="settings-title">故事设定</h2>
+        <div class="hint" id="story-meta"></div>
+      </div>
       <button class="cover-slot" id="btn-cover" type="button" title="封面图：上传或生成">
         <img id="cover-thumb" class="cover-thumb hidden" alt="">
         <span id="cover-empty" class="cover-empty">＋ 封面</span>
       </button>
     </div>
-    <div class="hint" id="story-meta"></div>
 
     <div class="grid2">
       <div class="field"><label for="f-story-title">故事名（设定本身，可以开很多局）</label><input id="f-story-title" placeholder="例如：雨夜的旧城"></div>

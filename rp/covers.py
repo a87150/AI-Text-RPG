@@ -126,7 +126,12 @@ def generate(prompt, negative="", width=COVER_W, height=COVER_H, timeout=GEN_TIM
         raise RuntimeError("生成完了但没有输出图片")
     blob = _fetch(img)
 
-    name = "%s-%s%s" % (time.strftime("%Y%m%d%H%M%S"), uuid.uuid4().hex[:6], ".png")
+    # 延用 ComfyUI 输出的真实扩展名。它的保存节点可以出 jpg/png/webp，
+    # 写死一个会让扩展名与内容不符。
+    ext = os.path.splitext(str(img.get("filename") or ""))[1].lower()
+    if ext not in ALLOWED_EXT:
+        ext = ".jpg"
+    name = "%s-%s%s" % (time.strftime("%Y%m%d%H%M%S"), uuid.uuid4().hex[:6], ext)
     # 先写临时文件再改名：中途失败不会留下半张图被当成封面
     fd, tmp = tempfile.mkstemp(dir=COVERS_DIR, suffix=".part")
     try:

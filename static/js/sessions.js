@@ -82,6 +82,8 @@ export function renderSessionList() {
 
     const body = document.createElement('div');
     body.className = 'si-body';
+    const cover = coverOfStory(s.story_id);
+    if (cover) body.appendChild(miniCover(cover));
     const title = document.createElement('div');
     title.className = 'si-title';
     title.textContent = s.title || '未命名故事';
@@ -92,7 +94,10 @@ export function renderSessionList() {
       + ' · ' + ((s.char_count || 0) + ' 个角色')
       + ' · ' + ((s.message_count || 0) + ' 条')
       + (s.has_summary ? ' · 已压缩' : '');
-    body.append(title, meta);
+    const text = document.createElement('div');
+    text.className = 'si-text';
+    text.append(title, meta);
+    body.append(text);
 
     const del = document.createElement('button');
     del.className = 'si-del';
@@ -234,6 +239,24 @@ async function removeStory(story) {
   }
 }
 
+
+/** 列表里的小图。没封面的话调用方不会调它。 */
+function miniCover(name) {
+  const img = document.createElement('img');
+  img.className = 'si-cover';
+  img.src = '/covers/' + encodeURIComponent(name);
+  img.alt = '';
+  img.loading = 'lazy';
+  return img;
+}
+
+/** 一局对话没自己的封面，用它所属故事的。 */
+function coverOfStory(storyId) {
+  if (!storyId) return '';
+  const story = (state.stories || []).find((x) => x.id === storyId);
+  return (story && story.cover) || '';
+}
+
 export function renderStoryList() {
   const box = $('#story-list');
   if (!box) return;
@@ -267,21 +290,17 @@ export function renderStoryList() {
     const head = document.createElement('div');
     head.className = 'si-body';
     // 有封面就在标题前面放张小图；没有就不占位，行高不会参差
-    if (story.cover) {
-      const thumb = document.createElement('img');
-      thumb.className = 'si-cover';
-      thumb.src = '/covers/' + encodeURIComponent(story.cover);
-      thumb.alt = '';
-      thumb.loading = 'lazy';
-      head.appendChild(thumb);
-    }
+    if (story.cover) head.appendChild(miniCover(story.cover));
     const title = document.createElement('div');
     title.className = 'si-title';
     title.textContent = story.title || '未命名故事';
     const meta = document.createElement('div');
     meta.className = 'si-meta';
     meta.textContent = runs.length + ' 局 · ' + story.character_count + ' 个角色';
-    head.append(title, meta);
+    const text = document.createElement('div');
+    text.className = 'si-text';
+    text.append(title, meta);
+    head.append(text);
 
     item.onclick = () => selectStory(story.id);
 

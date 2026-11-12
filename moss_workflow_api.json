@@ -157,7 +157,7 @@
       "filename_prefix": "comfyui",
       "timestamp": "second",
       "format": "jpg",
-      "quality": 100,
+      "quality": 90,
       "dpi": 300,
       "meta_data": false,
       "save_workflow_as_json": false,
