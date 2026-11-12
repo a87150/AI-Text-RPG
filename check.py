@@ -2185,6 +2185,9 @@ def main():
     _cs = (pathlib.Path(__file__).parent / "static" / "css" / "app.css").read_text(encoding="utf-8")
     check("编辑框有高度上限", "max-height: 60vh" in _cs, "")
     check("编辑框不再手动拖大", "resize: none" in _cs, "")
+    check("底部输入框也跟着长高", "autoGrow(input);" in _uj)
+    check("编辑时这条消息占满宽度", ".msg.editing" in _cs)
+    check("编辑结束撤掉占满", "classList.remove" in _mj)
     check("静态文件不缓存", rp_config.app.config["SEND_FILE_MAX_AGE_DEFAULT"] == 0)
     # 查进度失败、任务丢失这两条路不放锁的话，封面功能会永久静默失效
     _cv = (pathlib.Path(__file__).parent / "static" / "js" / "cover.js").read_text(encoding="utf-8")

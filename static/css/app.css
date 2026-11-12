@@ -481,6 +481,9 @@ body.story-view #btn-search { display: none; }
 .edit-bar button:first-child { border-color: var(--accent); color: var(--text); }
 .msg.user { align-self: flex-end; align-items: flex-end; }
 .msg.assistant { align-self: flex-start; align-items: flex-start; }
+/* 编辑一条消息时让它占满：气泡本身只有 78% 宽，在窄框里改整段太难受 */
+.msg.editing, .msg.editing .bubble { width: 100%; max-width: 100%; }
+.msg.editing { align-items: stretch; }
 .who {
   font-size: calc(var(--ui-fs) - 1.5px); color: var(--text-mute);
   margin-bottom: 5px; padding: 0 4px;
@@ -626,7 +629,8 @@ body.story-view #btn-search { display: none; }
 }
 .composer-row { display: flex; gap: 10px; }
 .composer textarea {
-  flex: 1; resize: none; height: 76px; padding: 12px 14px; border-radius: var(--radius);
+  /* 高度由 JS 跟着内容撑，这里只管底座和上限 */
+  flex: 1; resize: none; min-height: 76px; max-height: 40vh; overflow-y: auto;
   background: var(--bg-input); border: 1px solid var(--border-strong); color: var(--text);
   font-size: var(--ui-fs); line-height: 1.7; font-family: inherit; outline: none;
   transition: border-color .15s, box-shadow .15s;
@@ -696,8 +700,9 @@ body.story-view #btn-search { display: none; }
 .edit-ask button:hover { filter: brightness(1.15); }
 /* 生成中把「发送」换成「停止」，位置和尺寸都和发送按钮一致，省得按钮跳 */
 #btn-stop {
-  flex: none; align-self: flex-end;
-  padding: 0 18px; height: 36px; border-radius: 9px; cursor: pointer;
+  /* 和输入框默认高度齐平，顶部对齐：输入框自己会随内容长高，按钮不跟 */
+  flex: none; align-self: flex-start;
+  padding: 0 18px; height: 76px; border-radius: 9px; cursor: pointer;
   border: 1px solid var(--danger); background: transparent; color: var(--danger);
   font-size: .8125rem; font-weight: 500;
 }

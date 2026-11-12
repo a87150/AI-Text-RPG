@@ -2,7 +2,7 @@
 import { api } from './api.js';
 import { state } from './state.js';
 import { continueLast } from './chat.js';
-import { $, toast, renderMessages, syncAll } from './ui.js';
+import { $, toast, renderMessages, syncAll, autoGrow } from './ui.js';
 import { loadSessions, refreshCurrentSession } from './sessions.js';
 import { retryLast } from './chat.js';
 
@@ -110,6 +110,8 @@ function startEdit(index, host) {
   bar.append(save, cancel);
   bubble.innerHTML = '';
   bubble.append(area, bar);
+  // 气泡本身只有 78% 宽，在那个框里改整段太难受：编辑时让这一条占满
+  host.classList.add('editing');
 
   // 至少能看到 200 字：按当前宽度算一行放得下几个字，再按行高撑出底座；
   // 内容更多就继续长，长到 60vh 打住（CSS 有 max-height，超出在里面滚）。
@@ -118,8 +120,7 @@ function startEdit(index, host) {
     const fs = parseFloat(getComputedStyle(area).fontSize) || 16;
     const perLine = Math.max(10, Math.floor(Math.max(200, area.clientWidth - 20) / fs));
     const floor = Math.ceil(200 / perLine) * fs * 1.7 + 18;
-    area.style.height = 'auto';
-    area.style.height = Math.max(area.scrollHeight, floor) + 'px';
+    autoGrow(area, floor);
   };
   area.addEventListener('input', grow);
   window.addEventListener('resize', grow);
@@ -128,6 +129,7 @@ function startEdit(index, host) {
   // 不先把它摘掉，保存完和取消都停在输入框上不动。
   const closeEdit = () => {
     window.removeEventListener('resize', grow);
+    host.classList.remove('editing');
     host.querySelectorAll('.edit-area, .edit-bar').forEach((el) => el.remove());
   };
   const restore = () => { closeEdit(); renderMessages(); };

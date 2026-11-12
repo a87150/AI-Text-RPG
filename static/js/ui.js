@@ -170,6 +170,14 @@ export function focusComposer({ force = false } = {}) {
 }
 
 /* ------------------------------ 输入区同步 ------------------------------ */
+/** 让 textarea 跟着内容长高。minPx 是底座，上限交给 CSS 的 max-height，
+ * 超了就在框里自己滚，不会把整个页面撑开。 */
+export function autoGrow(el, minPx = 0) {
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = Math.max(el.scrollHeight, minPx) + 'px';
+}
+
 export function syncComposer() {
   const input = $('#input');
   const btn = $('#btn-send');
@@ -190,6 +198,8 @@ export function syncComposer() {
   paintAiStatus(hasSession);
   const count = $('#composer-count');
   if (count) count.textContent = text ? text.length + ' 字' : '';
+  // 写长了就长高，不用在一条细缝里改；清空后自己缩回去
+  autoGrow(input);
 }
 
 /**
