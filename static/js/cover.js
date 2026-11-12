@@ -21,13 +21,14 @@ function urlOf(name) {
 export function syncCoverThumb() {
   const story = currentStory();
   const name = (story && story.cover) || '';
+  const small = (story && story.thumb) || '';
   const img = $('#cover-thumb');
   const empty = $('#cover-empty');
   const slot = $('#btn-cover');
   if (slot) slot.disabled = !story;
   if (img) {
     if (name) {
-      img.src = urlOf(name);
+      img.src = small || urlOf(name);
       img.classList.remove('hidden');
     } else {
       img.removeAttribute('src');

@@ -20,6 +20,9 @@ import requests
 from .config import BASE_DIR, DATA_DIR
 
 COVERS_DIR = os.path.join(DATA_DIR, "covers")
+THUMBS_DIR = os.path.join(COVERS_DIR, "thumbs")
+# 列表里只显示 48px，但高分屏要撑 2-3 倍。存 160 够用，一张几 KB。
+THUMB_SIZE = 160
 WORKFLOW_PATH = os.path.join(BASE_DIR, "moss_workflow_api.json")
 
 # 同机的 ComfyUI 默认在 8188；换机器用环境变量 LT_COMFY 指过去
@@ -178,9 +181,11 @@ def _run_job(story_id, prompt, negative, timeout):
     if not story:
         _set_job(story_id, state="error", error="故事已被删掉")
         return
+    make_thumb(name)
     set_cover(story, name, prompt)
     save_story(story)
     _set_job(story_id, state="done", cover=name, url=url_of(name),
+             thumb=url_thumb(name),
              prompt=prompt, error="",
              history_count=len(story.get("cover_history") or []))
 
@@ -198,6 +203,52 @@ def start_job(story_id, prompt, negative="", timeout=None):
                          daemon=True)
     t.start()
     return job_of(story_id)
+
+
+def thumb_path(name):
+    return os.path.join(THUMBS_DIR, name)
+
+
+def make_thumb(name):
+    """按原图生一张小图。失败就返回 False，回退到用原图。"""
+    if not exists(name):
+        return False
+    try:
+        from PIL import Image
+    except ImportError:
+        return False
+    try:
+        os.makedirs(THUMBS_DIR, exist_ok=True)
+        with Image.open(os.path.join(COVERS_DIR, name)) as im:
+            im = im.convert("RGB")
+            im.thumbnail((THUMB_SIZE, THUMB_SIZE), Image.LANCZOS)
+            ext = os.path.splitext(name)[1].lower()
+            # 小图一律存 JPEG，比 PNG 小一个量级
+            out = thumb_path(name)
+            if ext in (".jpg", ".jpeg"):
+                im.save(out, "JPEG", quality=82, optimize=True)
+            else:
+                out = thumb_path(os.path.splitext(name)[0] + ".jpg")
+                im.save(out, "JPEG", quality=82, optimize=True)
+                return True
+        return True
+    except Exception:
+        return False
+
+
+def thumb_of(name):
+    """缩略图文件名；没生成过就现场生成一张。"""
+    if not exists(name):
+        return ""
+    base = os.path.splitext(name)[0] + ".jpg"
+    if os.path.isfile(thumb_path(base)):
+        return base
+    return base if make_thumb(name) else ""
+
+
+def url_thumb(name):
+    t = thumb_of(name)
+    return "/covers/thumbs/" + t if t else ""
 
 
 def save_upload(stream):
@@ -230,7 +281,20 @@ def drop(name):
             os.unlink(os.path.join(COVERS_DIR, name))
         except OSError:
             pass
+    t = thumb_path(os.path.splitext(name or "")[0] + ".jpg")
+    if os.path.basename(t) and os.path.isfile(t):
+        try:
+            os.unlink(t)
+        except OSError:
+            pass
 
+
+
+def is_thumb(name):
+    """只放行 thumbs 目录里实存的文件名（不含路径）。"""
+    if not name or os.path.basename(name) != name:
+        return False
+    return os.path.isfile(thumb_path(name))
 
 def url_of(name):
     return "/covers/" + name if name else ""

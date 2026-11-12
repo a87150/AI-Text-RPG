@@ -2384,6 +2384,32 @@ def main():
     check("不存在的封面当没封面", rp_stories._live_cover("nope.jpg") == "")
     check("真存在的封面照旧返回", rp_stories._live_cover(_dn1) == "")
 
+    # 99. 缩略图要真的是另一张小图，不能拿原图当缩略图
+    check("缩略图目录在封面目录下", _cov.THUMBS_DIR.startswith(_cov.COVERS_DIR))
+    check("缩略图尺寸不超过屏幕需求的三倍", _cov.THUMB_SIZE <= 200, str(_cov.THUMB_SIZE))
+    _tn = "zz_thumb_src.png"
+    _tp = os.path.join(_cov.COVERS_DIR, _tn)
+    try:
+        from PIL import Image
+        Image.new("RGB", (832, 1216), (30, 40, 60)).save(_tp, "PNG")
+        _okimg = True
+    except Exception:
+        _okimg = False
+    if _okimg:
+        _full_bytes = os.path.getsize(_tp)
+        check("能生成缩略图", _cov.make_thumb(_tn))
+        _th = _cov.thumb_of(_tn)
+        check("缩略图是 jpeg", _th.endswith(".jpg"), _th)
+        _thb = os.path.getsize(_cov.thumb_path(_th))
+        check("缩略图明显比原图小", _thb * 5 < _full_bytes, "%d vs %d" % (_thb, _full_bytes))
+        with Image.open(_cov.thumb_path(_th)) as _im:
+            check("缩略图真的被缩了", max(_im.size) <= _cov.THUMB_SIZE, str(_im.size))
+        check("缩略图地址形状对", _cov.url_thumb(_tn).startswith("/covers/thumbs/"))
+        check("不存在的缩略图不放行", _cov.is_thumb("nope.jpg") is False)
+        check("缩略图名拒绝路径", _cov.is_thumb("../x.jpg") is False)
+        _cov.drop(_tn)
+        check("删原图连带删缩略图", not _cov.is_thumb(_th) and not _cov.exists(_tn))
+
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")

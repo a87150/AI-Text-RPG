@@ -83,7 +83,7 @@ export function renderSessionList() {
     const body = document.createElement('div');
     body.className = 'si-body';
     const cover = coverOfStory(s.story_id);
-    if (cover) body.appendChild(miniCover(cover));
+    if (cover) body.appendChild(miniCover(thumbOfStory(s.story_id)));
     const title = document.createElement('div');
     title.className = 'si-title';
     title.textContent = s.title || '未命名故事';
@@ -241,12 +241,19 @@ async function removeStory(story) {
 
 
 /** 列表里的小图。没封面的话调用方不会调它。 */
-function miniCover(name) {
+function miniCover(src) {
   const img = document.createElement('img');
   img.className = 'si-cover';
-  img.src = '/covers/' + encodeURIComponent(name);
   img.alt = '';
   img.loading = 'lazy';
+  // 传进来的是小图地址；万一没生成就回退到原图
+  img.src = src || '';
+  img.onerror = () => {
+    if (src && src.indexOf('/thumbs/') !== -1) {
+      img.onerror = null;
+      img.src = src.replace('/thumbs/', '/');
+    }
+  };
   return img;
 }
 
@@ -255,6 +262,15 @@ function coverOfStory(storyId) {
   if (!storyId) return '';
   const story = (state.stories || []).find((x) => x.id === storyId);
   return (story && story.cover) || '';
+}
+
+function thumbOfStory(storyId) {
+  if (storyId) {
+    const story = (state.stories || []).find((x) => x.id === storyId);
+    if (story && story.thumb) return story.thumb;
+  }
+  const cover = coverOfStory(storyId);
+  return cover ? '/covers/' + encodeURIComponent(cover) : '';
 }
 
 export function renderStoryList() {
@@ -290,7 +306,7 @@ export function renderStoryList() {
     const head = document.createElement('div');
     head.className = 'si-body';
     // 有封面就在标题前面放张小图；没有就不占位，行高不会参差
-    if (story.cover) head.appendChild(miniCover(story.cover));
+    if (story.cover) head.appendChild(miniCover(story.thumb || ('/covers/' + encodeURIComponent(story.cover))));
     const title = document.createElement('div');
     title.className = 'si-title';
     title.textContent = story.title || '未命名故事';

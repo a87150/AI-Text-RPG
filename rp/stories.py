@@ -150,6 +150,15 @@ def _live_cover(name):
     from . import covers as cover_store
     return name if cover_store.exists(name) else ""
 
+
+def _live_thumb(name):
+    """列表用的小图地址。没小图就空着，前端自己回退到原图。"""
+    name = _live_cover(name)
+    if not name:
+        return ""
+    from . import covers as cover_store
+    return cover_store.url_thumb(name)
+
 def list_stories():
     with _lock:
         try:
@@ -168,6 +177,7 @@ def list_stories():
                 "ai_name": story.get("ai_name") or "",
                 "character_count": len(story.get("characters") or []),
                 "cover": _live_cover(story.get("cover")),
+                "thumb": _live_thumb(story.get("cover")),
                 "cover_prompt": story.get("cover_prompt") or "",
                 "cover_history_count": len(story.get("cover_history") or []),
             })

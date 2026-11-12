@@ -630,6 +630,14 @@ def api_get_session(sid):
     return jsonify(sess)
 
 
+@app.get("/covers/thumbs/<name>")
+def api_cover_thumb(name):
+    """列表里那张 48px 小图。不存在就 404，前端回退到原图。"""
+    if not cover_store.is_thumb(name):
+        abort(404)
+    return send_from_directory(cover_store.THUMBS_DIR, name, max_age=86400)
+
+
 @app.get("/covers/<name>")
 def api_cover_file(name):
     """封面图本体。只读、只认 covers 目录里的文件名。"""
@@ -653,9 +661,11 @@ def api_story_cover_upload(story_sid):
         return jsonify({"error": str(exc)}), 400
     except OSError:
         return jsonify({"error": "存不下这张图"}), 500
+    cover_store.make_thumb(name)
     set_cover(story, name)
     save_story(story)
     return jsonify({"cover": name, "url": cover_store.url_of(name),
+                    "thumb": cover_store.url_thumb(name),
                     "cover_prompt": story.get("cover_prompt") or ""})
 
 
