@@ -4,6 +4,7 @@ import { state } from './state.js';
 import {
   $, toast, renderMessages, syncAll, focusComposer, renderCharacterEditor,
 } from './ui.js';
+import { syncCoverThumb } from './cover.js';
 import {
   loadSessions, newRun, refreshCurrentSession, loadStories, switchSideView,
 } from './sessions.js';
@@ -196,6 +197,8 @@ export async function openSettings(opts = {}) {
   // 故事设定常驻右侧；对话设定才用弹窗
   const inline = !!editingStory;
   mountSettingsForm(inline ? 'pane' : 'modal');
+  // 表单搬过去之后再填封面：对话里只读，故事里可点
+  syncCoverThumb();
   // 面板显隐只由 switchSideView 决定：这里再动一次会和异步取数抢，切走了又冒出来
   const empty = $('#pane-empty');
   if (empty) empty.classList.toggle('hidden', inline);

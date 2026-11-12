@@ -1148,7 +1148,7 @@ body.story-view #btn-io { display: none; }
 
 /* 标题右侧那个框：没图时是虚线空位，有图就是缩略图 */
 .cover-slot {
-  flex: none; width: 128px; height: 176px; padding: 0; overflow: hidden;
+  flex: none; width: 192px; height: 264px; padding: 0; overflow: hidden;
   border: 1px dashed var(--border-strong); border-radius: 12px;
   background: var(--bg-input); color: var(--text-mute);
   cursor: pointer; display: flex; align-items: center; justify-content: center;

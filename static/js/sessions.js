@@ -82,8 +82,8 @@ export function renderSessionList() {
 
     const body = document.createElement('div');
     body.className = 'si-body';
-    const cover = coverOfStory(s.story_id);
-    if (cover) body.appendChild(miniCover(thumbOfStory(s.story_id)));
+    const cover = (storyOf(s) || {}).cover || '';
+    if (cover) body.appendChild(miniCover(thumbOf(s)));
     const title = document.createElement('div');
     title.className = 'si-title';
     title.textContent = s.title || '未命名故事';
@@ -264,13 +264,23 @@ function coverOfStory(storyId) {
   return (story && story.cover) || '';
 }
 
-function thumbOfStory(storyId) {
-  if (storyId) {
-    const story = (state.stories || []).find((x) => x.id === storyId);
-    if (story && story.thumb) return story.thumb;
+/** 老会话没有 story_id，退一步按标题认。 */
+function storyOf(sess) {
+  if (!sess) return null;
+  const all = state.stories || [];
+  if (sess.story_id) {
+    const hit = all.find((x) => x.id === sess.story_id);
+    if (hit) return hit;
   }
-  const cover = coverOfStory(storyId);
-  return cover ? '/covers/' + encodeURIComponent(cover) : '';
+  if (sess.title) return all.find((x) => x.title === sess.title) || null;
+  return null;
+}
+
+function thumbOf(sess) {
+  const story = storyOf(sess);
+  if (!story) return '';
+  if (story.thumb) return story.thumb;
+  return story.cover ? '/covers/' + encodeURIComponent(story.cover) : '';
 }
 
 export function renderStoryList() {

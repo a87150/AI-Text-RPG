@@ -6,11 +6,22 @@ import { $, toast } from './ui.js';
 let busy = false;
 
 function storyId() {
+  // 对话里没选中任何故事，封面属于这局用的那份设定
+  if (state.session && state.session.story_id) return state.session.story_id;
+  if (state.session && state.session.title) {
+    const hit = (state.stories || []).find((x) => x.title === state.session.title);
+    if (hit) return hit.id;
+  }
   return state.selectedStory || '';
 }
 
 function currentStory() {
   return (state.stories || []).find((s) => s.id === storyId()) || null;
+}
+
+/** 对话中只读：改封面是改设定本身，不能在已开局里改 */
+function readonlyHere() {
+  return !!(state.session && state.session.id);
 }
 
 function urlOf(name) {
@@ -25,7 +36,12 @@ export function syncCoverThumb() {
   const img = $('#cover-thumb');
   const empty = $('#cover-empty');
   const slot = $('#btn-cover');
-  if (slot) slot.disabled = !story;
+  if (slot) {
+    slot.disabled = !story || readonlyHere();
+    slot.title = readonlyHere()
+      ? '封面属于设定，去「故事」里改'
+      : '封面图：上传或生成';
+  }
   if (img) {
     if (name) {
       img.src = small || urlOf(name);
@@ -88,6 +104,10 @@ export function openCover() {
   const story = currentStory();
   if (!story) {
     toast('先选一份故事设定', 'error');
+    return;
+  }
+  if (readonlyHere()) {
+    toast('封面属于设定本身，去「故事」里换', 'error');
     return;
   }
   const prompt = story.cover_prompt || '';
