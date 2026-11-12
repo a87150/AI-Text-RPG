@@ -2309,6 +2309,38 @@ def main():
     check("busy 不落盘", "busy" not in (rp_storage.load_session(_bsid) or {}))
     client.delete("/api/sessions/" + _bsid)
 
+    # 96. 封面：路径靠 BASE_DIR 推、可撤销、拒绝路径穿越
+    from rp import covers as _cov
+    check("封面目录在数据目录下", _cov.COVERS_DIR.startswith(rp_config.DATA_DIR))
+    # "算出来的"就是：它必须等于 DATA_DIR 拼 covers。写死盘符的话，
+    # 换机器或换 LT_DATA_DIR 后就会指到一个不存在的地方。
+    check("封面路径由数据目录推出",
+          _cov.COVERS_DIR == os.path.join(rp_config.DATA_DIR, "covers"))
+    check("封面名拒绝路径穿越", _cov.exists("../settings.json") is False)
+    check("封面名拒绝空串", _cov.exists("") is False)
+
+    _st = rp_stories.new_story("测试")
+    check("新故事带封面字段", _st.get("cover") == "" and _st.get("cover_history") == [])
+    rp_stories.set_cover(_st, "a.png", "p1")
+    rp_stories.set_cover(_st, "b.png", "p2")
+    check("换封面时旧图进历史", [h["name"] for h in _st["cover_history"]] == ["a.png"])
+    check("封面提示词随图存", _st.get("cover_prompt") == "p2")
+    rp_stories.undo_cover(_st)
+    check("撤销回到上一张", _st.get("cover") == "a.png")
+    check("撤销连提示词一起还原", _st.get("cover_prompt") == "p1")
+    rp_stories.undo_cover(_st)
+    check("没历史时撤销清空而不报错", _st.get("cover") == "")
+
+    _blank = rp_stories.new_story("")
+    check("空故事拼不出提示词", rp_stories.cover_prompt_from(_blank) == "")
+    _rich = rp_stories.new_story("雨夜")
+    _rich["world"] = "一座下了三天雨的小城。"
+    _rich["characters"] = [{"name": "甲", "role": "摆渡人"}]
+    _pp = rp_stories.cover_prompt_from(_rich)
+    check("有设定时拼得出提示词", _pp and "甲" in _pp)
+    check("提示词不会拼出句号加顿号", "。、" not in _pp)
+    check("封面总长有上限", len(_pp) < 320, str(len(_pp)))
+
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")

@@ -30,6 +30,11 @@ def new_story(title=DEFAULT_TITLE):
         "user_name": "", "ai_name": "", "user_role": "", "ai_role": "",
         "world": "", "rules": "", "opening": "",
         "characters": [],
+        # cover 只存文件名，不存路径：路径由 DATA_DIR 推，换机器能跑
+        "cover": "",
+        # 生图的提示词要留一份，否则下次想重来就得重现想词
+        "cover_prompt": "",
+        "cover_history": [],
         "created_at": now, "updated_at": now,
     }
 
@@ -45,6 +50,70 @@ def load_story(sid):
         except (OSError, json.JSONDecodeError):
             return None
     return data if isinstance(data, dict) else None
+
+
+COVER_HISTORY_MAX = 6
+
+
+def set_cover(story, name, prompt=None):
+    """换封面。旧的不删，压进历史，撤销就是把它拿回来。"""
+    if not story:
+        return None
+    old = story.get("cover") or ""
+    if old and old != name:
+        hist = list(story.get("cover_history") or [])
+        hist.insert(0, {"name": old, "prompt": story.get("cover_prompt") or "",
+                        "ts": time.time()})
+        story["cover_history"] = hist[:COVER_HISTORY_MAX]
+    story["cover"] = name or ""
+    if prompt is not None:
+        story["cover_prompt"] = prompt
+    return story
+
+
+def undo_cover(story):
+    """回到上一张。没有上一张就清空，不报错。"""
+    if not story:
+        return None
+    hist = list(story.get("cover_history") or [])
+    if not hist:
+        story["cover"] = ""
+        return story
+    top = hist.pop(0)
+    story["cover"] = top.get("name") or ""
+    if top.get("prompt"):
+        story["cover_prompt"] = top["prompt"]
+    story["cover_history"] = hist
+    return story
+
+
+def cover_prompt_from(story):
+    """把故事的设定拼成一句能直接喂给生图模型的提示词。
+
+    只取前两百字：世界观往往前面就把场景说完了，再往后是规则条款，
+    那些对画面没帮助，反而会把模型带到写字上去。
+    """
+    if not story:
+        return ""
+    bits = []
+    title = (story.get("title") or "").strip()
+    world = (story.get("world") or "").strip()
+    if world:
+        bits.append(world[:200])
+    elif title:
+        bits.append(title)
+    names = []
+    for c in (story.get("characters") or [])[:3]:
+        if isinstance(c, dict) and c.get("name"):
+            role = (c.get("role") or "").strip()
+            names.append("%s（%s）" % (c["name"], role) if role else c["name"])
+    if names:
+        bits.append("出场：" + "、".join(names))
+    if not bits:
+        return ""
+    # 用空格接：世界观尾已经带标点，再拼顿号会出现"。、"
+    text = " ".join(b.strip().rstrip("。．.") for b in bits if b.strip())
+    return text + "。电影感构图，氛围强，细节丰富。"
 
 
 def save_story(story):
@@ -84,6 +153,9 @@ def list_stories():
                 "user_name": story.get("user_name") or "",
                 "ai_name": story.get("ai_name") or "",
                 "character_count": len(story.get("characters") or []),
+                "cover": story.get("cover") or "",
+                "cover_prompt": story.get("cover_prompt") or "",
+                "cover_history_count": len(story.get("cover_history") or []),
             })
     items.sort(key=lambda x: x["updated_at"], reverse=True)
     return items

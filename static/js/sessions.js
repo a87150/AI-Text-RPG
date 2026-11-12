@@ -4,6 +4,7 @@ import { state } from './state.js';
 import { $, toast, renderMessages, syncAll, focusComposer, syncHeader, closeNav, loadDraft } from './ui.js';
 // 循环引用（settings 也用 sessions 的函数）：函数声明会被提升，运行期调用没问题
 import { openSettings } from './settings.js';
+import { syncCoverThumb } from './cover.js';
 
 export async function loadSessions() {
   try {
@@ -265,6 +266,15 @@ export function renderStoryList() {
 
     const head = document.createElement('div');
     head.className = 'si-body';
+    // 有封面就在标题前面放张小图；没有就不占位，行高不会参差
+    if (story.cover) {
+      const thumb = document.createElement('img');
+      thumb.className = 'si-cover';
+      thumb.src = '/covers/' + encodeURIComponent(story.cover);
+      thumb.alt = '';
+      thumb.loading = 'lazy';
+      head.appendChild(thumb);
+    }
     const title = document.createElement('div');
     title.className = 'si-title';
     title.textContent = story.title || '未命名故事';
@@ -351,6 +361,7 @@ export async function selectStory(storyId) {
   if (empty) empty.classList.add('hidden');
   // 表单的搬移由 switchSideView 负责，这里不再重复加载
   await openSettings({ storyId });
+  syncCoverThumb();
 }
 
 export async function openSession(id) {

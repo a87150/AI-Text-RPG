@@ -1,0 +1,175 @@
+{
+  "1": {
+    "inputs": {
+      "unet_name": "moss_image_sft_int8_convrot.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "UNet加载器"
+    }
+  },
+  "2": {
+    "inputs": {
+      "clip_name": "qwen3.5_9b_int8_convrot.safetensors",
+      "type": "moss_image",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "加载CLIP"
+    }
+  },
+  "3": {
+    "inputs": {
+      "vae_name": "flux2-vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "加载VAE"
+    }
+  },
+  "4": {
+    "inputs": {
+      "text": "",
+      "clip": [
+        "2",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "提示词"
+    }
+  },
+  "5": {
+    "inputs": {
+      "text": "worst quality, low quality, blurry, bad anatomy, deformed face, distorted limbs, twisted limbs, extra limbs, missing limbs, extra fingers, missing fingers, fused fingers, asymmetric eyes, deformed pupil, bad eyes, unclear details, plastic skin, waxy skin, overly smooth skin, airbrushed skin, greasy skin, shiny skin",
+      "clip": [
+        "2",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "负面提示词"
+    }
+  },
+  "6": {
+    "inputs": {
+      "width": 768,
+      "height": 1024,
+      "batch_size": 1
+    },
+    "class_type": "EmptyLatentImage",
+    "_meta": {
+      "title": "空Latent图像"
+    }
+  },
+  "7": {
+    "inputs": {
+      "seed": 914823931803845,
+      "steps": 30,
+      "cfg": 3.5,
+      "sampler_name": "euler",
+      "scheduler": "normal",
+      "denoise": 1,
+      "model": [
+        "1",
+        0
+      ],
+      "positive": [
+        "4",
+        0
+      ],
+      "negative": [
+        "5",
+        0
+      ],
+      "latent_image": [
+        "6",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "K采样器"
+    }
+  },
+  "8": {
+    "inputs": {
+      "samples": [
+        "7",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE解码"
+    }
+  },
+  "18": {
+    "inputs": {
+      "model_name": "4x-UltraSharp.pth"
+    },
+    "class_type": "UpscaleModelLoader",
+    "_meta": {
+      "title": "加载放大模型"
+    }
+  },
+  "19": {
+    "inputs": {
+      "upscale_model": [
+        "18",
+        0
+      ],
+      "image": [
+        "8",
+        0
+      ]
+    },
+    "class_type": "ImageUpscaleWithModel",
+    "_meta": {
+      "title": "使用模型放大图像"
+    }
+  },
+  "20": {
+    "inputs": {
+      "upscale_method": "nearest-exact",
+      "scale_by": 0.5,
+      "image": [
+        "19",
+        0
+      ]
+    },
+    "class_type": "ImageScaleBy",
+    "_meta": {
+      "title": "缩放图像（比例）"
+    }
+  },
+  "30": {
+    "inputs": {
+      "custom_path": "",
+      "filename_prefix": "comfyui",
+      "timestamp": "second",
+      "format": "jpg",
+      "quality": 100,
+      "dpi": 300,
+      "meta_data": false,
+      "save_workflow_as_json": false,
+      "preview": true,
+      "images": [
+        "20",
+        0
+      ]
+    },
+    "class_type": "SaveImagePlusPrompt",
+    "_meta": {
+      "title": "Save Image Plus (with Prompt TXT)"
+    }
+  }
+}

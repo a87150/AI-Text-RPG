@@ -134,7 +134,13 @@ window.addEventListener('unhandledrejection', function (e) {
 <div class="modal hidden" id="settings-modal">
   <div class="modal-box">
     <div id="settings-form">
-    <h2 id="settings-title">故事设定</h2>
+    <div class="pane-head">
+      <h2 id="settings-title">故事设定</h2>
+      <button class="cover-slot" id="btn-cover" type="button" title="封面图：上传或生成">
+        <img id="cover-thumb" class="cover-thumb hidden" alt="">
+        <span id="cover-empty" class="cover-empty">＋ 封面</span>
+      </button>
+    </div>
     <div class="hint" id="story-meta"></div>
 
     <div class="grid2">
@@ -259,7 +265,33 @@ window.addEventListener('unhandledrejection', function (e) {
     <input type="file" id="import-file" accept=".json,application/json" hidden>
   </div>
 
-  <div class="modal hidden" id="pick-story-modal">
+  <div class="modal hidden" id="cover-modal">
+    <div class="modal-box cover-box">
+      <h3>封面图</h3>
+      <div class="cover-stage">
+        <img id="cover-stage-img" class="cover-stage-img hidden" alt="">
+        <div id="cover-stage-empty" class="cover-stage-empty">还没有封面。上传一张，或者让它按这份设定生一张。</div>
+      </div>
+      <div class="cover-actions">
+        <button type="button" id="cover-pick">选一张上传</button>
+        <button type="button" id="cover-gen" class="primary">按设定生成</button>
+        <button type="button" id="cover-undo" class="ghost">撤销重来</button>
+        <button type="button" id="cover-remove" class="ghost">去掉封面</button>
+      </div>
+      <div class="field">
+        <label for="cover-prompt">生图提示词（留空就用这个故事的世界观与出场角色自动拼）</label>
+        <textarea id="cover-prompt" rows="3" placeholder="例如：雨夜的旧城，石板路，一盏灯。电影感。"></textarea>
+        <div class="hint">提示词会跟图一起存一份，下次打开还能看到上一次用的是什么。</div>
+      </div>
+      <div class="cover-foot">
+        <span class="cover-msg" id="cover-msg"></span>
+        <button type="button" id="cover-close">关闭</button>
+      </div>
+    </div>
+  </div>
+  <input type="file" id="cover-file" accept="image/png,image/jpeg,image/webp" class="hidden">
+
+<div class="modal hidden" id="pick-story-modal">
     <div class="modal-box narrow pick-modal">
       <h2>从哪份设定开始</h2>
       <div class="hint">对话继承故事的设定；之后在「设定」里改的只影响这一局，故事本身不变。</div>

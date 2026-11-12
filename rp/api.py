@@ -6,7 +6,8 @@ import time
 import uuid
 
 import requests
-from flask import Response, jsonify, render_template, request, send_file
+from flask import (Response, jsonify, render_template, request, send_file,
+                   send_from_directory)
 from urllib.parse import quote as url_quote, urlsplit
 
 from .characters import (
@@ -39,9 +40,13 @@ from .prompts import (
     FIELD_TASKS, build_field_prompt, build_messages, build_system_prompt,
     clean_generated, ensure_original_kept,
 )
+from . import covers as cover_store
 from .stories import (
     apply_to, delete_story, list_stories, load_story, new_story, save_story,
     update_from, fill_names,
+                    set_cover,
+                    undo_cover,
+                    cover_prompt_from,
 )
 from .snapshots import list_snapshots, load_snapshot, snapshot
 from .storage import (
@@ -80,6 +85,10 @@ def _reject_cross_site():
     # 而表单只能发 safelisted 的三种类型，发不出 application/json；
     # 真要发 JSON 就得过预检，而预检过不了。
     ctype = (request.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+    # 封面上传走 multipart。跨站表单也能发 multipart，所以要求一个自定义头：
+    # 自定义头会触发预检，而预检过不了。
+    if ctype == "multipart/form-data" and request.headers.get("X-Cover-Upload"):
+        ctype = "application/json"
     if ctype != "application/json":
         return jsonify({"error": "拒绝非 JSON 写请求"}), 403
     # 有来源头的话再校一层，作为纵深
@@ -619,6 +628,73 @@ def api_get_session(sid):
     # 靠这个字段分辨是"后端还在写"还是"真没答上"。
     sess["busy"] = is_busy(sid)
     return jsonify(sess)
+
+
+@app.get("/covers/<name>")
+def api_cover_file(name):
+    """封面图本体。只读、只认 covers 目录里的文件名。"""
+    if not cover_store.exists(name):
+        return jsonify({"error": "没有这张图"}), 404
+    return send_from_directory(cover_store.COVERS_DIR, name, max_age=86400)
+
+
+@app.post("/api/stories/<story_sid>/cover")
+def api_story_cover_upload(story_sid):
+    """手动上传一张封面。"""
+    story = load_story(story_sid)
+    if not story:
+        return jsonify({"error": "故事不存在"}), 404
+    f = request.files.get("file")
+    if not f or not getattr(f, "filename", ""):
+        return jsonify({"error": "没选图"}), 400
+    try:
+        name = cover_store.save_upload(f)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except OSError:
+        return jsonify({"error": "存不下这张图"}), 500
+    set_cover(story, name)
+    save_story(story)
+    return jsonify({"cover": name, "url": cover_store.url_of(name),
+                    "cover_prompt": story.get("cover_prompt") or ""})
+
+
+@app.post("/api/stories/<story_sid>/cover/gen")
+def api_story_cover_gen(story_sid):
+    """用 ComfyUI 生一张封面。提示词要么用传进来的，要么用故事自己的设定拼。"""
+    story = load_story(story_sid)
+    if not story:
+        return jsonify({"error": "故事不存在"}), 404
+    data = request.get_json(silent=True) or {}
+    prompt = _str(data, "prompt", 2000)
+    if not prompt:
+        prompt = cover_prompt_from(story)
+    if not prompt:
+        return jsonify({"error": "这份设定还不够写提示词，先填一下世界观或手写一句"}), 400
+    negative = _str(data, "negative", 600)
+    try:
+        name = cover_store.generate(prompt, negative=negative)
+    except RuntimeError as exc:
+        return jsonify({"error": "生图失败：" + str(exc)}), 502
+    except requests.RequestException as exc:
+        return jsonify({"error": "连不上 ComfyUI（%s）" % exc}), 502
+    set_cover(story, name, prompt)
+    save_story(story)
+    return jsonify({"cover": name, "url": cover_store.url_of(name),
+                    "cover_prompt": prompt})
+
+
+@app.post("/api/stories/<story_sid>/cover/undo")
+def api_story_cover_undo(story_sid):
+    story = load_story(story_sid)
+    if not story:
+        return jsonify({"error": "故事不存在"}), 404
+    undo_cover(story)
+    save_story(story)
+    name = story.get("cover") or ""
+    return jsonify({"cover": name, "url": cover_store.url_of(name),
+                    "cover_prompt": story.get("cover_prompt") or "",
+                    "left": len(story.get("cover_history") or [])})
 
 
 @app.post("/api/sessions/import")

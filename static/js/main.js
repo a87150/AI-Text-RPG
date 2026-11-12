@@ -17,6 +17,7 @@ import { refreshBackups, runBackup, saveBackupConf } from './backup.js';
 import { sendFromInput, bindRetryEvents } from './chat.js';
 import { bindMessageActions } from './msgops.js';
 import { bindSearch } from './search.js';
+import { bindCover, syncCoverThumb } from './cover.js';
 import {
   openSettings, closeSettings, saveSettings, enhance, regenOpening,
   newRunFromSettings, setDraftMode, addLoreEntry, pushAllLore, popIdea, closeIdea, startEnhance,
@@ -828,6 +829,7 @@ async function boot() {
   bindMessageActions();
   bindSearch();
   bindUI();
+  bindCover();
   await refreshBackendStatus();
   await loadSessions();
   await loadStories();

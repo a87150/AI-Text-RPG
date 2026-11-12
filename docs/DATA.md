@@ -115,6 +115,10 @@ POST /api/sessions/<sid>/branch {"index": n}
     GET    /api/stories/<id>              读故事
     PUT    /api/stories/<id>              改故事
     DELETE /api/stories/<id>              删故事
+    POST   /api/stories/<id>/cover        上传封面（multipart，必须带 X-Cover-Upload 头）
+    POST   /api/stories/<id>/cover/gen    用 ComfyUI 生封面，可传 prompt / negative
+    POST   /api/stories/<id>/cover/undo   撤回到上一张
+    GET    /covers/<name>                 封面图本体
 
 消息控制：
 
