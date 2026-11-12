@@ -48,13 +48,11 @@ ALLOWED_EXT = (".png", ".jpg", ".jpeg", ".webp")
 
 os.makedirs(COVERS_DIR, exist_ok=True)
 
-
 def _load_workflow():
     if not os.path.isfile(WORKFLOW_PATH):
         raise RuntimeError("找不到工作流文件 moss_workflow_api.json")
     with open(WORKFLOW_PATH, encoding="utf-8") as f:
         return json.load(f)
-
 
 def _submit(workflow):
     res = requests.post(COMFY_URL + "/prompt",
@@ -67,7 +65,6 @@ def _submit(workflow):
     if not data.get("prompt_id"):
         raise RuntimeError("ComfyUI 没有返回任务号：%s" % str(data)[:200])
     return data["prompt_id"]
-
 
 def _wait(prompt_id, timeout=GEN_TIMEOUT):
     start = time.time()
@@ -84,7 +81,6 @@ def _wait(prompt_id, timeout=GEN_TIMEOUT):
         time.sleep(1.5)
     raise RuntimeError("生成超时（%d 秒），看看 ComfyUI 后台" % timeout)
 
-
 def _first_image(entry):
     """从 history 里挖出第一张图的位置描述。"""
     for out in (entry.get("outputs") or {}).values():
@@ -92,8 +88,6 @@ def _first_image(entry):
             if img.get("filename"):
                 return img
     return None
-
-
 
 def _written(img):
     """ComfyUI 把图写到哪了。不在本机（还是老版本没同意 custom_path）就返回 None。"""
@@ -123,7 +117,6 @@ def _fetch(img):
     if res.status_code != 200 or not res.content:
         raise RuntimeError("取图失败：HTTP %d" % res.status_code)
     return res.content
-
 
 def generate(prompt, negative="", width=COVER_W, height=COVER_H, timeout=GEN_TIMEOUT):
     """跑一次生成，返回落在 covers 目录里的文件名（不含目录）。"""
@@ -182,12 +175,10 @@ def generate(prompt, negative="", width=COVER_W, height=COVER_H, timeout=GEN_TIM
         raise
     return name
 
-
 # 正在生成的任务：story_id -> {状态、提示词、开始时间、结果或错误}
 # 只存内存。进程重启后没有任何任务在跑，落盘会把"生成中"永远留在文件里。
 _JOBS = {}
 _jobs_guard = threading.Lock()
-
 
 def job_of(story_id):
     """看这份故事现在有没有正在生成的封面。没有就返回 None。"""
@@ -195,13 +186,11 @@ def job_of(story_id):
         job = _JOBS.get(story_id)
         return dict(job) if job else None
 
-
 def _set_job(story_id, **fields):
     with _jobs_guard:
         job = _JOBS.get(story_id) or {}
         job.update(fields)
         _JOBS[story_id] = job
-
 
 def _run_job(story_id, prompt, negative, timeout):
     from .stories import load_story, save_story, set_cover
@@ -224,7 +213,6 @@ def _run_job(story_id, prompt, negative, timeout):
              prompt=prompt, error="",
              history_count=len(story.get("cover_history") or []))
 
-
 def start_job(story_id, prompt, negative="", timeout=None):
     """提交一个生图任务，立即返回。已经有一个在跑就不重复发。"""
     with _jobs_guard:
@@ -239,10 +227,8 @@ def start_job(story_id, prompt, negative="", timeout=None):
     t.start()
     return job_of(story_id)
 
-
 def thumb_path(name):
     return os.path.join(THUMBS_DIR, name)
-
 
 def make_thumb(name):
     """按原图生一张小图。失败就返回 False，回退到用原图。"""
@@ -270,7 +256,6 @@ def make_thumb(name):
     except Exception:
         return False
 
-
 def thumb_of(name):
     """缩略图文件名；没生成过就现场生成一张。"""
     if not exists(name):
@@ -280,11 +265,9 @@ def thumb_of(name):
         return base
     return base if make_thumb(name) else ""
 
-
 def url_thumb(name):
     t = thumb_of(name)
     return "/covers/thumbs/" + t if t else ""
-
 
 def save_upload(stream):
     """收一张上传的图，返回文件名。只认扩展名白名单，不认 Content-Type。"""
@@ -303,12 +286,10 @@ def save_upload(stream):
         raise
     return name
 
-
 def exists(name):
     if not name or os.path.basename(name) != name:
         return False
     return os.path.isfile(os.path.join(COVERS_DIR, name))
-
 
 def drop(name):
     # exists() 已经拦过路径，但下面拼缩略图路径时又用了原始 name；
@@ -326,8 +307,6 @@ def drop(name):
             os.unlink(t)
         except OSError:
             pass
-
-
 
 def is_thumb(name):
     """只放行 thumbs 目录里实存的文件名（不含路径）。"""
