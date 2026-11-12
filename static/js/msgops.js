@@ -104,7 +104,12 @@ function startEdit(index, host) {
   cancel.type = 'button';
   cancel.textContent = '取消';
 
-  const restore = () => { renderMessages(); };
+  // 编辑态只能从这里退出：renderMessages 见到 .edit-area 会跳过重绘，
+  // 不先把它摘掉，保存完和取消都停在输入框上不动。
+  const closeEdit = () => {
+    host.querySelectorAll('.edit-area, .edit-bar').forEach((el) => el.remove());
+  };
+  const restore = () => { closeEdit(); renderMessages(); };
   cancel.onclick = restore;
   save.onclick = async () => {
     const text = (area.value || '').trim();
@@ -115,6 +120,7 @@ function startEdit(index, host) {
         method: 'PUT', body: { index, content: text },
       });
       await refreshCurrentSession();
+      closeEdit();
       renderMessages();
       if (text !== original && hasAfter(index)) askRegenerate(index);
       else toast('已保存这条消息', 'ok');

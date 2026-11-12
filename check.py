@@ -2135,6 +2135,10 @@ def main():
     # 流式期间那个临时容器没有工具栏，于是要刷新才能看到。
     _cj = (pathlib.Path(__file__).parent / "static" / "js" / "chat.js").read_text(encoding="utf-8")
     check("生成完立刻重绘", "if (state.session === s) renderMessages();" in _cj)
+    # 编辑态退出时先摘掉输入框，否则 renderMessages 的守卫会把它自己拦下
+    _mj = (pathlib.Path(__file__).parent / "static" / "js" / "msgops.js").read_text(encoding="utf-8")
+    check("编辑保存先退出编辑态", "closeEdit();" + chr(10) + "      renderMessages();" in _mj)
+    check("取消也要退出编辑态", "const restore = () => { closeEdit(); renderMessages(); };;" not in _mj and "closeEdit(); renderMessages();" in _mj)
     check("重绘排在网络校准之前",
           _cj.index("if (state.session === s) renderMessages();")
           < _cj.index("const fresh = await refreshCurrentSession();"))
