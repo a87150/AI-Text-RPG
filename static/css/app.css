@@ -97,15 +97,22 @@ button:disabled { cursor: not-allowed; }
   display: flex; align-items: center; gap: 6px; padding: 10px;
   border-radius: 10px; margin-bottom: 4px; border: 1px solid transparent;
   cursor: pointer; transition: background .15s, border-color .15s;
+  /* 标题一行还是两行、有没有封面，条目高度都一样 */
+  height: 76px; box-sizing: border-box; overflow: hidden;
 }
 .session-item:hover { background: var(--bg-elev); }
 .session-item.active { background: var(--bg-elev); border-color: var(--border-strong); }
 .si-body { flex: 1; min-width: 0; }
 .si-title {
-  font-size: .8438rem; font-weight: 600; white-space: nowrap;
-  overflow: hidden; text-overflow: ellipsis;
+  font-size: .8438rem; font-weight: 600; line-height: 1.35;
+  /* 标题可以换行，但最多两行：再长就把每条高度撞不一样了 */
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; overflow-wrap: anywhere;
 }
-.si-meta { font-size: .6875rem; color: var(--text-mute); margin-top: 3px; }
+.si-meta {
+  font-size: .6875rem; color: var(--text-mute); margin-top: 3px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .si-del {
   border: none; background: transparent; color: var(--text-mute);
   font-size: 1rem; line-height: 1; padding: 2px 4px; border-radius: 6px;
@@ -252,6 +259,7 @@ body.story-view #btn-search { display: none; }
   display: grid; grid-template-columns: 1fr auto; gap: 4px 6px;
   padding: 10px 12px; border-radius: 10px; cursor: pointer;
   border: 1px solid transparent;
+  height: 76px; box-sizing: border-box; overflow: hidden; align-content: center;
 }
 .story-item:hover { background: var(--bg-elev); border-color: var(--border); }
 .story-item .si-del { align-self: center; }
@@ -1162,7 +1170,7 @@ body.story-view #btn-io { display: none; }
 /* 两个列表共用：小图 + 文字块两栏。文字块里面自己竖排，
    不能让 flex 把标题和副标题拉成一行 */
 .si-body { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; }
-.si-text { flex: 1; min-width: 0; display: block; }
+.si-text { flex: 1; min-width: 0; display: block; overflow: hidden; }
 .si-cover {
   flex: none; width: 48px; height: 48px; border-radius: 8px;
   object-fit: cover; background: var(--bg-input);
