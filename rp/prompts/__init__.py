@@ -484,7 +484,12 @@ def build_messages(sess, speaker=None):
 
 def build_locked_block(user_name, ai_name):
     lines = []
-    if user_name:
+    if user_name == PLACEHOLDER:
+        # 写设定时主角只给占位符（见 build_field_prompt）。
+        # 要是把它当真名写成「必须叫「{主角}」」，等于让模型去编一个名字，
+        # 生成出来的世界设定就把人名写死了。
+        lines.append("· 主角一律写成 %s，不要换成任何具体人名" % PLACEHOLDER)
+    elif user_name:
         lines.append("· 用户角色名必须叫「%s」：不得改名、不得替换、不得省略" % user_name)
     if ai_name:
         lines.append("· AI 角色名必须叫「%s」：不得改名、不得替换、不得省略" % ai_name)

@@ -1720,6 +1720,10 @@ def main():
     check("系统提示里世界观已替换", "甲是守灯人，甲怕黑。" in _sys)
     # 额外要求是写设定用的，不该跟着故事推进跑
     check("额外要求不进故事提示", "不要让甲轻易妥协。" not in _sys)
+    # 写设定时主角只给占位符，不能当真名钉死
+    check("写设定时不把占位符当真名",
+          "必须叫「{主角}」" not in rp_prompts.build_locked_block("{主角}", ""))
+    check("真名场景照旧钉死", "必须叫「甲」" in rp_prompts.build_locked_block("甲", ""))
     check("额外要求仍在写设定时生效",
           rp_prompts._extra_block("不要写血腥。", "", "")
           == "\n\n· 额外要求：\n不要写血腥。")
