@@ -629,7 +629,13 @@ def build_field_prompt(field, name="", user_name="", ai_name="", user_role="",
         ai_block=_ai_block(ai_name, ai_role, ai_state, writing()["auto_roles"]),
         user_role=(user_role or "").strip() or "（未填写，请合理创作）",
         world=(world or "").strip() or "（未填写，请合理创作）",
-        extra=_extra_block(rules, user_name, ai_name),
+        # 正在生成哪个名字，就不能把那个名字锁住：
+        # 任务说「起一个名字」、约束说「必须叫旧名」，只会互相抵消。
+        extra=_extra_block(
+            rules,
+            "" if field == "user_name" else user_name,
+            "" if field == "ai_name" else ai_name,
+        ),
         state_block=_state_block(opening, lore, mode),
     )
 

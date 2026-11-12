@@ -1724,6 +1724,14 @@ def main():
     check("写设定时不把占位符当真名",
           "必须叫「{主角}」" not in rp_prompts.build_locked_block("{主角}", ""))
     check("真名场景照旧钉死", "必须叫「甲」" in rp_prompts.build_locked_block("甲", ""))
+    # 生成某个名字时，不能把那个名字锁住
+    check("生成 AI 名字时不锁 AI 名字",
+          "必须叫" not in rp_prompts.build_field_prompt("ai_name", ai_name="林晚"))
+    check("生成主角名字时不锁主角名字",
+          "必须叫" not in rp_prompts.build_field_prompt("user_name", user_name="甲"))
+    check("写其他字段时仍锁住 AI 名字",
+          "必须叫「林晚」" in rp_prompts.build_field_prompt(
+              "world", world="一个城", user_name="甲", ai_name="林晚"))
     check("额外要求仍在写设定时生效",
           rp_prompts._extra_block("不要写血腥。", "", "")
           == "\n\n· 额外要求：\n不要写血腥。")
