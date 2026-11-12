@@ -2429,6 +2429,18 @@ def main():
     check("删掉当前就顶上一张", _ms["cover"] == _mn[2], _ms["cover"])
     rp_stories.delete_story(_ms["id"])
 
+    # 101. 一次生成只能落一份图：ComfyUI 写在哪就用哪张，不再拄一份
+    check("生图文件前缀已固定", isinstance(_cov.SAVE_PREFIX, str) and _cov.SAVE_PREFIX)
+    check("custom_path 指向封面目录",
+          '"custom_path"] = COVERS_DIR' in (pathlib.Path(__file__).parent / "rp" / "covers.py").read_text(encoding="utf-8"))
+    _pf = _cov.SAVE_PREFIX + "_zz_probe.jpg"
+    _pp = os.path.join(_cov.COVERS_DIR, _pf)
+    open(_pp, "wb").write(b"x")
+    check("能认出 ComfyUI 已写好的那张", _cov._written({"filename": _pf}) == _pp)
+    check("名字对不上也能按前缀找到", _cov._written({"filename": "wrong.jpg"}) == _pp)
+    os.unlink(_pp)
+    check("真没图时不乱拿", _cov._written({"filename": "nope.jpg"}) is None)
+
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")

@@ -23,6 +23,8 @@ COVERS_DIR = os.path.join(DATA_DIR, "covers")
 THUMBS_DIR = os.path.join(COVERS_DIR, "thumbs")
 # 列表里只显示 48px，但高分屏要撑 2-3 倍。存 160 够用，一张几 KB。
 THUMB_SIZE = 160
+# ComfyUI 写进来的文件名前缀。与历史上那批 cover_ 开头的区开，免得把旧图当成新生成的拿走。
+SAVE_PREFIX = "gen"
 WORKFLOW_PATH = os.path.join(BASE_DIR, "moss_workflow_api.json")
 
 # 同机的 ComfyUI 默认在 8188；换机器用环境变量 LT_COMFY 指过去
@@ -92,6 +94,27 @@ def _first_image(entry):
     return None
 
 
+
+def _written(img):
+    """ComfyUI 把图写到哪了。不在本机（还是老版本没同意 custom_path）就返回 None。"""
+    fn = str(img.get("filename") or "")
+    sub = str(img.get("subfolder") or "").strip("/\\")
+    if fn:
+        cand = os.path.join(COVERS_DIR, sub, fn) if sub else os.path.join(COVERS_DIR, fn)
+        if os.path.isfile(cand):
+            return cand
+    # custom_path 生效时，history 里报的名字和落盘名可能对不上。
+    # 既然前缀是我们自己设的，按前缀找最新那张就是了。
+    try:
+        hits = [os.path.join(COVERS_DIR, f) for f in os.listdir(COVERS_DIR)
+                if f.startswith(SAVE_PREFIX + "_")]
+    except OSError:
+        return None
+    if not hits:
+        return None
+    hits.sort(key=os.path.getmtime)
+    return hits[-1]
+
 def _fetch(img):
     params = {"filename": img["filename"],
               "subfolder": img.get("subfolder") or "",
@@ -118,29 +141,41 @@ def generate(prompt, negative="", width=COVER_W, height=COVER_H, timeout=GEN_TIM
         workflow[NODE_LATENT]["inputs"]["width"] = width
         workflow[NODE_LATENT]["inputs"]["height"] = height
     if NODE_SAVE in workflow:
-        # 不设 custom_path。设了会双写：ComfyUI 自己往那个目录写一张，我们拿回来
-        # 又存一张，一次生成两份 3MB 的图。只要 filename_prefix，图还是从 /view 拉，
-        # 落盘位置由 COVERS_DIR 决定，所以依然是算出来的而不是写死的。
-        workflow[NODE_SAVE]["inputs"]["filename_prefix"] = "cover"
+        # 让 ComfyUI 直接写进 covers 目录。不设的话它会写自己的 output，我们再从
+        # /view 拉一份存进来，同一张图两份。目录是 COVERS_DIR，算出来的。
+        # ComfyUI 跑在别的机器上时这个路径它写不了，那时会自动回退到 /view。
+        workflow[NODE_SAVE]["inputs"]["custom_path"] = COVERS_DIR
+        workflow[NODE_SAVE]["inputs"]["filename_prefix"] = SAVE_PREFIX
 
     entry = _wait(_submit(workflow), timeout=timeout)
     img = _first_image(entry)
     if not img:
         raise RuntimeError("生成完了但没有输出图片")
-    blob = _fetch(img)
-
     # 延用 ComfyUI 输出的真实扩展名。它的保存节点可以出 jpg/png/webp，
     # 写死一个会让扩展名与内容不符。
     ext = os.path.splitext(str(img.get("filename") or ""))[1].lower()
     if ext not in ALLOWED_EXT:
         ext = ".jpg"
     name = "%s-%s%s" % (time.strftime("%Y%m%d%H%M%S"), uuid.uuid4().hex[:6], ext)
+    dest = os.path.join(COVERS_DIR, name)
+
+    # 它已经写在目录里就直接改名接管，不再拉一份；拿不到才走 /view。
+    # ComfyUI 已经就地写好了。那就直接用它写的那一份，不拄也不拄过来——
+    # Windows 上它刚写完还握着句柄，改名和删除都会失败，硬拄只会多出一份来。
+    written = _written(img)
+    if written:
+        got = os.path.basename(written)
+        if got != name:
+            make_thumb(got)
+            return got
+
+    blob = _fetch(img)
     # 先写临时文件再改名：中途失败不会留下半张图被当成封面
     fd, tmp = tempfile.mkstemp(dir=COVERS_DIR, suffix=".part")
     try:
         with os.fdopen(fd, "wb") as f:
             f.write(blob)
-        os.replace(tmp, os.path.join(COVERS_DIR, name))
+        os.replace(tmp, dest)
     except OSError:
         if os.path.exists(tmp):
             os.unlink(tmp)

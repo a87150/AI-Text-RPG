@@ -370,8 +370,25 @@ function renderGrid(items) {
       del.className = 'cover-cell-del';
       del.textContent = '×';
       del.title = '彻底删掉这张';
+      // 两段式：第一次点变成“确认删”，三秒内再点才真删。比弹系统确认框快，
+      // 也不会把鼠标从格子里拉走。
+      let armed = 0;
       del.onclick = (e) => {
         e.stopPropagation();
+        if (!armed) {
+          armed = setTimeout(() => {
+            armed = 0;
+            del.classList.remove('armed');
+            del.textContent = '×';
+          }, 3000);
+          del.classList.add('armed');
+          del.textContent = '确认删？';
+          return;
+        }
+        clearTimeout(armed);
+        armed = 0;
+        del.classList.remove('armed');
+        del.textContent = '×';
         drop(it.name);
       };
       cell.appendChild(del);

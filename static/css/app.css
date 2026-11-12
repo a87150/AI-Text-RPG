@@ -1241,3 +1241,8 @@ body.story-view #btn-io { display: none; }
 }
 .cover-cell:hover .cover-cell-del { opacity: 1; }
 .cover-cell-del:hover { background: var(--danger); }
+/* 第一次点是问一句，这时按钮变宽、变红，读得出它在等确认 */
+.cover-cell-del.armed {
+  width: auto; padding: 2px 7px; border-radius: 4px;
+  background: var(--danger); opacity: 1; font-size: .625rem;
+}
