@@ -600,8 +600,8 @@ export function syncHeader() {
     // 没选对话时按钮留着一个灰壳只会显得脏，直接收起来
     el.classList.toggle('hidden', !on);
   }
-  // 对话页面的设定入口：有会话才能点，没会话时去侧栏选故事
   // 设定按钮只属于对话：故事页的设定就在右侧常驻，不需要入口
+  const settingsBtn = $('#btn-settings');
   if (settingsBtn) {
     const inStories = state.sideView === 'stories';
     settingsBtn.classList.toggle('hidden', inStories);

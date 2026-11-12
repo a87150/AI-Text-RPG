@@ -1253,7 +1253,7 @@ body.story-view #btn-io { display: none; }
 .mode-seg { display: flex; gap: 6px; width: 100%; margin-top: 0; }
 .mode-seg button { flex: 1 1 0; min-width: 0; padding: 6px 10px; font-size: .75rem; }
 .mode-seg button:disabled { opacity: .45; cursor: default; }
-.mode-label { display: block; margin-top: 6px; }
+.mode-label { display: block; margin-bottom: 6px; }
 /* 故事名占满整行，跟在模式下面 */
 .field.story-name { margin-top: 12px; max-width: none; }
 

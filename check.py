@@ -2109,6 +2109,10 @@ def main():
     _sj = (pathlib.Path(__file__).parent / "static" / "js" / "sessions.js").read_text(encoding="utf-8")
     check("设定按钮跟着视图隐藏",
           "settingsBtn.classList.toggle('hidden', inStories)" in _uj)
+    # 用之前必须先声明。上一版把 const 删了又留下使用，
+    # syncHeader 报 ReferenceError，界面误报后端不可用。
+    check("设定按钮先声明后使用",
+          _uj.index("const settingsBtn = $('#btn-settings')") < _uj.index("if (settingsBtn) {"))
     check("切视图时也算一次", "setBtn.classList.toggle('hidden', storyView)" in _sj)
     check("导入导出是弹窗", 'id="io-modal"' in _html and 'id="io-menu"' not in _html)
     check("弹窗里两个操作都在",
