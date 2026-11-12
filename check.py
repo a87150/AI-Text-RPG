@@ -1349,8 +1349,12 @@ def main():
     rp_config.save_tier("advanced", persist=False)
     _ts = {"turn": 2, "mode": "normal", "user_name": "我", "characters": [],
            "status": {}, "messages": [{"role": "user", "content": "我把外套挂在门边。"}]}
-    check("高级档尾巴提醒写状态行", "[[地点" in rp_prompts.build_messages(_ts, None)[-1]["content"])
+    _adv_msgs = rp_prompts.build_messages(_ts, None)
     _nb2 = rp_prompts.build_system_prompt(_ts, None)
+    check("高级档尾巴提醒写状态行", "<StatusBlock>" in _adv_msgs[-1]["content"])
+    # 两套格式并存时模型每轮都收到互相矛盾的要求，跟 system 里的必须一致
+    check("高级档 system 与尾巴提醒格式一致",
+          ("<StatusBlock>" in _nb2) == ("<StatusBlock>" in _adv_msgs[-1]["content"]))
     check("一般模式规则给了新角色格式", "【新角色】" in _nb2)
     check("一般模式规则给了人数上限", ("全场最多 %d 人" % rp_config.writing()["max_characters"]) in _nb2)
     rp_config.save_tier("basic", persist=False)
@@ -1720,7 +1724,27 @@ def main():
     check("系统提示里世界观已替换", "甲是守灯人，甲怕黑。" in _sys)
     # 额外要求是写设定用的，不该跟着故事推进跑
     check("额外要求不进故事提示", "不要让甲轻易妥协。" not in _sys)
-    # 写设定时主角只给占位符，不能当真名钉死
+
+    # 单字名（甲、乙）在中文里和普通字撞得太狠，不能见字就替换
+    check("单字名不误伤正文",
+          "甲板" in rp_prompts.build_field_prompt(
+              "world", user_name="甲", user_role="他站在甲板上。", world="一座城"))
+    check("多字名照常换成占位符",
+          "{主角}站着" in rp_prompts.build_field_prompt(
+              "world", user_name="林晚", user_role="林晚站着。", world="一座城"))
+    # 生成角色卡时主角同样只能是占位符，否则跟 field.md 第七条打架
+    check("写角色卡时主角也是占位符",
+          "必须叫「甲」" not in rp_prompts.build_field_prompt(
+              "character", name="丙", user_name="甲", user_role="甲站着。"))
+    # 摘要和事实已经拼在 system 里，重复加一遍会虚报用量
+    _cd = rp_prompts.build_context_debug({
+        "user_name": "甲", "summary": "很久以前" * 30,
+        "facts": [{"fact": "某件事", "state": "active"}], "messages": [],
+    })
+    check("上下文总量不重复计摘要和事实",
+          _cd["chars"]["total"] == len(_cd["system"]) + _cd["lore_chars"],
+          str(_cd["chars"]))
+    check("状态提示写明事实上限", "一轮最多三条" in rp_prompts.status_prompt())
     check("写设定时不把占位符当真名",
           "必须叫「{主角}」" not in rp_prompts.build_locked_block("{主角}", ""))
     check("真名场景照旧钉死", "必须叫「甲」" in rp_prompts.build_locked_block("甲", ""))

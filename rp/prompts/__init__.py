@@ -29,11 +29,14 @@ def render(name, **kw):
 # 贴在最后一条用户消息末尾的格式提醒，越弱的模型越需要
 TAIL_HINT = {
     "basic": "（正文写完后，另起一行写一行状态，形如："
-             "[[地点：某酒馆|时间：深夜|关系：戒备|目标：等他开口|事实：钥匙到了甲手里]]）",
+             "[[地点：某酒馆|时间：深夜|关系：戒备|目标：等他开口]]）",
     "standard": "（正文后另起一行写 [[地点：…|时间：…|关系：…|目标：…]]，没有的字段就不写）",
     # 高级档原来靠 system 里的示例，实测强模型聊久了就当没看见，
     # 状态和在场名单一直不更新
-    "advanced": "（正文后另起一行写 [[地点：…|时间：…|关系：…|目标：…]]，没有的字段就不写）",
+    # 必须跟 status_advanced.md 用同一种格式：
+    # 两套并存时模型每轮都收到互相矛盾的要求，哪个都不全遵守
+    "advanced": "（正文后另起一行写 <StatusBlock>{\"location\":\"…\",\"time\":\"…\",\"present\":[\"名字\"]}</StatusBlock>，"
+                "没有的字段就不写）",
 }
 
 # 用户这一轮明说了要加人。光靠 rules 里那一条，聊久了模型就当没看见。
@@ -328,7 +331,7 @@ def build_anchor_block(sess):
     for c in chars[:3]:
         role = (c.get("role") or "").strip()
         if role:
-            lines.append("· %s：%s" % (c["name"], role[:160]))
+            lines.append("· %s：%s" % (c["name"], clip(role, 160, "…（只是节选，人设还有后续）")))
     if not lines:
         return ""
     return ("【人设锚定 · 别把他们写成好说话的助手】\n" + "\n".join(lines)
@@ -350,7 +353,9 @@ def build_context_debug(sess, speaker=None):
     facts = active_facts(sess)
     facts_len = sum(len(str(f.get("fact") or "")) for f in facts)
     summary_len = len(sess.get("summary") or "")
-    total = len(system) + lore_len + summary_len + facts_len
+    # summary 和 facts 已经拼进 system 了，再加一遍是虚报；
+    # lore 是另外一条 system 消息，不在 system 里，要算
+    total = len(system) + lore_len
     return {
         "system": system,
         "lore": hits,
@@ -362,14 +367,15 @@ def build_context_debug(sess, speaker=None):
         "anchored": anchored,
         "anchor_every": every,
         "chars": {"total": total, "system": len(system)},
-        "tokens": int(total * 0.7),   # 中文粗估，够用来判断"还塞不塞得下"
+        # 按字数乘一个系数不行：中英比例不同精度差很多。
+        "tokens": _tokens(system) + int(lore_len * 0.7),
     }
 
 
 # 动作类动词：用来判断用户是"点了个头"还是"推门、拔刀、转身就跑"
 _ACTIONS = ("推", "拉", "拔", "抓", "握", "踏", "跨", "转身", "抬手", "低头",
             "后退", "靠近", "踢", "挥", "扔", "抢", "抱", "按", "坐", "站",
-            "走", "跑", "跑向", "扑", "抵", "撑", "捏", "扯", "掀", "探")
+            "走", "跑", "扑", "抵", "撑", "捏", "扯", "掀", "探")
 
 
 def input_density(sess):
@@ -385,7 +391,6 @@ def input_density(sess):
             break
     n = len(last.strip())
     acts = sum(last.count(v) for v in _ACTIONS)
-    quotes = last.count("「") + last.count("“") + last.count("\"") // 2
 
     lo, hi = w["narrator_min"] + w["line_min"], w["narrator_max"] + w["line_max"]
     # 这里定的是上限，不是目标值：能力强的模型一看到区间就往高处写，
@@ -616,10 +621,16 @@ def build_field_prompt(field, name="", user_name="", ai_name="", user_role="",
             task += "\n这个角色还没有名字：第一行写「名字：XXX」，第二行起再写设定。"
     else:
         task = FIELD_TASKS.get(field) or FIELD_TASKS["world"]
-    if field != "character" and (user_name or "").strip():
+    if (user_name or "").strip():
         # 生成设定时主角（= 用户扮演的角色）只给占位符。
         # AI 扮演的人不是主角，他的名字该照常给。
-        user_role = (user_role or "").replace(user_name.strip(), PLACEHOLDER)
+        #
+        # 只处理两个字以上的名字：单字名（甲、乙）在中文里和普通字撞得太狠，
+        # 「他站在甲板上」会变成「他站在{主角}板上」。
+        # ponytail: 单字名主角在角色卡里会原样保留，升级路径是提示用户改用 {主角} 写法。
+        _name = user_name.strip()
+        if len(_name) >= 2:
+            user_role = (user_role or "").replace(_name, PLACEHOLDER)
         user_name = PLACEHOLDER
     return render(
         "field.md",
@@ -700,6 +711,16 @@ def clean_generated(text):
             continue
         kept.append(para)
     return "\n\n".join(kept).strip() or body
+
+
+def _tokens(text):
+    """粗估 token 数：中文一字约 0.7个，ASCII 一字符约 0.28 个。
+    
+    """
+    text = text or ""
+    cjk = len(CJK_RE.findall(text))
+    rest = max(0, len(text) - cjk)
+    return int(cjk * 0.7 + rest * 0.28)
 
 
 def _norm(text):

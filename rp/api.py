@@ -1302,7 +1302,9 @@ def api_enhance():
         body = strip_thinking(text or "").strip()
         if is_name:
             body = body.strip('"“”「」『』').splitlines()[0].strip() if body else ""
-            body = body[:8]
+            # 模型常写成「名字：林晚」，前缀不是名字本身
+            body = re.sub(r"^(?:名字|姓名|角色名|名字是|姓名是)\s*[：:]\s*", "", body)
+            body = body.strip('"“”「」『』').strip()[:8]
         if len(body) < min_len:
             return "内容太短（%d 字）" % len(body)
         parsed["text"] = body
@@ -1659,7 +1661,9 @@ def api_chat():
                 return
 
             turn = parse_turn(answer, speaker, cast if use_rp else None)
-            if not turn.get("status") and ("[[" in answer or "【地点" in answer):
+            # StatusBlock 写坏了也是解析失败，不能只盯单行写法
+            if not turn.get("status") and ("[[" in answer or "【地点" in answer
+                                                 or "statusblock" in answer.lower()):
                 # 只记长度和指纹：原文是私人剧情，落进日志就是长期可 grep
                 metrics.note("status.parse_fail", sid=sid, mode="rp" if use_rp else "normal",
                              raw_len=len(answer))

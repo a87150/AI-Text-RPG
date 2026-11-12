@@ -109,8 +109,10 @@ def compress_session(sid, force=False, max_attempts=2):
     text = "\n".join(
         ("【旁白】%s\n" % m["narrator"] if m.get("narrator") else "")
         + "%s：%s" % (
-            m.get("speaker") or (user_name if m["role"] == "user" else ai_name),
-            m["content"],
+            # 直接下标碰上缺字段的旧消息会抛 KeyError，
+            # 而它在后台线程里，异常只落一条 warning，整次压缩就白跑了
+            m.get("speaker") or (user_name if m.get("role") == "user" else ai_name),
+            m.get("content") or "",
         )
         for m in old
     )
