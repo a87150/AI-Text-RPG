@@ -93,6 +93,66 @@ def undo_cover(story):
     return story
 
 
+
+def cover_list(story):
+    """当前这张加历史里的，按"现在用的在最前"排。"""
+    if not story:
+        return []
+    from . import covers as cover_store
+
+    out = []
+    cur = story.get("cover") or ""
+    if cur and cover_store.exists(cur):
+        out.append({"name": cur, "prompt": story.get("cover_prompt") or "",
+                    "thumb": cover_store.url_thumb(cur),
+                    "url": cover_store.url_of(cur), "current": True})
+    for h in story.get("cover_history") or []:
+        n = h.get("name") or ""
+        if not n or n == cur or not cover_store.exists(n):
+            continue
+        out.append({"name": n, "prompt": h.get("prompt") or "",
+                    "thumb": cover_store.url_thumb(n),
+                    "url": cover_store.url_of(n), "current": False})
+    return out
+
+
+def pick_cover(story, name):
+    """把历史里的某张拿回来当封面。当前这张压回历史，不丢。"""
+    if not story or not name:
+        return None
+    from . import covers as cover_store
+
+    if not cover_store.exists(name):
+        return None
+    hist = list(story.get("cover_history") or [])
+    keep = [h for h in hist if (h.get("name") or "") != name]
+    if story.get("cover"):
+        keep.insert(0, {"name": story["cover"], "prompt": story.get("cover_prompt") or ""})
+    picked = next((h for h in hist if (h.get("name") or "") == name), {})
+    story["cover"] = name
+    story["cover_prompt"] = picked.get("prompt") or story.get("cover_prompt") or ""
+    story["cover_history"] = keep[:COVER_HISTORY_MAX]
+    return story
+
+
+def forget_cover(story, name):
+    """把某张从这份设定里彻底删掉，连图一起。"""
+    if not story or not name:
+        return None
+    from . import covers as cover_store
+
+    hist = [h for h in (story.get("cover_history") or []) if (h.get("name") or "") != name]
+    if (story.get("cover") or "") == name:
+        if hist:
+            top = hist.pop(0)
+            story["cover"] = top.get("name") or ""
+            story["cover_prompt"] = top.get("prompt") or ""
+        else:
+            story["cover"] = ""
+    story["cover_history"] = hist
+    cover_store.drop(name)
+    return story
+
 def cover_prompt_from(story):
     """把故事的设定拼成一句能直接喂给生图模型的提示词。
 

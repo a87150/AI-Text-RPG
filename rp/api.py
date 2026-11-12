@@ -44,9 +44,8 @@ from . import covers as cover_store
 from .stories import (
     apply_to, delete_story, list_stories, load_story, new_story, save_story,
     update_from, fill_names,
-                    set_cover,
-                    undo_cover,
-                    cover_prompt_from,
+    set_cover, undo_cover, cover_prompt_from,
+    cover_list, pick_cover, forget_cover,
 )
 from .snapshots import list_snapshots, load_snapshot, snapshot
 from .storage import (
@@ -702,6 +701,54 @@ def api_story_cover_job(story_sid):
         "timeout": cover_store.GEN_TIMEOUT,
         "elapsed": round(time.time() - float(job.get("started") or time.time()), 1),
     })
+
+
+@app.get("/api/stories/<story_sid>/cover/list")
+def api_story_cover_list(story_sid):
+    """封面管理列表：当前这张在最前，后面是历史。"""
+    story = load_story(story_sid)
+    if not story:
+        return jsonify({"error": "故事不存在"}), 404
+    return jsonify({"items": cover_list(story)})
+
+
+@app.post("/api/stories/<story_sid>/cover/pick")
+def api_story_cover_pick(story_sid):
+    """把历史里的某张拿回来当封面。"""
+    story = load_story(story_sid)
+    if not story:
+        return jsonify({"error": "故事不存在"}), 404
+    data = request.get_json(silent=True) or {}
+    name = _str(data, "name", 200)
+    if not name:
+        return jsonify({"error": "没指定哪张"}), 400
+    if not pick_cover(story, name):
+        return jsonify({"error": "这张图不在了"}), 404
+    save_story(story)
+    return jsonify({"cover": story.get("cover") or "",
+                    "url": cover_store.url_of(story.get("cover") or ""),
+                    "thumb": cover_store.url_thumb(story.get("cover") or ""),
+                    "cover_prompt": story.get("cover_prompt") or "",
+                    "items": cover_list(story),
+                    "left": len(story.get("cover_history") or [])})
+
+
+@app.post("/api/stories/<story_sid>/cover/drop")
+def api_story_cover_drop(story_sid):
+    """彻底删掉一张（连图带记录）。"""
+    story = load_story(story_sid)
+    if not story:
+        return jsonify({"error": "故事不存在"}), 404
+    data = request.get_json(silent=True) or {}
+    name = _str(data, "name", 200)
+    if not name:
+        return jsonify({"error": "没指定哪张"}), 400
+    forget_cover(story, name)
+    save_story(story)
+    return jsonify({"cover": story.get("cover") or "",
+                    "thumb": cover_store.url_thumb(story.get("cover") or ""),
+                    "items": cover_list(story),
+                    "left": len(story.get("cover_history") or [])})
 
 
 @app.post("/api/stories/<story_sid>/cover/undo")

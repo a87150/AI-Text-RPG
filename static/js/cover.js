@@ -80,6 +80,7 @@ function afterChange(payload) {
   }
   syncStage(payload.cover || '');
   syncCoverThumb();
+  if (managing) loadGrid();
   document.dispatchEvent(new CustomEvent('rp:stories-changed'));
 }
 
@@ -118,6 +119,7 @@ export function closeCover() {
   // 关窗不影响后台生成，但没必要继续打接口
   stopPoll();
   stopTicking();
+  closeManage();
   busy = false;
 }
 
@@ -171,7 +173,7 @@ function showGenerating(startedAt) {
     empty.classList.remove('hidden');
     empty.textContent = '生成中…';
   }
-  for (const id of ['#cover-gen', '#cover-pick', '#cover-undo', '#cover-remove']) {
+  for (const id of ['#cover-gen', '#cover-pick', '#cover-undo', '#cover-manage']) {
     const b = $(id);
     if (b) b.disabled = true;
   }
@@ -188,7 +190,7 @@ function stopTicking() {
     clearInterval(tickTimer);
     tickTimer = 0;
   }
-  for (const id of ['#cover-gen', '#cover-pick', '#cover-remove']) {
+  for (const id of ['#cover-gen', '#cover-pick', '#cover-manage']) {
     const b = $(id);
     if (b) b.disabled = false;
   }
@@ -300,21 +302,121 @@ export function bindCover() {
   if (gen) gen.onclick = generate;
   const back = $('#cover-undo');
   if (back) back.onclick = undo;
-  const rm = $('#cover-remove');
-  if (rm) {
-    rm.onclick = async () => {
-      if (busy) return;
-      busy = true;
-      try {
-        const data = await api('/api/stories/' + storyId() + '/cover/undo', { method: 'POST', body: {} });
-        afterChange(data);
-        setMsg('封面已去掉', 'ok');
-      } catch (e) {
-        setMsg(e.message || '去不掉', 'error');
-      } finally {
-        busy = false;
-        syncUndo();
+  const mg = $('#cover-manage');
+  if (mg) mg.onclick = () => openManage();
+}
+
+let managing = false;
+
+function renderGrid(items) {
+  const box = $('#cover-grid');
+  if (!box) return;
+  box.innerHTML = '';
+  if (!items || !items.length) {
+    const empty = document.createElement('div');
+    empty.className = 'cover-grid-empty';
+    empty.textContent = '还没有图。上面生成一张，或者从本地选一张。';
+    box.appendChild(empty);
+    return;
+  }
+  for (const it of items) {
+    const cell = document.createElement('div');
+    cell.className = 'cover-cell' + (it.current ? ' active' : '');
+
+    const img = document.createElement('img');
+    img.className = 'cover-cell-img';
+    img.alt = '';
+    img.loading = 'lazy';
+    img.src = it.thumb || it.url;
+    img.onerror = () => {
+      if (it.url && img.src.indexOf('/thumbs/') !== -1) {
+        img.onerror = null;
+        img.src = it.url;
       }
     };
+    img.title = it.prompt || it.name;
+    if (!it.current) img.onclick = () => pick(it.name);
+    cell.appendChild(img);
+
+    if (it.current) {
+      const mark = document.createElement('span');
+      mark.className = 'cover-cell-mark';
+      mark.textContent = '正在用';
+      cell.appendChild(mark);
+    } else {
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'cover-cell-del';
+      del.textContent = '×';
+      del.title = '彻底删掉这张';
+      del.onclick = (e) => {
+        e.stopPropagation();
+        drop(it.name);
+      };
+      cell.appendChild(del);
+    }
+    box.appendChild(cell);
+  }
+}
+
+async function loadGrid() {
+  try {
+    const data = await api('/api/stories/' + storyId() + '/cover/list');
+    renderGrid(data.items || []);
+  } catch (e) {
+    const box = $('#cover-grid');
+    if (box) box.innerHTML = '<div class="cover-grid-empty">读不到图列表</div>';
+  }
+}
+
+function openManage() {
+  const panel = $('#cover-manage-panel');
+  if (!panel) return;
+  managing = panel.classList.contains('hidden');
+  panel.classList.toggle('hidden', !managing);
+  if (managing) loadGrid();
+}
+
+function closeManage() {
+  const panel = $('#cover-manage-panel');
+  if (panel) panel.classList.add('hidden');
+  managing = false;
+}
+
+async function pick(name) {
+  if (busy) return;
+  busy = true;
+  setMsg('正在换…');
+  try {
+    const data = await api('/api/stories/' + storyId() + '/cover/pick', {
+      method: 'POST', body: { name },
+    });
+    afterChange(data);
+    renderGrid(data.items || []);
+    setMsg('已换成这张', 'ok');
+  } catch (e) {
+    setMsg(e.message || '换不了', 'error');
+  } finally {
+    busy = false;
+    syncUndo();
+  }
+}
+
+async function drop(name) {
+  if (busy) return;
+  busy = true;
+  setMsg('正在删…');
+  try {
+    const data = await api('/api/stories/' + storyId() + '/cover/drop', {
+      method: 'POST', body: { name },
+    });
+    afterChange(data);
+    renderGrid(data.items || []);
+    setMsg('已删掉', 'ok');
+  } catch (e) {
+    setMsg(e.message || '删不掉', 'error');
+  } finally {
+    busy = false;
+    syncUndo();
   }
 }

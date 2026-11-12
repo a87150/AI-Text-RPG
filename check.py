@@ -2410,6 +2410,25 @@ def main():
         _cov.drop(_tn)
         check("删原图连带删缩略图", not _cov.is_thumb(_th) and not _cov.exists(_tn))
 
+    # 100. 封面管理：列出来、选回去、删得掉
+    _ms = rp_stories.new_story("管理测试")
+    rp_stories.save_story(_ms)
+    _mn = ["zz_m1.jpg", "zz_m2.jpg", "zz_m3.jpg"]
+    for _n in _mn:
+        open(os.path.join(_cov.COVERS_DIR, _n), "wb").write(b"x")
+        rp_stories.set_cover(_ms, _n, "p_" + _n)
+    check("管理列表带当前那张", [i["name"] for i in rp_stories.cover_list(_ms)][0] == _mn[2])
+    check("管理列表长度对", len(rp_stories.cover_list(_ms)) == 3)
+    rp_stories.pick_cover(_ms, _mn[0])
+    check("选回去就变当前", _ms["cover"] == _mn[0])
+    check("选回去不丢原来那张", _mn[2] in [h["name"] for h in _ms["cover_history"]])
+    rp_stories.forget_cover(_ms, _mn[1])
+    check("删掉就不在列表里", _mn[1] not in [i["name"] for i in rp_stories.cover_list(_ms)])
+    check("删掉连图一起没", not _cov.exists(_mn[1]))
+    rp_stories.forget_cover(_ms, _ms["cover"])
+    check("删掉当前就顶上一张", _ms["cover"] == _mn[2], _ms["cover"])
+    rp_stories.delete_story(_ms["id"])
+
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")

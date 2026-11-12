@@ -119,6 +119,9 @@ POST /api/sessions/<sid>/branch {"index": n}
     POST   /api/stories/<id>/cover/gen    用 ComfyUI 生封面，可传 prompt / negative
     POST   /api/stories/<id>/cover/undo   撤回到上一张
     GET    /api/stories/<id>/cover/job    查一次生图进度（前端每两秒问一次）
+    GET    /api/stories/<id>/cover/list   封面管理：当前 + 历史
+    POST   /api/stories/<id>/cover/pick   把历史里的某张设为封面
+    POST   /api/stories/<id>/cover/drop   删掉某张封面（连图）
     GET    /covers/thumbs/<name>          封面缩略图（列表用，160px）
     GET    /covers/<name>                 封面图本体
 

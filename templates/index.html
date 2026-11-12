@@ -278,7 +278,14 @@ window.addEventListener('unhandledrejection', function (e) {
         <button type="button" id="cover-pick">选一张上传</button>
         <button type="button" id="cover-gen" class="primary">按设定生成</button>
         <button type="button" id="cover-undo" class="ghost">撤销重来</button>
-        <button type="button" id="cover-remove" class="ghost">去掉封面</button>
+        <button type="button" id="cover-manage" class="ghost">管理封面</button>
+      </div>
+      <div class="cover-manage-panel hidden" id="cover-manage-panel">
+        <div class="cover-manage-head">
+          <span>这份设定用过的图</span>
+          <span class="hint">点一张就换成它；右上角的 × 是彻底删掉。</span>
+        </div>
+        <div class="cover-grid" id="cover-grid"></div>
       </div>
       <div class="field">
         <label for="cover-prompt">生图提示词（留空就用这个故事的世界观与出场角色自动拼）</label>
