@@ -93,7 +93,9 @@ function startEdit(index, host) {
 
   const area = document.createElement('textarea');
   area.className = 'edit-area';
-  area.value = original;
+  // 记住这是哪一局的编辑：renderMessages 的守卫只该拦同一局的重绘，
+  // 否则切到别的会话时会被拦下，标题换了、消息区还是上一局的。
+  area.dataset.sid = (state.session && state.session.id) || '';  area.value = original;
 
   const bar = document.createElement('div');
   bar.className = 'edit-bar';

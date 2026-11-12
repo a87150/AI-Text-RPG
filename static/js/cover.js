@@ -292,14 +292,21 @@ function watchJob() {
     try {
       data = await api('/api/stories/' + sid + '/cover/job');
     } catch (e) {
+      // 断网或后端 500 也会走这里。锁必须放掉，
+      // 否则上传、生成、撤销全走 if (busy) return，一直静默失效。
+      busy = false;
       stopTicking();
+      syncUndo();
       setMsg('查不到进度：' + (e.message || e), 'error');
       return;
     }
     if (token !== watchToken) return;  // 已经关窗或换了对象，别再接着轮
     const job = data.job;
     if (!job) {
+      // 服务重启过，内存里的任务表没了；同样得把锁放掉
+      busy = false;
       stopTicking();
+      syncUndo();
       setMsg('任务没了，可能服务重启过', 'error');
       return;
     }

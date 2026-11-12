@@ -1181,7 +1181,10 @@ export function renderMessages() {
   if (!box) return;
   // 有人正在就地改消息就不重建：整表推倒重来会把那个
   // textarea 连同没保存的字一起抹掉。
-  if (box.querySelector('.edit-area')) return;
+  // 但只拦同一个会话的重绘：切局、删局时 state.session 已经换了，
+  // 还按旧条件跳过，屏幕上就会一直是上一局的内容。
+  const editing = box.querySelector('.edit-area');
+  if (editing && editing.dataset.sid === ((state.session && state.session.id) || '')) return;
   // 用户往上翻着看时不抢滚动；只有本来就贴底才跟着底。
   const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
   box.innerHTML = '';

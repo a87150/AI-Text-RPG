@@ -2165,6 +2165,13 @@ def main():
     # 编辑态退出时先摘掉输入框，否则 renderMessages 的守卫会把它自己拦下
     _mj = (pathlib.Path(__file__).parent / "static" / "js" / "msgops.js").read_text(encoding="utf-8")
     check("编辑保存先退出编辑态", "closeEdit();" + chr(10) + "      renderMessages();" in _mj)
+    # 切局时 state.session 已经换了，守卫还按旧条件跳过的话，消息区会停在上一局
+    check("编辑守卫只拦同一局的重绘",
+          "editing.dataset.sid === ((state.session && state.session.id)" in _uj)
+    check("编辑框记下所属会话", "area.dataset.sid" in _mj)
+    # 查进度失败、任务丢失这两条路不放锁的话，封面功能会永久静默失效
+    _cv = (pathlib.Path(__file__).parent / "static" / "js" / "cover.js").read_text(encoding="utf-8")
+    check("封面轮询出错也要放锁", _cv.count("busy = false;") >= 10, str(_cv.count("busy = false;")))
     check("取消也要退出编辑态", "const restore = () => { closeEdit(); renderMessages(); };;" not in _mj and "closeEdit(); renderMessages();" in _mj)
     check("重绘排在网络校准之前",
           _cj.index("if (state.session === s) renderMessages();")
