@@ -2159,6 +2159,9 @@ def main():
     # 流式期间那个临时容器没有工具栏，于是要刷新才能看到。
     _cj = (pathlib.Path(__file__).parent / "static" / "js" / "chat.js").read_text(encoding="utf-8")
     check("生成完立刻重绘", "if (state.session === s) renderMessages();" in _cj)
+    # 只贴 DOM 不进数组的话，一重绘刚发的话就没了
+    check("发消息时本地数组也要有这条",
+          "s.messages.push({ role: 'user', content: text });" in _cj)
     # 编辑态退出时先摘掉输入框，否则 renderMessages 的守卫会把它自己拦下
     _mj = (pathlib.Path(__file__).parent / "static" / "js" / "msgops.js").read_text(encoding="utf-8")
     check("编辑保存先退出编辑态", "closeEdit();" + chr(10) + "      renderMessages();" in _mj)

@@ -234,7 +234,14 @@ async function sendMessage(text, { isRetry, isContinue }) {
 
   const userLabel = s.user_name || '我';
   const aiLabel = s.ai_name || 'AI';
-  if (!isRetry && !isContinue && box) box.appendChild(buildMessage('user', text, userLabel).el);
+  if (!isRetry && !isContinue && box) {
+    box.appendChild(buildMessage('user', text, userLabel).el);
+    // 本地数组也要有这条：renderMessages 读的是 s.messages，
+    // 只贴在 DOM 上的消息下一次重绘就没了。
+    // 后端在流开始前就已经存下这条，这里只是跟着镜像一份。
+    if (!Array.isArray(s.messages)) s.messages = [];
+    s.messages.push({ role: 'user', content: text });
+  }
 
   // 生成中不露角色名：只有旁白块 + 一个带省略号和秒数的气泡
   const turnBox = document.createElement('div');
@@ -418,6 +425,9 @@ async function sendMessage(text, { isRetry, isContinue }) {
         if (fresh) {
           updateSub();
           syncAll();
+          // 本地先画的那一份可能和落盘的差一点（标题、角色、状态都会被后端再洗一遍），
+          // 拿到真相后再对齐一次。正在编辑就不动，renderMessages 自己会跳过。
+          if (state.session === s) renderMessages();
         }
       } catch (e) { /* 校准失败不影响已经显示的内容 */ }
       try { await loadSessions(); } catch (e) { /* 列表没刷新就等下一次 */ }
