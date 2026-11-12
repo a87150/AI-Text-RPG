@@ -2365,6 +2365,21 @@ def main():
     check("删故事后当前封面也没了", not _cov.exists(_dn2))
     check("删故事后历史封面也没了", not _cov.exists(_dn1))
 
+    # 撤销不能只弹栈：被撤掉的那张要从磁盘上消失，否则越撤越多孤儿图
+    _us = rp_stories.new_story("撤销测试")
+    rp_stories.save_story(_us)
+    _un = ["zz_undo_1.jpg", "zz_undo_2.jpg"]
+    for _n in _un:
+        open(os.path.join(_cov.COVERS_DIR, _n), "wb").write(b"x")
+        rp_stories.set_cover(_us, _n, "p")
+        rp_stories.save_story(_us)
+    check("两张都在盘上", all(_cov.exists(_n) for _n in _un))
+    rp_stories.undo_cover(_us)
+    check("撤一步删一张", not _cov.exists(_un[1]) and _cov.exists(_un[0]))
+    rp_stories.undo_cover(_us)
+    check("撤到底也清干净", not _cov.exists(_un[0]))
+    rp_stories.delete_story(_us["id"])
+
     # 文件被手删了也不能把坏引用回给前端
     check("不存在的封面当没封面", rp_stories._live_cover("nope.jpg") == "")
     check("真存在的封面照旧返回", rp_stories._live_cover(_dn1) == "")

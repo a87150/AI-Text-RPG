@@ -103,6 +103,8 @@ export function openCover() {
         busy = true;
         showGenerating(data.job.started);
         watchJob();
+      } else if (data.job && data.job.state === 'done') {
+        syncUndo();
       }
     } catch (e) { /* 查不到就当没任务 */ }
   })();
@@ -219,6 +221,8 @@ function watchJob() {
       pollTimer = setTimeout(watchJob, 2000);
       return;
     }
+    // 任务结束了，把生成中的锁解掉，否则撤销按钮一直是灰的
+    busy = false;
     stopTicking();
     if (job.state === 'error') {
       syncStage((currentStory() && currentStory().cover) || '');

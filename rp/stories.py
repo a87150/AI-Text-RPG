@@ -75,15 +75,21 @@ def undo_cover(story):
     """回到上一张。没有上一张就清空，不报错。"""
     if not story:
         return None
+    from . import covers as cover_store
+
     hist = list(story.get("cover_history") or [])
+    dropped = story.get("cover") or ""
     if not hist:
         story["cover"] = ""
-        return story
-    top = hist.pop(0)
-    story["cover"] = top.get("name") or ""
-    if top.get("prompt"):
-        story["cover_prompt"] = top["prompt"]
-    story["cover_history"] = hist
+    else:
+        top = hist.pop(0)
+        story["cover"] = top.get("name") or ""
+        if top.get("prompt"):
+            story["cover_prompt"] = top["prompt"]
+        story["cover_history"] = hist
+    # 被撤掉的那张没人用了。不删的话每撤一次多一份三百 KB，且再也回不到历史里。
+    if dropped:
+        cover_store.drop(dropped)
     return story
 
 
