@@ -18,6 +18,7 @@ Flask 提供 JSON/SSE 接口，前端是零构建的原生 ES modules，所有�
     rp/storage.py               会话 JSON 读写 + 每会话一把锁
     rp/stories.py               故事 JSON 读写、建局时快照给会话
     rp/snapshots.py             存档点
+    rp/covers.py                封面：上传落盘、缩略图、后台生图任务
     rp/backup.py                data/ 打包成 zip
     rp/config.py                常量、模型配置、写作参数、档位、持久化
 
@@ -42,6 +43,22 @@ Flask 提供 JSON/SSE 接口，前端是零构建的原生 ES modules，所有�
 
 SSE 事件类型：speaker（这轮谁说话）、thinking（模型的思考，可折叠）、delta（正文增量）、retry（重试中，带次数）、result、final、done、error。
 
+## 封面生成的一轮
+
+路径与普通回复完全分开，它不走模型，也不写会话 JSON 的正文：
+
+1. POST /api/stories/<id>/cover/gen 把提示词和 job id 丢进内存，开一个 daemon
+   线程，**立即**返回 202。不等图。
+2. 线程里埋头做：改工作流的提示词和种子 → POST ComfyUI /prompt → 轮询 /history/<id>
+   直到有图 → 定位它落在 data/covers/ 的哪个文件 → 生成缩略图 → 写回故事的
+   cover / cover_history → 把 job 标成 done。
+3. 前端每 2 秒 GET /api/stories/<id>/cover/job ，看到 done 就换图。失败也从这个接口拿到
+   错误文本。
+
+关键约束：**工作流直接写进 data/covers/，不再从 ComfyUI 的 output 拉一份。**
+两边各写一份曾经导致每次生成多一张废图。因为 Windows 上 ComfyUI 还没放句柄，
+定位到的文件就地用，不重命名也不复制。
+
 ## 为什么要加锁
 
 两件事会同时发生：用户连按回车，以及后台压缩线程正在写同一个会话文件。storage.py 给每个会话 id 一把 RLock，所有读改写都在这把锁里。写文件用「临时文件 + os.replace」，进程被杀也不会留下半个 JSON。
@@ -55,6 +72,7 @@ SSE 事件类型：speaker（这轮谁说话）、thinking（模型的思考，�
     settings.js     故事设定表单、单项 AI 生成、开新局
     msgops.js       重写、编辑、分叉
     search.js       全文搜索面板
+    cover.js        封面：大图弹窗、生成进度轮询、管理列表、只读态
     backup.js       备份面板
     api.js          统一请求封装与 SSE 解析
     state.js        全局状态对象

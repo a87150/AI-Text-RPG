@@ -77,6 +77,8 @@ Ollama 是内置提供方，不需要存 Key；模型列表来自 `GET /api/mode
 | `LT_DATA_DIR` | 数据目录，默认 `data/`；`check.py` 用它指到临时目录 |
 | `LT_BACKUP_DIR` | 备份目录，默认 `backups/`；`check.py` 同样指到临时目录 |
 | `LT_LOG_DIR` | 事件日志目录，默认 `logs/`；已进 .gitignore |
+| `LT_COMFY` | ComfyUI 地址，默认 `http://127.0.0.1:8188` |
+| `LT_COVER_TIMEOUT` | 封面生图超时秒数，默认 180，下限 30 |
 
 ## 前端本地存储
 

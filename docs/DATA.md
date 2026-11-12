@@ -6,6 +6,8 @@
     ├── <会话 id>.json          一局对话
     ├── stories/<故事 id>.json   故事模板
     ├── snapshots/<会话 id>/     存档点，每个会话留 10 份
+    ├── covers/                 封面原图
+    │   └── thumbs/             160px 缩略图，列表用
     └── settings.json          模型、Key、参数、档位
 
 会话 id 是 12 位十六进制串，由后端生成。
@@ -78,6 +80,15 @@ POST /api/sessions/<sid>/branch {"index": n}
 ## 故事 JSON
 
 结构和会话基本一致，只是没有 messages、status、facts、summary。它在「开新局」时被复制成新会话的初始设定。
+
+封面三个字段：
+
+    "cover": "20261112144152-0aac75.jpg",
+    "cover_prompt": "夜雨的旧城，一个黑发女人站在露台上",
+    "cover_history": ["145645-eb8997.jpg", "145857-65e521.jpg"]
+
+cover 只存文件名，路径由 DATA_DIR 推，换机器能跑。cover_history 最多 6 条，新的在前。
+引用的文件不在时读出来是空串，界面上不会出现破图。
 
 ## settings.json
 
