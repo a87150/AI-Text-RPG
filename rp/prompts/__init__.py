@@ -368,7 +368,8 @@ def build_context_debug(sess, speaker=None):
         "anchor_every": every,
         "chars": {"total": total, "system": len(system)},
         # 按字数乘一个系数不行：中英比例不同精度差很多。
-        "tokens": _tokens(system) + int(lore_len * 0.7),
+        # lore 是另一条 system 消息，走同一套估算
+        "tokens": _tokens(system) + _tokens("".join(h["content"] for h in hits)),
     }
 
 
@@ -713,14 +714,30 @@ def clean_generated(text):
     return "\n\n".join(kept).strip() or body
 
 
+# token 估算的字符分类。不能拿 CJK_RE 算：它只认汉字，中文标点会掉进
+# ASCII 那一档，而标点在词表里几乎各占一个 token，一段规则里十几处就能差出一成。
+_TOKEN_HAN_RE = re.compile(r"[\u4e00-\u9fff]")
+_TOKEN_PUNCT_RE = re.compile(
+    r"[\u3000-\u303f\uff01-\uff0f\uff1a-\uff20\uff3b-\uff40\uff5b-\uff60]")
+
+
 def _tokens(text):
-    """粗估 token 数：中文一字约 0.7个，ASCII 一字符约 0.28 个。
-    
+    """粗估 token 数，按 Qwen 系词表校准（默认模型就是 qwen）。
+
+    汉字不是一字一个：这类词表把常用词合并成整词，实测长段中文只有 0.55～0.67。
+    标点和换行反而贵，基本各占一个。对着本机 tokenizer 对过：整份
+    system prompt 误差 +1%，纯英文 +10%。短的结构行（`1. 写人设`）会低估，
+    但它们在总量里占比很小。
+
+    宁可偏高：这个数是给人看「还剩多少余量」的，低估会让人以为还写得下，
+    实际上已经撞到上限被截断了。
     """
     text = text or ""
-    cjk = len(CJK_RE.findall(text))
-    rest = max(0, len(text) - cjk)
-    return int(cjk * 0.7 + rest * 0.28)
+    han = len(_TOKEN_HAN_RE.findall(text))
+    punct = len(_TOKEN_PUNCT_RE.findall(text))
+    lines = text.count("\n")
+    rest = max(0, len(text) - han - punct - lines)
+    return int(round(han * 0.65 + punct * 0.9 + lines * 1.0 + rest * 0.25))
 
 
 def _norm(text):

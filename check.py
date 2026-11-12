@@ -549,6 +549,15 @@ def main():
     check("检查器标出命中的世界书",
           bool(dbg["lore"]) and dbg["lore"][0]["keys"] == "某酒馆", str(dbg["lore"])[:50])
     check("检查器给出 token 估算", dbg["tokens"] > 0)
+    # 中文在 Qwen 词表里约 0.6 个 token/字，不是一字一个；
+    # 但也不能像旧公式那样把标点当英文算，会低估一成
+    _zh = "她站在门口，风从背后吹过来。"
+    _t_zh = rp_prompts._tokens(_zh)
+    check("中文不按一字一 token 估", _t_zh < len(_zh) * 0.85, str(_t_zh))
+    check("中文估算也不至于过低", _t_zh >= len(_zh) * 0.5, str(_t_zh))
+    check("中文标点比英文标点贵",
+          rp_prompts._tokens("。。。。") > rp_prompts._tokens("...."),
+          str(rp_prompts._tokens("。。。。")) + " vs " + str(rp_prompts._tokens("....")))
     check("上下文接口带 debug", "debug" in rp_context.context_info(dbg_sess))
 
     # 21. 事实账本：旧说法让位，不双写
