@@ -17,7 +17,6 @@ import threading
 _lock = threading.RLock()
 os.makedirs(SNAP_DIR, exist_ok=True)
 
-
 def _dir(sid):
     safe = "".join(ch for ch in (sid or "") if ch.isalnum() or ch in "-_")
     if not safe:
@@ -25,7 +24,6 @@ def _dir(sid):
     path = os.path.join(SNAP_DIR, safe)
     os.makedirs(path, exist_ok=True)
     return path
-
 
 def snapshot(sess, reason="manual"):
     """把整份会话存一份；名字里带时间和原因，方便人看。"""
@@ -51,7 +49,6 @@ def snapshot(sess, reason="manual"):
                 pass
     return name
 
-
 def list_snapshots(sid):
     path = _dir(sid)
     if not path:
@@ -67,7 +64,6 @@ def list_snapshots(sid):
         items.append({"name": fn, "reason": reason, "size": stat.st_size,
                       "at": int(stat.st_mtime)})
     return items
-
 
 def load_snapshot(sid, name):
     path = _dir(sid)

@@ -16,15 +16,12 @@ from ..stories import PLACEHOLDER, fill_names
 
 _DIR = os.path.dirname(os.path.abspath(__file__))
 
-
 def load(name):
     with open(os.path.join(_DIR, name), encoding="utf-8") as f:
         return f.read()
 
-
 def render(name, **kw):
     return Template(load(name)).safe_substitute(**kw).strip()
-
 
 # 贴在最后一条用户消息末尾的格式提醒，越弱的模型越需要
 TAIL_HINT = {
@@ -45,7 +42,6 @@ _ADD_CAST_RE = re.compile(
     r"新增角色|新角色|来个角色|登场一个|"
     r"多一个角色|加一个人")
 
-
 def cast_hint(sess):
     """用户要求加人时把格式钉到他眼前。
 
@@ -64,7 +60,6 @@ def cast_hint(sess):
             '【新角色】{"name":"名字","role":"身份与性格","relation":"和在场角色的关系"}。'
             '只写这一轮新出现的那个' + who + '。）')
 
-
 def clip(text, limit, tail="…"):
     """按字数截断，尽量断在句号上，别把人设砍成半句话。
 
@@ -81,7 +76,6 @@ def clip(text, limit, tail="…"):
             return head[:pos + 1] + tail
     return head.rstrip("，、, ") + tail
 
-
 def role_range(cap=None):
     """AI 生成角色卡的目标字数，落在这一档实际能注入的上限之内。
 
@@ -93,14 +87,12 @@ def role_range(cap=None):
         return 320, 520
     return max(60, int(cap * 0.6)), max(120, int(cap * 0.9))
 
-
 def active_facts(sess, limit=None):
     """已确立且没被推翻的事实，按档位取最近若干条。"""
     cap = limit if limit is not None else tier_limits()["facts"]
     book = [f for f in (sess.get("facts") or [])
             if isinstance(f, dict) and f.get("state") == "active"]
     return book[-cap:] if cap else book
-
 
 # 规则也按档位分：小模型能可靠执行的硬约束就五条左右，多了互相打架，
 # 而"文风跟着场景能量走"这类元指令 9B 执行不了，占着位置反而挤掉更要紧的。
@@ -125,10 +117,8 @@ STATUS_FILE = {
     "advanced": "status_advanced.md",
 }
 
-
 def status_prompt():
     return render(STATUS_FILE.get(tier(), "status.md"))
-
 
 def build_rules(user_name, mode=None, names=""):
     w = writing()
@@ -161,7 +151,6 @@ def build_rules(user_name, mode=None, names=""):
         max_characters=w["max_characters"],
         status_block=status_block,
     )
-
 
 def build_character_block(chars, speaker=None, status=None):
     """角色卡整段展开，并分「在场 / 不在场」。
@@ -196,7 +185,6 @@ def build_character_block(chars, speaker=None, status=None):
         lines.append("这一轮只写【%s】一个人的话，别人只出现在旁白里。" % speaker)
     return "\n".join(lines)
 
-
 def build_status_scene(sess):
     """状态字段本身是数据，读起来像后台日志；串成一句话模型才当情境用。"""
     status = sess.get("status") or {}
@@ -219,7 +207,6 @@ def build_status_scene(sess):
             bits.append("%s：%s。" % (label, value))
     return "".join(bits)
 
-
 # 正文语言。这句必须每轮都在：模型不看这个就按自己的习惯走
 LANGUAGE_LINES = {
     "zh": ("正文一律用简体中文写。不要夹整句外语，不要写成中英混排；"
@@ -228,7 +215,6 @@ LANGUAGE_LINES = {
            "and do not mix languages; proper nouns and technical terms may keep their "
            "original spelling."),
 }
-
 
 def build_system_prompt(sess, speaker=None):
     user_name, _ = role_labels(sess)
@@ -288,7 +274,6 @@ LORE_MAX_ITEMS = 6
 LORE_MAX_CHARS = 400
 LORE_SCAN_MESSAGES = 6
 
-
 def lore_hits(sess, recent_text=""):
     """本轮命中的世界书条目（含命中的关键词，方便前端高亮）。"""
     entries = sess.get("lore") or []
@@ -311,7 +296,6 @@ def lore_hits(sess, recent_text=""):
             break
     return hits
 
-
 def build_lore_block(sess, recent_text=""):
     """只把最近对话里点到名的世界书条目塞进去，设定再多也不稀释人设。"""
     hits = lore_hits(sess, recent_text)
@@ -320,7 +304,6 @@ def build_lore_block(sess, recent_text=""):
     lead = (sess.get("user_name") or "").strip()
     return ("【世界书（本轮相关设定）】\n"
             + "\n".join("· " + fill_names(h["content"], lead) for h in hits))
-
 
 
 
@@ -336,7 +319,6 @@ def build_anchor_block(sess):
         return ""
     return ("【人设锚定 · 别把他们写成好说话的助手】\n" + "\n".join(lines)
             + "\n保持这些人的脾气、说话方式和底线，不要因为聊久了就变软、变话痨。")
-
 
 def build_context_debug(sess, speaker=None):
     """这一轮到底发了什么：给「上下文」面板用，先能看见才能调。"""
@@ -372,12 +354,10 @@ def build_context_debug(sess, speaker=None):
         "tokens": _tokens(system) + _tokens("".join(h["content"] for h in hits)),
     }
 
-
 # 动作类动词：用来判断用户是"点了个头"还是"推门、拔刀、转身就跑"
 _ACTIONS = ("推", "拉", "拔", "抓", "握", "踏", "跨", "转身", "抬手", "低头",
             "后退", "靠近", "踢", "挥", "扔", "抢", "抱", "按", "坐", "站",
             "走", "跑", "扑", "抵", "撑", "捏", "扯", "掀", "探")
-
 
 def input_density(sess):
     """用户这一轮写了多细。固定字数在长段动作后必然失衡，得让目标跟着走。
@@ -402,7 +382,6 @@ def input_density(sess):
         return "thick", (int(lo * 0.9), int(lo * 1.6))
     return "normal", (int(lo * 1.0), int(hi * 1.0))
 
-
 # 强模型会把一轮写成一场完整的戏：铺景、对话、转折、收束一气写完。
 # 用户还没接话，故事就翻篇了——这条把它按住
 STEP_HINT = ("（这一轮只往前挪一小步：一个动作、一段对话或一个反应就收住。"
@@ -414,7 +393,6 @@ DENSITY_HINT = {
     "normal": "",
 }
 
-
 def timeline_hint(sess):
     """时间只被记录、没人用它，模型就会在原地打转或者凭空跳档。"""
     time = ((sess.get("status") or {}).get("time") or "").strip()
@@ -422,7 +400,6 @@ def timeline_hint(sess):
         return ""
     return ("（上一轮结束时是「%s」。本轮时间要从那里自然往下走；"
             "跨度大就在正文里交代清过了多久、天色怎么变的。）" % time)
-
 
 def build_messages(sess, speaker=None):
     """历史消息还原成「旁白 + 角色」的形式，让模型明白谁说过什么。"""
@@ -487,7 +464,6 @@ def build_messages(sess, speaker=None):
                 break
     return messages
 
-
 def build_locked_block(user_name, ai_name):
     lines = []
     if user_name == PLACEHOLDER:
@@ -503,7 +479,6 @@ def build_locked_block(user_name, ai_name):
         return ""
     return render("locked.md", lines="\n".join(lines))
 
-
 def _extra_block(rules, user_name, ai_name):
     parts = []
     if rules and rules.strip():
@@ -512,7 +487,6 @@ def _extra_block(rules, user_name, ai_name):
     if locked:
         parts.append(locked)
     return ("\n\n" + "\n\n".join(parts)) if parts else ""
-
 
 def _state_block(opening="", lore=None, mode=""):
     """已经定下来的其余内容也给它看，不然单项生成会和别的字段打架。"""
@@ -532,7 +506,6 @@ def _state_block(opening="", lore=None, mode=""):
         parts.append("\n".join(lines))
     return ("\n" + "\n".join(parts)) if parts else ""
 
-
 def _others_block(characters, skip_first=True):
     """角色列表里除第一个以外的角色，扩写时必须整份保留。"""
     items = [c for c in (characters or []) if isinstance(c, dict) and str(c.get("name") or "").strip()]
@@ -549,7 +522,6 @@ def _others_block(characters, skip_first=True):
             line += "｜当前：%s" % state[:80]
         lines.append(line)
     return "\n".join(lines)
-
 
 def _ai_block(ai_name, ai_role, ai_state="", auto_roles=1):
     """AI 角色空着的时候别让模型自己乱编，先说清这是可以推断的。
@@ -570,7 +542,6 @@ def _ai_block(ai_name, ai_role, ai_state="", auto_roles=1):
     if state:
         lines.append("· 他的当前状态（剧情里已经发生了，必须保留）：" + state[:120])
     return "\n".join(lines)
-
 
 # 生成世界观和开场白时附一行名单，代码拿去补角色表，不留在正文里
 CAST_TAIL = ("如果这段里出现了「我」和 AI 角色之外的人物，"
@@ -607,7 +578,6 @@ FIELD_TASKS = {
              "第二行起写 60~120 字的设定：是什么、谁管着、有什么规矩或秘密。"
              "不要写成角色卡，不要和已有条目重复。"),
 }
-
 
 def build_field_prompt(field, name="", user_name="", ai_name="", user_role="",
                        ai_role="", world="", rules="", characters=None,
@@ -654,7 +624,6 @@ def build_field_prompt(field, name="", user_name="", ai_name="", user_role="",
 
 
 
-
 def build_summary_prompt(prev_summary, text, summary_chars=None):
     # 摘要长度是写作参数之一：短了省 token 但细节留不住，长了占预算
     chars = writing()["summary_chars"] if summary_chars is None else summary_chars
@@ -673,7 +642,6 @@ _HEADING = re.compile(r"^[^\n。！？]{1,16}[:：]$")
 CJK_RE = re.compile(r"[\u4e00-\u9fff]")
 # 设定正文里出现整行英文，基本是模型在解释「Here is the setting:」之类
 ASCII_WORD_RE = re.compile(r"[A-Za-z]{3,}")
-
 
 def clean_generated(text):
     """只留设定正文：去掉开场客套、小标题、Markdown 记号与重复段落。"""
@@ -713,13 +681,11 @@ def clean_generated(text):
         kept.append(para)
     return "\n\n".join(kept).strip() or body
 
-
 # token 估算的字符分类。不能拿 CJK_RE 算：它只认汉字，中文标点会掉进
 # ASCII 那一档，而标点在词表里几乎各占一个 token，一段规则里十几处就能差出一成。
 _TOKEN_HAN_RE = re.compile(r"[\u4e00-\u9fff]")
 _TOKEN_PUNCT_RE = re.compile(
     r"[\u3000-\u303f\uff01-\uff0f\uff1a-\uff20\uff3b-\uff40\uff5b-\uff60]")
-
 
 def _tokens(text):
     """粗估 token 数，按 Qwen 系词表校准（默认模型就是 qwen）。
@@ -739,18 +705,14 @@ def _tokens(text):
     rest = max(0, len(text) - han - punct - lines)
     return int(round(han * 0.65 + punct * 0.9 + lines * 1.0 + rest * 0.25))
 
-
 def _norm(text):
     return re.sub(r"[^\u4e00-\u9fa5A-Za-z0-9]", "", text or "")
-
 
 def _sentences(text):
     return [s.strip() for s in _SENT_SPLIT.split(text or "") if s.strip()]
 
-
 def _bigrams(text):
     return {text[i:i + 2] for i in range(len(text) - 1)} if len(text) > 1 else set()
-
 
 def covered_by(original, generated, min_ratio=0.35):
     """简述是否已经"被吸收"进生成结果。
@@ -771,7 +733,6 @@ def covered_by(original, generated, min_ratio=0.35):
         return True
     return len(grams & _bigrams(dst)) / len(grams) >= min_ratio
 
-
 def _drop_rewritten(original, generated):
     """生成结果里跟简述重复的句子丢掉，避免同一句话说两遍。"""
     src = [_norm(s) for s in _sentences(original)]
@@ -783,7 +744,6 @@ def _drop_rewritten(original, generated):
             continue
         kept.append(sent)
     return "。".join(kept).strip()
-
 
 def ensure_original_kept(original, generated):
     """简述是底稿：生成结果已经吸收它就整段替换，漏了才把原文补回去。"""

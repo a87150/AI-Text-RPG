@@ -42,10 +42,8 @@ TOTAL = {"calls": 0, "prompt_tokens": 0, "completion_tokens": 0,
 KEEP_DAYS = 14          # 一天一个文件，单日实测 400KB 左右，两周就是一个上限
 _pruned = {"done": False}
 
-
 def _path():
     return os.path.join(LOG_DIR, time.strftime("%Y-%m-%d") + ".log")
-
 
 def _prune():
     """启动后第一次写日志时清一遍过期文件。
@@ -66,7 +64,6 @@ def _prune():
     except Exception:
         pass
 
-
 def note(event, **fields):
     """写一行 JSON 事件。任何异常都不往外抛。"""
     _prune()
@@ -80,7 +77,6 @@ def note(event, **fields):
                 f.write(line + "\n")
     except Exception:
         pass
-
 
 def begin(session_id, prompt_chars, system_chars, messages):
     """一轮请求开始：记下起点，首 token 的耗时从这一刻算。"""
@@ -97,7 +93,6 @@ def begin(session_id, prompt_chars, system_chars, messages):
     note("chat.request", sid=session_id, prompt_chars=prompt_chars,
          system_chars=system_chars, messages=messages)
 
-
 def first_token():
     """第一个正文增量到了——用户真正感觉到的那段等待到此结束。"""
     for sid, slot in _pending.items():
@@ -109,7 +104,6 @@ def first_token():
         note("chat.first_token", sid=sid, ms=ms, prompt_chars=LAST["prompt_chars"])
         return
 
-
 def end(session_id, ok=True, **extra):
     """一轮结束：总耗时、首字节、prompt 大小一起记，方便算 prefill 占比。"""
     slot = _pending.pop(session_id or "", {})
@@ -119,7 +113,6 @@ def end(session_id, ok=True, **extra):
     note("chat.done", sid=session_id, ok=ok, total_ms=total,
          first_token_ms=LAST["first_token_ms"],
          prompt_chars=LAST["prompt_chars"], **extra)
-
 
 def record(usage, model=""):
     """一轮结束后把用量记进来，顺带算个估算费用。"""
@@ -137,7 +130,6 @@ def record(usage, model=""):
     if LAST["cost"]:
         TOTAL["cost"] = round(TOTAL["cost"] + LAST["cost"]["total"], 6)
     note("chat.usage", model=LAST["model"], usage=usage, cost=LAST["cost"])
-
 
 def snapshot():
     """面板要读的数字。"""

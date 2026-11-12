@@ -18,7 +18,6 @@ def guess_name(text):
 
 CHARACTER_HISTORY_KEEP = 4    # 每个角色保留的最近变化条数
 
-
 def default_character(sess):
     name = (sess.get("ai_name") or "").strip() \
         or guess_name(sess.get("ai_role", "")) or "AI 角色"
@@ -28,7 +27,6 @@ def default_character(sess):
         "state": "",
         "history": [],
     }
-
 
 def ensure_characters(sess):
     """归一化角色表；老会话没有角色表时用 ai_name/ai_role 兜底成一个。"""
@@ -53,7 +51,6 @@ def ensure_characters(sess):
     sess["characters"] = cleaned
     return cleaned
 
-
 def next_speaker(sess):
     """圆桌式之后不再由代码指定发言人，一轮里在场角色各自发言。
 
@@ -61,19 +58,15 @@ def next_speaker(sess):
     """
     return ""
 
-
 def advance_turn(sess):
     sess["turn"] = int(sess.get("turn") or 0) + 1
-
 
 # 模型会把「无」「暂无」当成名字写出来，这些不是人
 _BAD_NAMES = {"无", "没有", "暂无", "未知", "不详", "空", "none", "null",
               "-", "—", "（无）", "无。", "无人物", "路人", "众人"}
 
-
 def is_bad_name(name):
     return str(name or "").strip().lower() in _BAD_NAMES
-
 
 def looks_like_name(name):
     """从在场名单里捞人用：像人名才建卡，免得把整句话塞进角色列。"""
@@ -82,13 +75,11 @@ def looks_like_name(name):
         return False
     return not re.search(r"[，,。；;：:！？!?\s0-9]", text)
 
-
 # 用户在消息里直接点名要加的人。靠模型写【新角色】靠不住，
 # 它聊到后面就把规则当没看见，建卡这件事得自己做。
 _ADD_CAST_RE = re.compile(
     r"(?:加入角色|新增角色|加个角色|加一个角色|新角色|加个人)"
     r"[：: ]*【?([^\s，。；,;、【】\[\]]{1,10})")
-
 
 def parse_add_cast(text):
     """从用户这句话里拿出要加的名字，不靠模型。
@@ -101,7 +92,6 @@ def parse_add_cast(text):
         if nm and looks_like_name(nm) and nm not in out:
             out.append(nm)
     return out
-
 
 def upsert_character(sess, data):
     """登记新角色 / 更新已有角色的设定与变化，返回 (名字, 是否新增)。"""
@@ -160,7 +150,6 @@ STATE_SYSTEM_EN = (
     'present and away must cover everyone exactly once. '
     'If someone leaves, follows, splits off, or the location changes, say so.'
 )
-
 
 def refresh_states(sess, text):
     """正文写完之后再过一遍角色状态。
@@ -249,7 +238,6 @@ def refresh_states(sess, text):
         n += 1
     return n
 
-
 def apply_change(sess, data):
     if not isinstance(data, dict):
         return None
@@ -264,7 +252,6 @@ def apply_change(sess, data):
             c["state"] = change[:120]
             return name
     return None
-
 
 def role_labels(sess):
     ai_name = (sess.get("ai_name") or "").strip() \
@@ -298,7 +285,6 @@ MARK_KEYS = {
     "在场": "present", "离场": "away", "退场": "away",
 }
 NAME_SPLIT_RE = re.compile(r"[,，、/]")
-
 
 def _take_mark_line(text):
     """剥掉 [[…]] 状态行并解析成 status；格式不对就整行丢弃。"""
@@ -339,7 +325,6 @@ def _take_mark_line(text):
             status[key] = value
     return src, status
 
-
 def _parse_items(value):
     """物品可以绑到具体人身上：物品：乙=纱裙、皮鞭；甲=手机。
 
@@ -361,7 +346,6 @@ def _parse_items(value):
             grouped[""] = "、".join(loose)
         return grouped
     return value
-
 
 def merge_status(old, new):
     """状态是累积的：这一轮没写到的字段沿用上一轮，别把已有信息清空。
@@ -394,7 +378,6 @@ def merge_status(old, new):
         out[key] = value
     return out
 
-
 def scene_split(chars, status):
     """把角色分成「这一幕在场」和「这一幕不在场」。没标过就都算在场。"""
     status = status or {}
@@ -413,7 +396,6 @@ STATUS_FIELDS = ("location", "time", "relations", "items", "goal")
 # 状态块里额外允许一条事实账本：模型每轮声明"刚刚定下的事"
 FACT_KEY = "facts"
 
-
 def _clean_names(seq, cap=None):
     """在场/离场名单：剔掉「无」这类占位词，去重，上限比角色数宽一点好接新人。"""
     if isinstance(seq, str):
@@ -427,7 +409,6 @@ def _clean_names(seq, cap=None):
         if name not in out:
             out.append(name)
     return out[:cap]
-
 
 def extract_status(text):
     """取出状态块与事实行，并从正文里删掉它们。
@@ -497,7 +478,6 @@ def extract_status(text):
 
 FACT_LINE_RE = re.compile(r"^[ \t]*【事实】[ \t]*[:：]?[ \t]*(.+)$", re.M)
 
-
 def split_facts(text):
     """一句一条，太短的丢掉，最多三条。"""
     parts = re.split(r"[；;。\n]", text or "")
@@ -512,10 +492,8 @@ def split_facts(text):
 FACTS_MAX = 40
 FACTS_KEEP = 12
 
-
 def _norm(text):
     return re.sub(r"\s+", "", (text or "").lower())
-
 
 def merge_facts(sess, new_facts, turn=None):
     """把这一轮声明的事实并进账本：相似的旧事实让位，总数封顶。"""
@@ -568,10 +546,8 @@ def merge_facts(sess, new_facts, turn=None):
             metrics.note("ledger.redundant", count=_dup, sample=fresh[0].get("fact"))
     return fresh
 
-
 # 跟设定面板那条手动编辑的上限对齐
 LORE_MAX = 40
-
 
 def add_lore(sess, entry, turn=None):
     """对话里攒出来的词条：按 keys 去重，满了就不加。只写这一局，不碰故事模板。
@@ -599,34 +575,28 @@ def add_lore(sess, entry, turn=None):
                  "turn": int(turn if turn is not None else sess.get("turn") or 0)})
     return True
 
-
 def _fact_subject(text):
     """拿句子开头当主体，够用来分组，不用做分词。"""
     head = re.split(r"[，,。；;：:！？!?\s]", text.strip(), maxsplit=1)[0]
     return head[:12]
-
 
 def active_facts(sess, limit=FACTS_KEEP):
     book = sess.get("facts") or []
     live = [f for f in book if isinstance(f, dict) and f.get("state") == "active"]
     return live[-limit:]
 
-
 def is_character_slot(tag):
     """【名字】这种两到四个汉字的短标签，才可能是角色段。"""
     text = str(tag or "").strip()
     return bool(text) and len(text) <= 8 and not re.search(r"[，,。；;：:！？!?\s0-9]", text)
-
 
 def _sync_new_character(result):
     """new_characters 是准的，new_character 留第一个给旧调用方。"""
     if result["new_characters"]:
         result["new_character"] = result["new_characters"][0]
 
-
 # 认人时要去掉的装饰符
 _TRIM = "「」【】\"' \u3000"
-
 
 def parse_cast(text):
     """解析「认人」的输出：一行一人，名字在前、一句话设定在后。
@@ -658,7 +628,6 @@ def parse_cast(text):
 
 _CAST_LINE = re.compile("^\\s*(?:\u89d2\u8272|\u4eba\u7269)[\uff1a:]\\s*(.+)$")
 
-
 def split_cast_line(text):
     """把生成结果末尾的「角色：甲、乙」剥出来，返回 (正文, 名字列表)。
 
@@ -680,7 +649,6 @@ def split_cast_line(text):
         rest = "\n".join(lines[:i] + lines[i + 1:]).strip()
         return rest, names
     return body.strip(), []
-
 
 def parse_lore_batch(text):
     """解析“一次写几条世界书”的输出：一行一条，关键词在前、内容在后。
@@ -704,7 +672,6 @@ def parse_lore_batch(text):
             continue
         out.append({"keys": keys, "content": body})
     return out
-
 
 def parse_turn(text, speaker="", names=None):
     """拆出旁白和每个角色的发言。

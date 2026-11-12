@@ -23,7 +23,6 @@ TEXT_FIELDS = (
 )
 DEFAULT_TITLE = "未命名故事"
 
-
 def get_session_lock(sid):
     with _session_locks_guard:
         lock = _session_locks.get(sid)
@@ -32,7 +31,6 @@ def get_session_lock(sid):
             _session_locks[sid] = lock
         return lock
 
-
 def try_acquire_busy(sid):
     with _busy_guard:
         if sid in _busy_sessions:
@@ -40,11 +38,9 @@ def try_acquire_busy(sid):
         _busy_sessions.add(sid)
         return True
 
-
 def release_busy(sid):
     with _busy_guard:
         _busy_sessions.discard(sid)
-
 
 def is_busy(sid):
     """这个会话现在有没有一轮在生成。
@@ -55,16 +51,13 @@ def is_busy(sid):
     with _busy_guard:
         return sid in _busy_sessions
 
-
 # ============================== 存储层 ==============================
 SID_RE = re.compile(r"[0-9a-f]{12}")
-
 
 def session_path(sid):
     if not isinstance(sid, str) or not SID_RE.fullmatch(sid):
         return None
     return os.path.join(DATA_DIR, sid + ".json")
-
 
 class StaleSession(Exception):
     """磁盘上的版本比调用方拿着的新：另一个标签页先写了。"""
@@ -73,7 +66,6 @@ class StaleSession(Exception):
         super().__init__("会话已在别处更新")
         self.expected = expected
         self.actual = actual
-
 
 def current_stamp(sid):
     """读磁盘上的 updated_at，不建立完整对象。"""
@@ -87,10 +79,8 @@ def current_stamp(sid):
         return None
     return data.get("updated_at") if isinstance(data, dict) else None
 
-
 # 最近一次读/写耗时（毫秒），供上下文面板显示。
 IO_TIMING = {"load_ms": 0.0, "save_ms": 0.0, "bytes": 0}
-
 
 def save_session(sess, expect=None):
     """写盘。expect 给就是乐观锁：磁盘上的 updated_at 和它对不上就报 StaleSession。
@@ -123,7 +113,6 @@ def save_session(sess, expect=None):
                 except OSError:
                     pass
 
-
 def load_session(sid):
     path = session_path(sid)
     if not path or not os.path.isfile(path):
@@ -138,7 +127,6 @@ def load_session(sid):
             return data
         except (OSError, json.JSONDecodeError):
             return None
-
 
 def new_session(title=DEFAULT_TITLE, mode="normal"):
     now = time.time()
@@ -155,7 +143,6 @@ def new_session(title=DEFAULT_TITLE, mode="normal"):
         "turn": 0,          # 轮流发言进度
         "created_at": now, "updated_at": now,
     }
-
 
 def list_sessions():
     with _file_lock:

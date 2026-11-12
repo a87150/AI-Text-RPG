@@ -19,11 +19,9 @@ KEEP_MAX = 30          # ponytail: 只按份数裁剪，磁盘不够时再加大
 _EXTRA = (".json",)
 _log_lock = threading.Lock()
 
-
 def ensure_dir():
     os.makedirs(BACKUP_DIR, exist_ok=True)
     return BACKUP_DIR
-
 
 def mask_settings(raw):
     """把 providers 里的 api_key 清成空串，其余设置照旧带上。"""
@@ -37,7 +35,6 @@ def mask_settings(raw):
                 item["api_key"] = ""
     return out
 
-
 def _iter_files(root):
     for here, _dirs, files in os.walk(root):
         for fn in files:
@@ -45,7 +42,6 @@ def _iter_files(root):
                 continue
             full = os.path.join(here, fn)
             yield full, os.path.relpath(full, root).replace("\\", "/")
-
 
 def create(reason="manual"):
     """打一个包；返回 {name, size, at, files, skipped}。"""
@@ -88,7 +84,6 @@ def create(reason="manual"):
     return {"name": name, "size": stat.st_size, "at": int(stat.st_mtime),
             "files": files, "skipped": skipped}
 
-
 def listing():
     ensure_dir()
     items = []
@@ -106,14 +101,12 @@ def listing():
     items.sort(key=lambda x: x["at"], reverse=True)
     return items
 
-
 def path_of(name):
     """只认 backups/ 里真实存在的文件名，挡住 ../ 之类的路径。"""
     if not name or "/" in name or "\\" in name or not name.endswith(".zip"):
         return None
     full = os.path.join(ensure_dir(), name)
     return full if os.path.isfile(full) else None
-
 
 def delete(name):
     full = path_of(name)
@@ -125,14 +118,12 @@ def delete(name):
     except OSError:
         return False
 
-
 def prune(keep=None):
     # 用户可能把份数调过，没显式传就读设置里的值
     if keep is None:
         keep = config.backup_conf().get("keep") or KEEP_MAX
     for item in listing()[int(keep):]:
         delete(item["name"])
-
 
 def _read_keys():
     """当前 settings.json 里存着的 api_key，按提供方分。"""
@@ -145,7 +136,6 @@ def _read_keys():
     return {pid: (item or {}).get("api_key") or ""
             for pid, item in (data.get("providers") or {}).items()
             if isinstance(item, dict)}
-
 
 def restore(name):
     """把一份备份解回 data/。
@@ -213,7 +203,6 @@ def restore(name):
                 pass
     return {"files": written, "guard": guard["name"], "keys": filled}
 
-
 def due(conf, latest_at, now=None):
     """现在该不该自动备份：开了、且距上一份超过间隔。"""
     if not isinstance(conf, dict) or not conf.get("enabled"):
@@ -221,7 +210,6 @@ def due(conf, latest_at, now=None):
     minutes = max(1, int(conf.get("every_minutes") or 1440))
     now = time.time() if now is None else now
     return (now - float(latest_at or 0)) >= minutes * 60
-
 
 def auto_loop(stop_event, conf_reader):
     """定时备份：每次醒来重新读配置，改设置不用重启。"""
@@ -236,7 +224,6 @@ def auto_loop(stop_event, conf_reader):
                 app.logger.info("自动备份：%s（%d 个文件）", result["name"], result["files"])
         except Exception as exc:      # 定时任务绝不能把线程弄死
             app.logger.warning("自动备份出错：%s", exc)
-
 
 def start_auto(conf_reader):
     stop = threading.Event()

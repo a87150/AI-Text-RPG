@@ -15,12 +15,10 @@ STORY_FIELDS = ("title", "user_name", "user_role", "world", "rules", "opening")
 _lock = threading.RLock()
 os.makedirs(STORY_DIR, exist_ok=True)
 
-
 def story_path(sid):
     if not sid or not SID_RE.fullmatch(sid):
         return None
     return os.path.join(STORY_DIR, sid + ".json")
-
 
 def new_story(title=DEFAULT_TITLE):
     now = time.time()
@@ -38,7 +36,6 @@ def new_story(title=DEFAULT_TITLE):
         "created_at": now, "updated_at": now,
     }
 
-
 def load_story(sid):
     path = story_path(sid)
     if not path or not os.path.isfile(path):
@@ -54,7 +51,6 @@ def load_story(sid):
 
 COVER_HISTORY_MAX = 6
 
-
 def set_cover(story, name, prompt=None):
     """换封面。旧的不删，压进历史，撤销就是把它拿回来。"""
     if not story:
@@ -69,7 +65,6 @@ def set_cover(story, name, prompt=None):
     if prompt is not None:
         story["cover_prompt"] = prompt
     return story
-
 
 def undo_cover(story):
     """回到上一张。没有上一张就清空，不报错。"""
@@ -93,7 +88,6 @@ def undo_cover(story):
     return story
 
 
-
 def cover_list(story):
     """当前这张加历史里的，按"现在用的在最前"排。"""
     if not story:
@@ -115,7 +109,6 @@ def cover_list(story):
                     "url": cover_store.url_of(n), "current": False})
     return out
 
-
 def pick_cover(story, name):
     """把历史里的某张拿回来当封面。当前这张压回历史，不丢。"""
     if not story or not name:
@@ -133,7 +126,6 @@ def pick_cover(story, name):
     story["cover_prompt"] = picked.get("prompt") or story.get("cover_prompt") or ""
     story["cover_history"] = keep[:COVER_HISTORY_MAX]
     return story
-
 
 def forget_cover(story, name):
     """把某张从这份设定里彻底删掉，连图一起。"""
@@ -181,7 +173,6 @@ def cover_prompt_from(story):
     text = " ".join(b.strip().rstrip("。．.") for b in bits if b.strip())
     return text + "。电影感构图，氛围强，细节丰富。"
 
-
 def save_story(story):
     path = story_path(story.get("id"))
     if not path:
@@ -202,14 +193,12 @@ def save_story(story):
     return story
 
 
-
 def _live_cover(name):
     """存的是文件名，但文件可能已经不在了。不在就当没封面。"""
     if not name:
         return ""
     from . import covers as cover_store
     return name if cover_store.exists(name) else ""
-
 
 def _live_thumb(name):
     """列表用的小图地址。没小图就空着，前端自己回退到原图。"""
@@ -243,7 +232,6 @@ def list_stories():
             })
     items.sort(key=lambda x: x["updated_at"], reverse=True)
     return items
-
 
 def delete_story(sid):
     path = story_path(sid)
@@ -279,7 +267,6 @@ def update_from(story, sess):
     story["title"] = story["title"] or DEFAULT_TITLE
     return story
 
-
 def apply_to(sess, story):
     """用故事模板填一个空会话；对话内容（消息/前情/回合）保持干净。"""
     for key in STORY_FIELDS:
@@ -296,7 +283,6 @@ def apply_to(sess, story):
     return sess
 
 PLACEHOLDER = "{主角}"   # 设定里的主角占位符
-
 
 def fill_names(text, lead=""):
     """把设定里的 {主角} 换成这一局实际的名字。

@@ -158,7 +158,6 @@ PRICES = {
     "qwen-max": (1.60, 6.40, 0.80),
 }
 
-
 def price_of(model):
     """按模型名前缀匹配单价；对不上返 None。"""
     name = (model or "").strip().lower()
@@ -168,7 +167,6 @@ def price_of(model):
         if name.startswith(key):
             return PRICES[key]
     return None
-
 
 def estimate_cost(model, usage):
     """把 usage 换成一个每百万 token 单价的估算。拿不到单价就返 None。"""
@@ -194,15 +192,12 @@ def estimate_cost(model, usage):
 CREATIVITY_TEMP = {"standard": 0.75, "creative": 0.95, "wild": 1.1}
 _creativity = CREATIVITY_DEFAULT
 
-
 def creativity():
     with _model_lock:
         return _creativity
 
-
 def creativity_temp(level=None):
     return CREATIVITY_TEMP.get(level or creativity(), CREATIVITY_TEMP["standard"])
-
 
 def save_creativity(value, persist=True):
     global _creativity
@@ -214,11 +209,9 @@ def save_creativity(value, persist=True):
         persist_settings()
     return creativity()
 
-
 def tier():
     with _model_lock:
         return _tier
-
 
 def save_tier(value, persist=True):
     global _tier
@@ -235,29 +228,23 @@ def save_tier(value, persist=True):
         persist_settings()
     return tier()
 
-
 def tier_limits(level=None):
     return TIER_LIMITS.get(level or tier(), TIER_LIMITS["basic"])
-
 
 def tier_keep(level=None):
     """这档压缩后该留几条：跟历史能带的量走，高级档不限条数就用到上限。"""
     return tier_limits(level)["history_msgs"] or KEEP_RECENT_MAX
 
-
 def tier_context(level=None):
     return tier_limits(level)["context"]
-
 
 def reasoning_effort():
     with _model_lock:
         return _reasoning
 
-
 def backup_conf():
     with _model_lock:
         return dict(_backup)
-
 
 def save_backup_conf(data):
     global _backup
@@ -283,7 +270,6 @@ def save_backup_conf(data):
     persist_settings()
     return backup_conf()
 
-
 def save_reasoning(value, persist=True):
     global _reasoning
     if value not in REASONING_LEVELS:
@@ -300,17 +286,14 @@ MODE_DEFAULT = "normal"
 MODE_LABELS = {"normal": "一般模式", "rp": "角色扮演"}
 _mode = MODE_DEFAULT
 
-
 def mode_of():
     with _model_lock:
         return _mode
-
 
 def mode_for(sess):
     """对话自己的模式优先；老会话没有就跟随全局默认。"""
     value = (sess or {}).get("mode")
     return value if value in MODES else mode_of()
-
 
 def reset_settings():
     """把写作参数、模式、档位、思考强度、创意程度恢复出厂。
@@ -328,7 +311,6 @@ def reset_settings():
     persist_settings()
     return writing()
 
-
 def save_mode(value, persist=True):
     global _mode
     if value not in MODES:
@@ -342,7 +324,6 @@ def save_mode(value, persist=True):
 def writing():
     with _model_lock:
         return dict(_writing)
-
 
 def save_writing(data, persist=True):
     """只改真的给了值的项；空串/0 视为「这次不动」，否则一次误传就把参数压到下限。"""
@@ -382,14 +363,12 @@ def current_target():
     with _model_lock:
         return _model_state["provider"], _model_state["model"]
 
-
 def provider_ids():
     """内置的在前，用户自己加的在后。"""
     with _model_lock:
         extra = [pid for pid, over in _provider_overrides.items()
                  if pid not in PROVIDERS and (over or {}).get("label")]
     return list(PROVIDERS) + extra
-
 
 def provider_public(pid):
     """对外的提供方信息：不下发 API Key，只告诉前端有没有配。"""
@@ -408,7 +387,6 @@ def provider_public(pid):
         "has_key": bool((over.get("api_key") or "").strip()),
     }
 
-
 def provider_endpoint(pid):
     info = provider_public(pid)
     base = (info["base_url"] or "").rstrip("/")
@@ -416,14 +394,12 @@ def provider_endpoint(pid):
         raise RuntimeError("%s 还没有设置接口地址" % info["label"])
     return base + "/chat/completions"
 
-
 def provider_usable(pid):
     """本地随时可用；云端要配好地址和 Key 才算可用。"""
     info = provider_public(pid)
     if info["kind"] == "ollama":
         return True
     return bool(info["has_key"]) and bool(info["base_url"].strip())
-
 
 def provider_headers(pid):
     info = provider_public(pid)
@@ -434,7 +410,6 @@ def provider_headers(pid):
         raise RuntimeError("%s 还没有配置 API Key，请在「云端模型」里填一下" % info["label"])
     return {"Authorization": "Bearer " + key}
 
-
 def _read_disk_settings():
     try:
         with open(SETTINGS_PATH, encoding="utf-8") as f:
@@ -442,7 +417,6 @@ def _read_disk_settings():
     except (OSError, json.JSONDecodeError):
         return {}
     return data if isinstance(data, dict) else {}
-
 
 def persist_settings():
     # 没跑过 load_settings 的进程（命令行小脚本、单元检查）内存里全是默认值，
@@ -474,7 +448,6 @@ def persist_settings():
                 os.remove(tmp)
             except OSError:
                 pass
-
 
 def load_settings():
     global _loaded
@@ -556,7 +529,6 @@ def load_settings():
         _model_state["provider"] = DEFAULT_PROVIDER
         _model_state["model"] = DEFAULT_MODEL
 
-
 def set_current_model(provider, model):
     provider = (provider or DEFAULT_PROVIDER).strip()
     model = (model or "").strip()
@@ -574,7 +546,6 @@ def set_current_model(provider, model):
         _model_state["model"] = model
     persist_settings()
     return provider, model
-
 
 def save_provider(pid, data):
     if not pid:
@@ -609,7 +580,6 @@ def save_provider(pid, data):
     persist_settings()
     return provider_public(pid)
 
-
 def delete_provider(pid):
     """只删自己加的；内置的删了没意义，下次启动又回来。"""
     if pid in PROVIDERS:
@@ -623,7 +593,6 @@ def delete_provider(pid):
             _model_state["model"] = DEFAULT_MODEL
     persist_settings()
     return provider_ids()
-
 
 def list_local_models(timeout=8):
     resp = requests.get(OLLAMA_TAGS_URL, timeout=timeout)

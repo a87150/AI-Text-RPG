@@ -68,13 +68,11 @@ def _str(data, key, limit=0):
     text = val.strip() if isinstance(val, str) else ""
     return text[:limit] if limit else text
 
-
 # ============================== 入口守卫 ==============================
 # 本机应用没有登录，一个跨站 <form method=post> 就能替用户改写设置、
 # 反复建备份把历史包挤出保留份数。写请求只接受本机来源。
 _SAFE_METHODS = frozenset(("GET", "HEAD", "OPTIONS"))
 _LOCAL_HOSTS = frozenset(("127.0.0.1", "localhost", "::1"))
-
 
 @app.before_request
 def _reject_cross_site():
@@ -99,7 +97,6 @@ def _reject_cross_site():
             return jsonify({"error": "拒绝跨站请求"}), 403
     return None
 
-
 @app.after_request
 def _security_headers(resp):
     # 不放 CSP：现有页面用了内联 style 和内联事件，上 CSP 会直接白屏。
@@ -107,12 +104,10 @@ def _security_headers(resp):
     resp.headers.setdefault("Referrer-Policy", "no-referrer")
     return resp
 
-
 # ============================== 路由 ==============================
 @app.get("/")
 def index():
     return render_template("index.html")
-
 
 @app.get("/api/config")
 def api_config():
@@ -143,7 +138,6 @@ def api_config():
         "creativity_temps": CREATIVITY_TEMP,
     })
 
-
 @app.post("/api/writing")
 def api_writing():
     data = request.get_json(silent=True) or {}
@@ -166,13 +160,11 @@ def api_writing():
                     "reasoning_effort": reasoning_effort(), "tier": tier(),
                     "creativity": creativity()})
 
-
 @app.post("/api/writing/reset")
 def api_writing_reset():
     return jsonify({"writing": reset_settings(), "mode": mode_of(),
                     "reasoning_effort": reasoning_effort(), "tier": tier(),
                     "creativity": creativity()})
-
 
 @app.get("/api/search")
 def api_search():
@@ -216,7 +208,6 @@ def api_search():
             break
     return jsonify({"hits": hits, "query": query, "truncated": len(hits) >= limit})
 
-
 @app.get("/api/models")
 def api_models():
     """各提供方及其模型；Ollama 掉线不影响云端模型的选择。"""
@@ -241,7 +232,6 @@ def api_models():
         "error": error,
     })
 
-
 @app.post("/api/model")
 def api_set_model():
     data = request.get_json(silent=True) or {}
@@ -255,11 +245,9 @@ def api_set_model():
         return jsonify({"error": str(exc)}), 400
     return jsonify({"provider": provider, "model": model})
 
-
 @app.get("/api/providers")
 def api_providers():
     return jsonify([provider_public(pid) for pid in provider_ids()])
-
 
 @app.post("/api/providers/<pid>")
 def api_save_provider(pid):
@@ -269,7 +257,6 @@ def api_save_provider(pid):
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
-
 @app.delete("/api/providers/<pid>")
 def api_delete_provider(pid):
     try:
@@ -277,11 +264,9 @@ def api_delete_provider(pid):
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
-
 @app.get("/api/sessions")
 def api_list_sessions():
     return jsonify(list_sessions())
-
 
 def seed_opening(sess):
     """把设定里的开场白变成第一条消息；已经聊过就不动。"""
@@ -304,7 +289,6 @@ def seed_opening(sess):
     else:
         msg = {"role": "assistant", "content": "", "narrator": turn["narrator"]}
     sess["messages"] = [msg]
-
 
 def _rename_all(sess, mapping):
     """改了角色名，状态块里记着旧名的地方一起换掉。
@@ -337,7 +321,6 @@ def _rename_all(sess, mapping):
             title = title.replace(old, new)
         sess["title"] = title
 
-
 def _renames(old_chars, new_chars):
     """按位置对比新旧角色表，找出被改掉的名字。"""
     m = {}
@@ -347,7 +330,6 @@ def _renames(old_chars, new_chars):
         if an and bn and an != bn:
             m[an] = bn
     return m
-
 
 def _bind_story(sess, story):
     """让会话记住自己从哪份设定来。有现成设定就只记 id，不回写内容。
@@ -364,7 +346,6 @@ def _bind_story(sess, story):
     save_story(story)
     sess["story_id"] = story["id"]
     return story
-
 
 @app.post("/api/sessions")
 def api_create_session():
@@ -401,7 +382,6 @@ def api_create_session():
     sess["context"] = context_info(sess)
     return jsonify(sess)
 
-
 @app.get("/api/stories")
 def api_stories():
     """故事列表；顺带带上每个故事开过几个对话。"""
@@ -415,7 +395,6 @@ def api_stories():
         item["runs"] = counts.get(item["id"], 0)
     return jsonify(items)
 
-
 @app.get("/api/stories/<story_sid>")
 def api_get_story(story_sid):
     """故事的完整设定，用来在设定弹窗里单独编辑它（不牵扯任何一局对话）。"""
@@ -424,14 +403,12 @@ def api_get_story(story_sid):
         return jsonify({"error": "故事不存在"}), 404
     return jsonify(story)
 
-
 @app.post("/api/stories")
 def api_create_story():
     data = request.get_json(silent=True) or {}
     story = new_story(_str(data, "title") or DEFAULT_TITLE)
     save_story(story)
     return jsonify(story), 201
-
 
 @app.put("/api/stories/<story_sid>")
 def api_update_story(story_sid):
@@ -443,11 +420,9 @@ def api_update_story(story_sid):
     save_story(story)
     return jsonify(story)
 
-
 @app.delete("/api/stories/<story_sid>")
 def api_delete_story(story_sid):
     return jsonify({"ok": delete_story(story_sid)})
-
 
 # ============================== 备份 ==============================
 def session_to_markdown(sess):
@@ -529,7 +504,6 @@ def session_to_markdown(sess):
         lines += ["## 前情提要", "", sess["summary"].strip(), ""]
     return "\n".join(lines).rstrip() + "\n"
 
-
 @app.get("/api/sessions/<sid>/export.md")
 def api_export_markdown(sid):
     sess = load_session(sid)
@@ -542,12 +516,10 @@ def api_export_markdown(sid):
     resp.headers["Content-Disposition"] = "attachment; filename*=UTF-8''%s.md" % url_quote(name)
     return resp
 
-
 @app.get("/api/backups")
 def api_backups():
     return jsonify({"items": backup.listing(), "conf": backup_conf(),
                     "dir": backup.BACKUP_DIR})
-
 
 @app.post("/api/backups")
 def api_backup_create():
@@ -557,14 +529,12 @@ def api_backup_create():
         return jsonify({"error": "备份失败：%s" % exc}), 500
     return jsonify({"item": result, "items": backup.listing()})
 
-
 @app.get("/api/backups/<name>")
 def api_backup_download(name):
     full = backup.path_of(name)
     if not full:
         return jsonify({"error": "备份不存在"}), 404
     return send_file(full, as_attachment=True, download_name=name)
-
 
 @app.post("/api/backups/<name>/restore")
 def api_backup_restore(name):
@@ -575,26 +545,22 @@ def api_backup_restore(name):
     load_settings()
     return jsonify({"result": result, "items": backup.listing()})
 
-
 @app.delete("/api/backups/<name>")
 def api_backup_delete(name):
     if not backup.delete(name):
         return jsonify({"error": "备份不存在"}), 404
     return jsonify({"items": backup.listing()})
 
-
 @app.put("/api/backup-config")
 def api_backup_config():
     data = request.get_json(silent=True) or {}
     return jsonify(save_backup_conf(data))
-
 
 @app.get("/api/sessions/<sid>/snapshots")
 def api_snapshots(sid):
     if not load_session(sid):
         return jsonify({"error": "会话不存在"}), 404
     return jsonify(list_snapshots(sid))
-
 
 @app.post("/api/sessions/<sid>/snapshots/<name>/restore")
 def api_restore_snapshot(sid, name):
@@ -613,7 +579,6 @@ def api_restore_snapshot(sid, name):
     save_session(saved)
     return jsonify(load_session(sid))
 
-
 @app.get("/api/sessions/<sid>")
 def api_get_session(sid):
     sess = load_session(sid)
@@ -629,7 +594,6 @@ def api_get_session(sid):
     sess["busy"] = is_busy(sid)
     return jsonify(sess)
 
-
 @app.get("/covers/thumbs/<name>")
 def api_cover_thumb(name):
     """列表里那张 48px 小图。不存在就 404，前端回退到原图。"""
@@ -637,14 +601,12 @@ def api_cover_thumb(name):
         abort(404)
     return send_from_directory(cover_store.THUMBS_DIR, name, max_age=86400)
 
-
 @app.get("/covers/<name>")
 def api_cover_file(name):
     """封面图本体。只读、只认 covers 目录里的文件名。"""
     if not cover_store.exists(name):
         return jsonify({"error": "没有这张图"}), 404
     return send_from_directory(cover_store.COVERS_DIR, name, max_age=86400)
-
 
 @app.post("/api/stories/<story_sid>/cover")
 def api_story_cover_upload(story_sid):
@@ -668,7 +630,6 @@ def api_story_cover_upload(story_sid):
                     "thumb": cover_store.url_thumb(name),
                     "cover_prompt": story.get("cover_prompt") or ""})
 
-
 @app.post("/api/stories/<story_sid>/cover/gen")
 def api_story_cover_gen(story_sid):
     """用 ComfyUI 生一张封面。提示词要么用传进来的，要么用故事自己的设定拼。"""
@@ -690,7 +651,6 @@ def api_story_cover_gen(story_sid):
         pass
     return jsonify({"job": job, "cover_prompt": prompt}), 202
 
-
 @app.get("/api/stories/<story_sid>/cover/job")
 def api_story_cover_job(story_sid):
     """查一次生图进度。前端每两秒问一下。"""
@@ -703,7 +663,6 @@ def api_story_cover_job(story_sid):
         "elapsed": round(time.time() - float(job.get("started") or time.time()), 1),
     })
 
-
 @app.get("/api/stories/<story_sid>/cover/list")
 def api_story_cover_list(story_sid):
     """封面管理列表：当前这张在最前，后面是历史。"""
@@ -711,7 +670,6 @@ def api_story_cover_list(story_sid):
     if not story:
         return jsonify({"error": "故事不存在"}), 404
     return jsonify({"items": cover_list(story)})
-
 
 @app.post("/api/stories/<story_sid>/cover/pick")
 def api_story_cover_pick(story_sid):
@@ -733,7 +691,6 @@ def api_story_cover_pick(story_sid):
                     "items": cover_list(story),
                     "left": len(story.get("cover_history") or [])})
 
-
 @app.post("/api/stories/<story_sid>/cover/drop")
 def api_story_cover_drop(story_sid):
     """彻底删掉一张（连图带记录）。"""
@@ -751,7 +708,6 @@ def api_story_cover_drop(story_sid):
                     "items": cover_list(story),
                     "left": len(story.get("cover_history") or [])})
 
-
 @app.post("/api/stories/<story_sid>/cover/undo")
 def api_story_cover_undo(story_sid):
     story = load_story(story_sid)
@@ -763,7 +719,6 @@ def api_story_cover_undo(story_sid):
     return jsonify({"cover": name, "url": cover_store.url_of(name),
                     "cover_prompt": story.get("cover_prompt") or "",
                     "left": len(story.get("cover_history") or [])})
-
 
 @app.post("/api/sessions/import")
 def api_import_session():
@@ -816,7 +771,6 @@ def api_import_session():
     save_session(sess)
     return jsonify({"id": sess["id"], "title": sess["title"],
                     "messages": len(clean), "characters": len(sess.get("characters") or [])})
-
 
 @app.put("/api/sessions/<sid>")
 def api_update_session(sid):
@@ -907,7 +861,6 @@ def api_update_session(sid):
         sess["context"] = context_info(sess)
         return jsonify(sess)
 
-
 def _state_snapshot(sess):
     """当下这一眼看得到的现场：场景格 + 每个人的状态一句。
 
@@ -921,7 +874,6 @@ def _state_snapshot(sess):
     st = sess.get("status")
     return {"status": dict(st) if isinstance(st, dict) else {}, "states": states}
 
-
 def _restore_snapshot(sess, snap):
     """把现场恢复成快照里的样子；没快照就清空，宁可空着也不能留错的。"""
     snap = snap if isinstance(snap, dict) else {}
@@ -931,7 +883,6 @@ def _restore_snapshot(sess, snap):
     for c in sess.get("characters") or []:
         if isinstance(c, dict):
             c["state"] = states.get(c.get("name") or "", "")
-
 
 def _rewind_to(sess, index):
     """把会话退回到 index 之前，轮次和账本一起退。
@@ -983,7 +934,6 @@ def _rewind_to(sess, index):
     _restore_snapshot(sess, snap)
     return sess
 
-
 @app.post("/api/sessions/<sid>/lore/promote")
 def api_promote_lore(sid):
     """把这一局攒的词条存进故事模板。
@@ -1029,7 +979,6 @@ def api_promote_lore(sid):
             save_story(story)
         return jsonify({"ok": True, "added": added, "story_lore": cards})
 
-
 @app.post("/api/sessions/<sid>/rewind")
 def api_rewind(sid):
     if is_busy(sid):
@@ -1053,7 +1002,6 @@ def api_rewind(sid):
         sess["context_chars"] = context_chars(sess)
         sess["context"] = context_info(sess)
         return jsonify(sess)
-
 
 @app.post("/api/sessions/<sid>/branch")
 def api_branch(sid):
@@ -1086,7 +1034,6 @@ def api_branch(sid):
     cloned["context_chars"] = context_chars(cloned)
     cloned["context"] = context_info(cloned)
     return jsonify(cloned)
-
 
 @app.post("/api/sessions/<sid>/commit_partial")
 def api_commit_partial(sid):
@@ -1133,7 +1080,6 @@ def api_commit_partial(sid):
         out["context"] = context_info(sess)
         return jsonify(out)
 
-
 @app.put("/api/sessions/<sid>/message")
 def api_edit_message(sid):
     if is_busy(sid):
@@ -1165,7 +1111,6 @@ def api_edit_message(sid):
         sess["context"] = context_info(sess)
         return jsonify(sess)
 
-
 @app.delete("/api/sessions/<sid>")
 def api_delete_session(sid):
     if is_busy(sid):
@@ -1183,7 +1128,6 @@ def api_delete_session(sid):
     shutil.rmtree(os.path.join(SNAP_DIR, sid), ignore_errors=True)
     return jsonify({"ok": True})
 
-
 @app.post("/api/sessions/<sid>/clear")
 def api_clear_session(sid):
     if is_busy(sid):
@@ -1199,7 +1143,6 @@ def api_clear_session(sid):
         save_session(sess)
     return jsonify({"ok": True, "context_chars": context_chars(sess),
                     "context": context_info(sess)})
-
 
 @app.post("/api/sessions/<sid>/character-pick")
 def api_character_pick(sid):
@@ -1226,7 +1169,6 @@ def api_character_pick(sid):
     return jsonify({"ok": True, "characters": chars,
                     "dropped": drop or "", "added": name if drop else ""})
 
-
 @app.post("/api/sessions/<sid>/compress")
 def api_compress_session(sid):
     if not try_acquire_busy(sid):
@@ -1243,7 +1185,6 @@ def api_compress_session(sid):
         "context_chars": context_chars(sess) if sess else 0,
         "context": context_info(sess),
     })
-
 
 @app.post("/api/enhance")
 def api_enhance():
@@ -1374,7 +1315,6 @@ def api_enhance():
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
-
 @app.post("/api/sessions/<sid>/opening")
 def api_opening(sid):
     if not try_acquire_busy(sid):
@@ -1444,7 +1384,6 @@ def api_opening(sid):
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
-
 def _stream_model(messages, speaker, temperature, max_attempts, use_rp):
     """把 completion_events 包成 SSE 事件流；成功时返回 (正文, 尝试次数)。
 
@@ -1469,7 +1408,6 @@ def _stream_model(messages, speaker, temperature, max_attempts, use_rp):
     yield sse({"type": "error", "message": "生成失败，请稍后手动重试。"})
     return None, 0
 
-
 def _join_text(prev, extra):
     """续写的拼接：模型常把上一句的末尾重复一遍再往下写，能对上就切掉。"""
     if not extra:
@@ -1482,7 +1420,6 @@ def _join_text(prev, extra):
             extra = extra[n:]
             break
     return prev + extra
-
 
 def _commit_turn(s2, turn, use_rp, resume=False):
     """一轮生成之后要落盘的所有副作用：消息、状态、账本、角色、轮次、存档。
@@ -1566,7 +1503,6 @@ def _commit_turn(s2, turn, use_rp, resume=False):
         refresh_states(s2, (turn.get("narrator") or "") + chr(10) + (turn.get("line") or ""))
     save_session(s2)
     return msg
-
 
 @app.post("/api/chat")
 def api_chat():

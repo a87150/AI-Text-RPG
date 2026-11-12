@@ -40,7 +40,6 @@ def context_chars(sess):
         total += len(m.get("content") or "") + len(m.get("narrator") or "")
     return total
 
-
 def context_info(sess):
     """上下文用量与压缩统计，供前端展示。"""
     sess = sess or {}
@@ -161,7 +160,6 @@ def compress_session(sid, force=False, max_attempts=2):
 
 _compress_fail_at = {}       # sid -> 上次失败时间
 _COMPRESS_RETRY_SECS = 300  # 失败了先歇五分钟，别每轮都白调一次模型
-
 
 def background_compress(sid):
     last = _compress_fail_at.get(sid)

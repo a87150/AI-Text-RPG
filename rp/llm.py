@@ -16,11 +16,9 @@ _NO_REASONING = set()
 # 不认 stream_options（拿不到用量）的提供方，同样只记内存
 _NO_STREAM_USAGE = set()
 
-
 def reasoning_supported():
     """当前提供方是否还应当发思考档位。供设置界面提示用。"""
     return current_target()[0] not in _NO_REASONING
-
 
 # ============================== 模型调用 ==============================
 def model_call(messages, temperature=0.8, stream=False, extra=None, reasoning=None):
@@ -77,7 +75,6 @@ def model_call(messages, temperature=0.8, stream=False, extra=None, reasoning=No
             resp = _post(payload)
     return resp
 
-
 def model_text(messages, temperature=0.8, reasoning=None):
     resp = model_call(messages, temperature=temperature, stream=False, reasoning=reasoning)
     if resp.status_code != 200:
@@ -88,7 +85,6 @@ def model_text(messages, temperature=0.8, reasoning=None):
     content = (msg.get("content") or "").strip() \
         or (msg.get("reasoning_content") or msg.get("reasoning") or "").strip()
     return strip_thinking(content)
-
 
 def iter_sse_parts(resp, usage=None):
     """逐块解析 OpenAI 兼容流，产出 (content, reasoning)。
@@ -120,7 +116,6 @@ def iter_sse_parts(resp, usage=None):
         reasoning = delta.get("reasoning_content") or delta.get("reasoning") or ""
         if content or reasoning:
             yield content, reasoning
-
 
 def completion_events(messages, base_temp, max_attempts, min_chars=0,
                       extra=None, validate=None, with_reasoning=False):
@@ -195,13 +190,11 @@ def completion_events(messages, base_temp, max_attempts, min_chars=0,
            "message": "已自动重试 %d 次仍失败：%s" % (attempts_used, last_error),
            "raw": last_raw[:800]}
 
-
 def sse(obj):
     return "data: " + json.dumps(obj, ensure_ascii=False) + "\n\n"
 
 
 THINK_RE = re.compile(r"<think(?:ing)?>.*?</think(?:ing)?>", re.S | re.I)
-
 
 def strip_thinking(text):
     if not text:
@@ -209,7 +202,6 @@ def strip_thinking(text):
     t = THINK_RE.sub("", text).strip()
     # 推理字段常在正文前带一段分隔线，去掉
     return re.sub(r"^(?:[-*_]{3,}[ \t]*\n+)+", "", t).strip()
-
 
 # 模型常把状态写成裸 JSON 而不是带标签，或者标签只写了一半；这些都会漏进正文
 _LEAK_BLOCK = re.compile(r"<StatusBlock>.*?(?:</StatusBlock>|$)", re.S | re.I)
@@ -237,7 +229,6 @@ def loose_status_json(text):
     match = _LEAK_JSON.search(text or "")
     return match.group(0) if match else ""
 
-
 def strip_status_leaks(text):
     """把漏进正文的状态残渣清掉：标签、裸 JSON、围栏、多余分隔行。"""
     body = text or ""
@@ -251,7 +242,6 @@ def strip_status_leaks(text):
     body = _LEAK_LINE.sub("", body)
     body = re.sub(r"\n{3,}", "\n\n", body)
     return body.strip()
-
 
 def extract_json_all(text):
     """一段里可能连着写好几个对象（模型一次加两个人，中间只有换行），全都捞出来。
@@ -278,7 +268,6 @@ def extract_json_all(text):
             out.append(obj)
         i = start + end
     return out
-
 
 def extract_json(text):
     if not text:

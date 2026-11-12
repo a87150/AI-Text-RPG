@@ -33,7 +33,6 @@ import rp.snapshots as rp_snapshots  # noqa: E402
 
 FAILED = []
 
-
 def check(name, ok, detail=""):
     print(("PASS " if ok else "FAIL ") + name + ((" :: " + str(detail)) if detail and not ok else ""))
     if not ok:
@@ -52,7 +51,6 @@ TURN_TEXT = (
 
 TURN_LORE = TURN_TEXT + chr(10) +     '【新词条】{"keys":"旧钟楼","content":"城里的钟楼。"}'
 
-
 def fake_completion_events(messages, base_temp=0.8, max_attempts=3, min_chars=0,
                            extra=None, validate=None, with_reasoning=False, **kw):
     if MODE["kind"] == "final":
@@ -61,14 +59,12 @@ def fake_completion_events(messages, base_temp=0.8, max_attempts=3, min_chars=0,
         return
     yield {"type": "error", "attempts": 1, "message": "离线自检不调用模型", "raw": ""}
 
-
 def fake_model_text(messages, temperature=0.8, **kw):
     """状态补全走的是 model_text 这条路，跟主生成不是同一个函数。
 
     不 patch 它，自检里每次落一回轮次都会真打一次外网。
     """
     return '{"changes":[]}'
-
 
 def main():
     # 路由模块用的是自己命名空间里的名字，patch 在这一层才生效
