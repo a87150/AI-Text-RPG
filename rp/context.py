@@ -22,6 +22,18 @@ def context_chars(sess):
             total += len(c.get("name") or "") + len(c.get("role") or "")
             total += len(c.get("state") or "")
             total += sum(len(h) for h in (c.get("history") or []) if isinstance(h, str))
+    # 世界书、事实账本、状态行也会随消息一起发给模型，
+    # 不计进来的话阈值会偏低，真正的 prompt 可能撞破模型窗。
+    for e in sess.get("lore") or []:
+        if isinstance(e, dict):
+            total += len(e.get("content") or "") + len(e.get("keys") or "")
+    for f in sess.get("facts") or []:
+        if isinstance(f, dict):
+            total += len(f.get("fact") or "")
+    st = sess.get("status")
+    if isinstance(st, dict):
+        for v in st.values():
+            total += len(v) if isinstance(v, str) else 0
     # 已经写进摘要的那些不再计：它们不再发给模型，算进去会让阈值永远撞线
     start = int(sess.get("compressed_upto") or 0)
     for m in (sess.get("messages") or [])[start:]:

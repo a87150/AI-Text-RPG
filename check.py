@@ -1053,7 +1053,7 @@ def main():
         {"role": "user", "content": "我推门进去。"},
         {"role": "assistant", "content": "你来了。", "speaker": "甲", "narrator": "门轴响了一声。"},
     ], status={"location": "灯塔二层", "time": "深夜", "present": ["甲"]},
-        facts=[{"text": "钥匙在抽屉里"}], turn=2))
+        facts=[{"fact": "钥匙在抽屉里"}], turn=2))
 
     _r = client.post("/api/sessions/%s/commit_partial" % _sp["id"],
                      json={"content": "他没抬头，只把灯芯挑亮了一点。", "speaker": "甲"})

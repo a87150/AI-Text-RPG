@@ -270,7 +270,9 @@ def update_from(story, sess):
     story["characters"] = json.loads(json.dumps(sess.get("characters") or []))
     story["lore"] = json.loads(json.dumps(sess.get("lore") or []))
     # 角色表是唯一来源，第一个角色就是「AI 角色」
-    first = story["characters"][0] if story["characters"] else {}
+    # 先过滤非 dict：请求里一个字符串就能把这里炸成 500
+    dicts = [c for c in (story.get("characters") or []) if isinstance(c, dict)]
+    first = dicts[0] if dicts else {}
     story["ai_name"] = first.get("name") or ""
     story["ai_role"] = first.get("role") or ""
     story["title"] = (sess.get("title") or story.get("title") or DEFAULT_TITLE).strip()

@@ -311,6 +311,10 @@ def exists(name):
 
 
 def drop(name):
+    # exists() 已经拦过路径，但下面拼缩略图路径时又用了原始 name；
+    # 入口是直接传用户输入的，这里必须自己再拦一道。
+    if not name or os.path.basename(name) != name:
+        return
     if exists(name):
         try:
             os.unlink(os.path.join(COVERS_DIR, name))

@@ -2,12 +2,13 @@
 """HTTP 路由。"""
 import json
 import os
+import shutil
 import time
 import uuid
 
 import requests
-from flask import (Response, jsonify, render_template, request, send_file,
-                   send_from_directory)
+from flask import (Response, abort, jsonify, render_template, request,
+                   send_file, send_from_directory)
 from urllib.parse import quote as url_quote, urlsplit
 
 from .characters import (
@@ -47,7 +48,7 @@ from .stories import (
     set_cover, undo_cover, cover_prompt_from,
     cover_list, pick_cover, forget_cover,
 )
-from .snapshots import list_snapshots, load_snapshot, snapshot
+from .snapshots import SNAP_DIR, list_snapshots, load_snapshot, snapshot
 from .storage import (
     DEFAULT_TITLE, TEXT_FIELDS, StaleSession, get_session_lock, list_sessions,
     load_session, new_session, release_busy, save_session, session_path,
@@ -519,7 +520,7 @@ def session_to_markdown(sess):
     if facts:
         lines += ["## 事实账本", ""]
         for f in facts:
-            text = f.get("text") if isinstance(f, dict) else str(f)
+            text = f.get("fact") if isinstance(f, dict) else str(f)
             if text:
                 lines.append("- %s" % text)
         lines.append("")
@@ -1031,6 +1032,9 @@ def api_promote_lore(sid):
 
 @app.post("/api/sessions/<sid>/rewind")
 def api_rewind(sid):
+    if is_busy(sid):
+        return jsonify({"error": "这一轮还在生成，等它写完再重写"}), 409
+
     """删掉 index 起的消息，用来重写。ponytail: 前情提要不动，压缩是单向的。"""
     data = request.get_json(silent=True) or {}
     try:
@@ -1053,6 +1057,9 @@ def api_rewind(sid):
 
 @app.post("/api/sessions/<sid>/branch")
 def api_branch(sid):
+    if is_busy(sid):
+        return jsonify({"error": "这一轮还在生成，等它写完再分叉"}), 409
+
     """把会话在 index 处截断后复制成新的一局，原对话不受影响。"""
     data = request.get_json(silent=True) or {}
     try:
@@ -1129,6 +1136,9 @@ def api_commit_partial(sid):
 
 @app.put("/api/sessions/<sid>/message")
 def api_edit_message(sid):
+    if is_busy(sid):
+        return jsonify({"error": "这一轮还在生成，等它写完再改"}), 409
+
     """就地改一条消息的文本。"""
     data = request.get_json(silent=True) or {}
     text = _str(data, "content")
@@ -1158,6 +1168,9 @@ def api_edit_message(sid):
 
 @app.delete("/api/sessions/<sid>")
 def api_delete_session(sid):
+    if is_busy(sid):
+        return jsonify({"error": "这一轮还在生成，等它写完再删"}), 409
+
     path = session_path(sid)
     if path and os.path.isfile(path):
         with get_session_lock(sid):
@@ -1165,11 +1178,17 @@ def api_delete_session(sid):
                 os.remove(path)
             except OSError:
                 pass
+    # 快照跟着会话走，不然这些孤儿目录会一直留在盘上，
+    # 还会进每一个备份包里。
+    shutil.rmtree(os.path.join(SNAP_DIR, sid), ignore_errors=True)
     return jsonify({"ok": True})
 
 
 @app.post("/api/sessions/<sid>/clear")
 def api_clear_session(sid):
+    if is_busy(sid):
+        return jsonify({"error": "这一轮还在生成，等它写完再清空"}), 409
+
     with get_session_lock(sid):
         sess = load_session(sid)
         if not sess:
@@ -1643,7 +1662,7 @@ def api_chat():
             if not turn.get("status") and ("[[" in answer or "【地点" in answer):
                 # 只记长度和指纹：原文是私人剧情，落进日志就是长期可 grep
                 metrics.note("status.parse_fail", sid=sid, mode="rp" if use_rp else "normal",
-                             raw_len=len(answer), raw_tail=answer[-40:].replace(chr(10), " "))
+                             raw_len=len(answer))
             if use_rp and not (turn["lines"] or turn["narrator"]):
                 yield sse({"type": "error",
                            "message": "模型这一轮没写出内容（旁白和角色发言都空），请重试。"})

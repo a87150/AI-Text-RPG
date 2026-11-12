@@ -23,8 +23,11 @@ const PAGE_SIZE = 10;
 function pageSize(box, itemHeight = 66) {
   // 这里要量百分百高度的滚动容器，不是列表自身：列表在调用前已经
   // 被 innerHTML='' 清空，clientHeight 塔成 0 了，永远落回 PAGE_SIZE。
+  // 量到一个有高度的祖先就停。本来一路往上走也行，但隐藏的
+  // #session-block / #story-block 是 display:none，会一直量到整个侧栏，每页条数偏大。
   let host = box ? box.parentElement : null;
-  while (host && !host.clientHeight) host = host.parentElement;
+  while (host && host !== document.body && !host.clientHeight) host = host.parentElement;
+  if (host === document.body) host = null;
   const h = host ? host.clientHeight : 0;
   // 不设下限“最少 4 条”：那会把一屏放不下的条目硬塞进去，滚动条又被隐藏。
   const size = h ? Math.max(3, Math.floor((h - 18) / itemHeight)) : PAGE_SIZE;
@@ -508,7 +511,10 @@ export async function compressSession(btn) {
 export async function refreshCurrentSession() {
   if (!state.session) return null;
   try {
-    const fresh = await api('/api/sessions/' + state.session.id);
+    const sid = state.session.id;
+    const fresh = await api('/api/sessions/' + sid);
+    // 等的这几百毫秒里可能已经切到另一局，旧响应不能把它改回去
+    if (!state.session || state.session.id !== sid) return null;
     state.session = fresh;
     return fresh;
   } catch (e) {

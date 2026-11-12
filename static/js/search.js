@@ -139,7 +139,7 @@ export function openSearch() {
   if (!modal || !input) return;
   modal.classList.remove('hidden');
   input.value = '';
-  say('<div class="hint">输入关键词，扫的是所有会话的全文。</div>');
+  say('输入关键词，扫的是所有会话的全文。');
   input.focus();
 }
 

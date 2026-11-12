@@ -102,6 +102,8 @@ export async function streamSSE(url, body, onEvent, { idleTimeout = 240000, sign
       }
     }
   } catch (e) {
+    // 自己点停止也抛 AbortError，但那不是超时，不能用超时的话去说。
+    if (e && e.name === 'AbortError' && signal && signal.aborted) throw e;
     if (e && (e.name === 'AbortError' || e.name === 'TimeoutError')) {
       throw new ApiError('超过 ' + Math.round(idleTimeout / 1000) + ' 秒没有新进度，已中止');
     }

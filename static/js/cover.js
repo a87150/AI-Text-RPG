@@ -5,6 +5,9 @@ import { $, toast } from './ui.js';
 
 let busy = false;
 
+/* 已发出的轮询回调用它判断自己还算不算数：关窗、切故事、重开一次生成都会把它 +1 */
+let watchToken = 0;
+
 /** 对话里只读：改封面是改设定本身，不能在已开局里改。
  *  判据是表单现在挂在哪个容器里，不是看有没有对话。 */
 function readonlyHere() {
@@ -119,6 +122,9 @@ function afterChange(payload) {
     story.cover = payload.cover || '';
     if (typeof payload.cover_prompt === 'string') story.cover_prompt = payload.cover_prompt;
     if (typeof payload.left === 'number') story.cover_history_count = payload.left;
+    // 列表用的是另存的缩略图名，不同步的话左边小格子一直是旧图
+    if (typeof payload.thumb === 'string') story.thumb = payload.thumb;
+    else if (payload.cover !== undefined) story.thumb = '';
   }
   syncStage(payload.cover || '');
   syncCoverThumb();
@@ -181,7 +187,9 @@ export function closeCover() {
   stopPoll();
   stopTicking();
   closeManage();
+  watchToken++;  // 作废已发出的那次回调
   busy = false;
+  syncUndo();
 }
 
 async function upload(file) {
@@ -263,9 +271,15 @@ let tickTimer = 0;
 /** 轮询进度。跑完就自己收工，把图换上。 */
 function watchJob() {
   const sid = storyId();
+  const token = ++watchToken;
   stopPoll();
   pollTimer = setTimeout(async () => {
-    if (storyId() !== sid) { stopTicking(); stopPoll(); return; }
+    if (storyId() !== sid) {
+      // 切走了：停抽可以，但 busy 必须放掉。否则这个标志会一直卡着，
+      // 上传、生成、撤销都走 if (busy) return，全部静默失效。
+      busy = false;
+      stopTicking(); stopPoll(); syncUndo(); return;
+    }
     let data;
     try {
       data = await api('/api/stories/' + sid + '/cover/job');
@@ -274,6 +288,7 @@ function watchJob() {
       setMsg('查不到进度：' + (e.message || e), 'error');
       return;
     }
+    if (token !== watchToken) return;  // 已经关窗或换了对象，别再接着轮
     const job = data.job;
     if (!job) {
       stopTicking();

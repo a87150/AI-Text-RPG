@@ -1179,6 +1179,11 @@ export function appendRetryHint(lastContent, stopped) {
 export function renderMessages() {
   const box = $('#messages');
   if (!box) return;
+  // 有人正在就地改消息就不重建：整表推倒重来会把那个
+  // textarea 连同没保存的字一起抹掉。
+  if (box.querySelector('.edit-area')) return;
+  // 用户往上翻着看时不抢滚动；只有本来就贴底才跟着底。
+  const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
   box.innerHTML = '';
 
   const s = state.session;
@@ -1225,7 +1230,7 @@ export function renderMessages() {
     if (state.session && state.session.busy) appendBusyHint();
     else appendRetryHint(last.content || '');
   }
-  scrollToBottom(true);
+  if (atBottom || !box.scrollTop) scrollToBottom(true);
 }
 
 /** 刷新打断的是浏览器这头的流，后端照旧在生成，盯着会话等它落盘。 */

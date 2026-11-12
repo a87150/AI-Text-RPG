@@ -741,7 +741,10 @@ export async function enhance() {
 
   busyEnhance = true;
   const btn = $('#btn-enhance');
-  btn.disabled = true;
+  if (btn) btn.disabled = true;
+  // 中间任何一步抛出，都得把这两个标志放掉；否则下次 openSettings
+  // 会被 busyEnhance 拦住，表现就是「设定点了没反应」。
+  try {
 
   const all = buildSteps();
   // 上次失败的只补那几项，已经成功的不重跑
@@ -793,8 +796,10 @@ export async function enhance() {
       + failed.map((f) => f.label).join('、') + '。再点一次按钮只补这几项。', 'error');
   }
 
-  busyEnhance = false;
-  btn.disabled = false;
+  } finally {
+    busyEnhance = false;
+    if (btn) btn.disabled = false;
+  }
 }
 
 /** 保存设定，并用同一份设定新开一局。 */
