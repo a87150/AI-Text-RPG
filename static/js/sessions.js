@@ -392,6 +392,12 @@ export function switchSideView(view) {
   const pane = $('#story-pane');
   if (pane) pane.classList.toggle('hidden', !storyView);
   document.body.classList.toggle('story-view', storyView);
+  // 设定按钮只在对话视图出现。切视图不经 syncAll，这里自己算。
+  const setBtn = $('#btn-settings');
+  if (setBtn) {
+    setBtn.classList.toggle('hidden', storyView);
+    setBtn.disabled = storyView || !state.session || state.busy;
+  }
   if (storyView) {
     loadStories();
     // 表单可能还挂在弹窗里（上一轮在对话视图打开过设定），切回来要搬进面板

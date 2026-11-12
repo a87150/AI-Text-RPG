@@ -2104,6 +2104,12 @@ def main():
     check("对话有设定入口", 'id="btn-settings"' in _html)
     _mj = (pathlib.Path(__file__).parent / "static" / "js" / "main.js").read_text(encoding="utf-8")
     check("设定按钮已绑定", "btn-settings" in _mj and "openSettings()" in _mj)
+    # 设定按钮只在对话视图出现，故事页不该有入口
+    _uj = (pathlib.Path(__file__).parent / "static" / "js" / "ui.js").read_text(encoding="utf-8")
+    _sj = (pathlib.Path(__file__).parent / "static" / "js" / "sessions.js").read_text(encoding="utf-8")
+    check("设定按钮跟着视图隐藏",
+          "settingsBtn.classList.toggle('hidden', inStories)" in _uj)
+    check("切视图时也算一次", "setBtn.classList.toggle('hidden', storyView)" in _sj)
     check("导入导出是弹窗", 'id="io-modal"' in _html and 'id="io-menu"' not in _html)
     check("弹窗里两个操作都在",
           'id="btn-export"' in _html and 'id="btn-import-session"' in _html)

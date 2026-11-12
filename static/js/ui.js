@@ -601,8 +601,12 @@ export function syncHeader() {
     el.classList.toggle('hidden', !on);
   }
   // 对话页面的设定入口：有会话才能点，没会话时去侧栏选故事
-  const settingsBtn = $('#btn-settings');
-  if (settingsBtn) settingsBtn.disabled = !state.session || state.busy;
+  // 设定按钮只属于对话：故事页的设定就在右侧常驻，不需要入口
+  if (settingsBtn) {
+    const inStories = state.sideView === 'stories';
+    settingsBtn.classList.toggle('hidden', inStories);
+    settingsBtn.disabled = inStories || !state.session || state.busy;
+  }
   for (const id of ['btn-new-story', 'btn-new-session']) {
     const el = $('#' + id);
     if (el) el.disabled = state.busy;
