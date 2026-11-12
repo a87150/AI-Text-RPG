@@ -32,7 +32,6 @@ function urlOf(name) {
 export function syncCoverThumb() {
   const story = currentStory();
   const name = (story && story.cover) || '';
-  const small = (story && story.thumb) || '';
   const img = $('#cover-thumb');
   const empty = $('#cover-empty');
   const slot = $('#btn-cover');
@@ -44,7 +43,9 @@ export function syncCoverThumb() {
   }
   if (img) {
     if (name) {
-      img.src = small || urlOf(name);
+      // 这里是 192x264 的预览位，小图（160px）撑不住，会糊。
+      // 160px 只给列表里那个 48px 格子用。
+      img.src = urlOf(name);
       img.classList.remove('hidden');
     } else {
       img.removeAttribute('src');
