@@ -20,17 +20,24 @@ export async function loadSessions() {
 const PAGE_SIZE = 10;
 
 /** 一页装几条要看列表有多高，固定条数会在还有大片空白时就翻页。 */
-function pageSize(box, itemHeight = 66) {
+function pageSize(box, itemHeight = 80) {
   // 这里要量百分百高度的滚动容器，不是列表自身：列表在调用前已经
-  // 被 innerHTML='' 清空，clientHeight 塔成 0 了，永远落回 PAGE_SIZE。
+  // 被 innerHTML='' 清空，clientHeight 塌成 0 了，永远落回 PAGE_SIZE。
   // 量到一个有高度的祖先就停。本来一路往上走也行，但隐藏的
   // #session-block / #story-block 是 display:none，会一直量到整个侧栏，每页条数偏大。
   let host = box ? box.parentElement : null;
   while (host && host !== document.body && !host.clientHeight) host = host.parentElement;
   if (host === document.body) host = null;
   const h = host ? host.clientHeight : 0;
-  // 不设下限“最少 4 条”：那会把一屏放不下的条目硬塞进去，滚动条又被隐藏。
-  const size = h ? Math.max(3, Math.floor((h - 18) / itemHeight)) : PAGE_SIZE;
+  // 父容器里除了列表还有「新建」按钮和翻页条，能放条目的只有中间那一截。
+  // 翻页条此刻通常还是隐藏的（量出来 0），先按它显出来的高度扣掉，
+  // 否则正好卡在临界值时，翻页条一出现就又溢出、继续冒滚动条。
+  let used = 0;
+  if (host) for (const el of host.children) if (el !== box) used += el.offsetHeight || 0;
+  const avail = h - used - 44;
+  // 一条按 80px 算（.session-item 高 76 加 4px 间距），末尾再留 8px，
+  // 免得刚好填满时因为一像素误差冒出滚动条。
+  const size = avail > 0 ? Math.max(3, Math.floor((avail - 8) / itemHeight)) : PAGE_SIZE;
   state.pageSize = size;
   return size;
 }

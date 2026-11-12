@@ -2188,6 +2188,10 @@ def main():
     check("底部输入框也跟着长高", "autoGrow(input);" in _uj)
     check("编辑时这条消息占满宽度", ".msg.editing" in _cs)
     check("编辑结束撤掉占满", "classList.remove" in _mj)
+    _sj = (pathlib.Path(__file__).parent / "static" / "js" / "sessions.js").read_text(encoding="utf-8")
+    # 条目实际 76px 高加 4px 间距，按 66 算会多塞几条：溢出出了滚动条却还没到翻页
+    check("每页条数按真实条目高度算", "itemHeight = 80" in _sj)
+    check("算页数时扣掉标题和翻页条", "for (const el of host.children)" in _sj)
     check("静态文件不缓存", rp_config.app.config["SEND_FILE_MAX_AGE_DEFAULT"] == 0)
     # 查进度失败、任务丢失这两条路不放锁的话，封面功能会永久静默失效
     _cv = (pathlib.Path(__file__).parent / "static" / "js" / "cover.js").read_text(encoding="utf-8")
