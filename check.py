@@ -2188,6 +2188,14 @@ def main():
     check("底部输入框也跟着长高", "autoGrow(input);" in _uj)
     check("编辑时这条消息占满宽度", ".msg.editing" in _cs)
     check("编辑结束撤掉占满", "classList.remove" in _mj)
+    # AI 消息宽度是内容撑的，78% 只是上限；要一样宽只能实测，不能按百分比设
+    check("编辑框宽度照抄 AI 回复的 min(80%, 760px)", "min(80%, 760px)" in _cs)
+    check("编辑态不再被 .msg 的 78% 放开", "max-width: 100%" not in _cs.split(".msg.editing")[1].split("}")[0])
+    # 之前整行替换把 padding 和圆角一起删了，输入框变直角
+    _composer = _cs.split(".composer textarea")[1].split("}")[0]
+    check("底部输入框有圆角", "border-radius: var(--radius)" in _composer)
+    check("底部输入框有内边距", "padding: 12px 14px" in _composer)
+    check("停止按钮圆角和其他控件一致", "height: 76px; border-radius: var(--radius)" in _cs)
     _sj = (pathlib.Path(__file__).parent / "static" / "js" / "sessions.js").read_text(encoding="utf-8")
     # 条目实际 76px 高加 4px 间距，按 66 算会多塞几条：溢出出了滚动条却还没到翻页
     check("每页条数按真实条目高度算", "itemHeight = 80" in _sj)
