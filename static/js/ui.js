@@ -600,6 +600,9 @@ export function syncHeader() {
     // 没选对话时按钮留着一个灰壳只会显得脏，直接收起来
     el.classList.toggle('hidden', !on);
   }
+  // 对话页面的设定入口：有会话才能点，没会话时去侧栏选故事
+  const settingsBtn = $('#btn-settings');
+  if (settingsBtn) settingsBtn.disabled = !state.session || state.busy;
   for (const id of ['btn-new-story', 'btn-new-session']) {
     const el = $('#' + id);
     if (el) el.disabled = state.busy;

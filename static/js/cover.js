@@ -5,8 +5,19 @@ import { $, toast } from './ui.js';
 
 let busy = false;
 
+/** 对话里只读：改封面是改设定本身，不能在已开局里改。
+ *  判据是表单现在挂在哪个容器里，不是看有没有对话。 */
+function readonlyHere() {
+  const pane = $('#story-pane');
+  const form = $('#settings-form');
+  if (!pane || !form) return false;
+  return !pane.contains(form);
+}
+
 function storyId() {
-  // 对话里没选中任何故事，封面属于这局用的那份设定
+  // 故事页看的就是左边选中的那份，不能被对话的 story_id 盖掉。
+  // 之前没分这个，开过对话后切故事，封面一直停在第一个上。
+  if (!readonlyHere() && state.selectedStory) return state.selectedStory;
   if (state.session && state.session.story_id) return state.session.story_id;
   if (state.session && state.session.title) {
     const hit = (state.stories || []).find((x) => x.title === state.session.title);
@@ -19,14 +30,6 @@ function currentStory() {
   return (state.stories || []).find((s) => s.id === storyId()) || null;
 }
 
-/** 对话里只读：改封面是改设定本身，不能在已开局里改。
- *  判据是表单现在挂在哪个容器里，不是看有没有对话。 */
-function readonlyHere() {
-  const pane = $('#story-pane');
-  const form = $('#settings-form');
-  if (!pane || !form) return false;
-  return !pane.contains(form);
-}
 
 function urlOf(name) {
   return name ? '/covers/' + encodeURIComponent(name) : '';

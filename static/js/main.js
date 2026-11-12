@@ -662,6 +662,8 @@ function bindUI() {
   $('#btn-import-session').onclick = () => $('#import-file').click();
   $('#import-file').onchange = (e) => { closeIo(); importSessionFile(e); };
   $('#btn-send').onclick = sendFromInput;
+  const _setBtn = $('#btn-settings');
+  if (_setBtn) _setBtn.onclick = () => openSettings();
   $('#btn-clear').onclick = clearSession;
   $('#btn-export').onclick = () => {
     closeIo();

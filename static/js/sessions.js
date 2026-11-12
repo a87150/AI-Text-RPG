@@ -21,8 +21,13 @@ const PAGE_SIZE = 10;
 
 /** 一页装几条要看列表有多高，固定条数会在还有大片空白时就翻页。 */
 function pageSize(box, itemHeight = 66) {
-  const h = box ? box.clientHeight : 0;
-  const size = h ? Math.max(4, Math.floor(h / itemHeight)) : PAGE_SIZE;
+  // 这里要量百分百高度的滚动容器，不是列表自身：列表在调用前已经
+  // 被 innerHTML='' 清空，clientHeight 塔成 0 了，永远落回 PAGE_SIZE。
+  let host = box ? box.parentElement : null;
+  while (host && !host.clientHeight) host = host.parentElement;
+  const h = host ? host.clientHeight : 0;
+  // 不设下限“最少 4 条”：那会把一屏放不下的条目硬塞进去，滚动条又被隐藏。
+  const size = h ? Math.max(3, Math.floor((h - 18) / itemHeight)) : PAGE_SIZE;
   state.pageSize = size;
   return size;
 }

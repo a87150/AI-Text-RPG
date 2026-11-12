@@ -2094,13 +2094,16 @@ def main():
 
     # 顶栏按钮图标 + 文字；导入导出走中间弹窗
     _tb = _html[_html.index('class="actions"'):_html.index('</header>')]
-    for _bid in ("btn-search", "btn-context", "btn-compress",
+    for _bid in ("btn-search", "btn-context", "btn-settings", "btn-compress",
                  "btn-clear", "btn-io", "btn-theme"):
         _seg = _tb[_tb.index('id="%s"' % _bid):]
         _seg = _seg[:_seg.index("</button>")]
         check(_bid + " 带文字", "<i>" in _seg and len(_seg.split("</i>")[-1].strip()) > 0,
               _seg)
-    check("顶栏已不再有独立设定按钮", 'id="btn-settings"' not in _html)
+    # 对话页面的设定入口：按钮在，且挂了点击
+    check("对话有设定入口", 'id="btn-settings"' in _html)
+    _mj = (pathlib.Path(__file__).parent / "static" / "js" / "main.js").read_text(encoding="utf-8")
+    check("设定按钮已绑定", "btn-settings" in _mj and "openSettings()" in _mj)
     check("导入导出是弹窗", 'id="io-modal"' in _html and 'id="io-menu"' not in _html)
     check("弹窗里两个操作都在",
           'id="btn-export"' in _html and 'id="btn-import-session"' in _html)

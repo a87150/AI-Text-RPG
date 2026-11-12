@@ -1248,12 +1248,21 @@ body.story-view #btn-io { display: none; }
 }
 
 /* 模式段跟在标题小字下面，比对话里那个紧凑 */
-.mode-seg { margin-top: 8px; }
+/* 模式：小字下面一行，左边标题右边两个按钮 */
+.mode-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.mode-label { flex: none; font-size: .75rem; color: var(--text-mute); }
+.mode-seg { margin-top: 0; }
 .mode-seg button { padding: 3px 10px; font-size: .75rem; }
 .mode-seg button:disabled { opacity: .45; cursor: default; }
+/* 故事名缩窄，跟在模式下面，不再占一整行 */
+.field.story-name { margin-top: 10px; max-width: 260px; }
+.field.story-name input { padding: 5px 9px; font-size: .8125rem; }
 
 /* 两段式确认的那一步：变红、变宽，一眼看出它在等确认 */
 .cover-actions button.armed {
   background: var(--danger); border-color: var(--danger); color: #fff;
   padding-left: 16px; padding-right: 16px;
 }
+
+/* 两个列表都在侧栏里滚，不把整个侧栏撑开；分页靠 pageSize 读的就是这里的高度 */
+#session-list, #story-list { overflow-y: auto; min-height: 0; }
