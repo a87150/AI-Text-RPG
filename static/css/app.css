@@ -977,6 +977,17 @@ body.story-view #btn-search { display: none; }
 
 @media (max-width: 820px) {
   .nav-toggle { display: inline-flex; }
+  /* 顶部这一排挤不下：不换行时每个按钮被压到几十像素，文字逐字竖排，
+     整条工具栏能撑到 800 多像素高，直接把消息区挤没。拆成两行，
+     按钮组自己占一行、横向滚动，高度就锁在几十像素。 */
+  .topbar { flex-wrap: wrap; padding: 10px 12px; gap: 8px; align-items: flex-start; }
+  .title-wrap { order: 2; flex: 1 1 0; min-width: 0; }
+  .actions {
+    order: 3; flex: 0 0 100%; flex-wrap: nowrap; overflow-x: auto;
+    padding-bottom: 2px; scrollbar-width: none;
+  }
+  .actions::-webkit-scrollbar { display: none; }
+  .actions button, .model-row, .model-row select { flex: 0 0 auto; white-space: nowrap; }
   /* 侧栏变抽屉：手机上也要能管故事和对话 */
   .sidebar {
     display: flex; position: fixed; inset: 0 auto 0 0; z-index: 60;

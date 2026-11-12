@@ -2196,6 +2196,9 @@ def main():
     check("底部输入框有圆角", "border-radius: var(--radius)" in _composer)
     check("底部输入框有内边距", "padding: 12px 14px" in _composer)
     check("停止按钮圆角和其他控件一致", "height: 76px; border-radius: var(--radius)" in _cs)
+    # 手机上 toolbar 不换行会把按钮压成竖排，整条撑到 800 多像素高
+    check("手机顶部栏拆两行", ".topbar { flex-wrap: wrap;" in _cs)
+    check("手机按钮组横向滚动不竖排", "overflow-x: auto" in _cs and "white-space: nowrap" in _cs)
     _sj = (pathlib.Path(__file__).parent / "static" / "js" / "sessions.js").read_text(encoding="utf-8")
     # 条目实际 76px 高加 4px 间距，按 66 算会多塞几条：溢出出了滚动条却还没到翻页
     check("每页条数按真实条目高度算", "itemHeight = 80" in _sj)
