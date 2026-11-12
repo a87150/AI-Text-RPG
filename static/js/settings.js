@@ -192,6 +192,12 @@ export async function openSettings(opts = {}) {
 
   const heading = $('#settings-title');
   if (heading) heading.textContent = editingStory ? '故事设定' : '对话设定';
+  // 模式属于已开局：对话里改会和正在跑的那一局打架，只在故事里改
+  const modeSeg = $('#f-mode');
+  if (modeSeg) {
+    for (const b of modeSeg.querySelectorAll('button')) b.disabled = !editingStory;
+    modeSeg.title = editingStory ? '' : '模式在开局时定下，要改去「故事」里';
+  }
   const regen = $('#btn-regen-opening');
   if (regen) regen.classList.toggle('hidden', !!editingStory);
   // 故事设定常驻右侧；对话设定才用弹窗

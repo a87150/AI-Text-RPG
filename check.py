@@ -2094,12 +2094,13 @@ def main():
 
     # 顶栏按钮图标 + 文字；导入导出走中间弹窗
     _tb = _html[_html.index('class="actions"'):_html.index('</header>')]
-    for _bid in ("btn-search", "btn-context", "btn-settings", "btn-compress",
+    for _bid in ("btn-search", "btn-context", "btn-compress",
                  "btn-clear", "btn-io", "btn-theme"):
         _seg = _tb[_tb.index('id="%s"' % _bid):]
         _seg = _seg[:_seg.index("</button>")]
         check(_bid + " 带文字", "<i>" in _seg and len(_seg.split("</i>")[-1].strip()) > 0,
               _seg)
+    check("顶栏已不再有独立设定按钮", 'id="btn-settings"' not in _html)
     check("导入导出是弹窗", 'id="io-modal"' in _html and 'id="io-menu"' not in _html)
     check("弹窗里两个操作都在",
           'id="btn-export"' in _html and 'id="btn-import-session"' in _html)

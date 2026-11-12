@@ -600,13 +600,6 @@ export function syncHeader() {
     // 没选对话时按钮留着一个灰壳只会显得脏，直接收起来
     el.classList.toggle('hidden', !on);
   }
-  // 「设定」不跟着藏：它没会话也有话说（提示先选一个）。
-  // 之前跟着一起 hidden，用户入口就没了，只能去控制台找
-  const settingsBtn = $('#btn-settings');
-  if (settingsBtn) {
-    settingsBtn.disabled = false;
-    settingsBtn.classList.remove('hidden');
-  }
   for (const id of ['btn-new-story', 'btn-new-session']) {
     const el = $('#' + id);
     if (el) el.disabled = state.busy;

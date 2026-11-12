@@ -19,9 +19,13 @@ function currentStory() {
   return (state.stories || []).find((s) => s.id === storyId()) || null;
 }
 
-/** 对话中只读：改封面是改设定本身，不能在已开局里改 */
+/** 对话里只读：改封面是改设定本身，不能在已开局里改。
+ *  判据是表单现在挂在哪个容器里，不是看有没有对话。 */
 function readonlyHere() {
-  return !!(state.session && state.session.id);
+  const pane = $('#story-pane');
+  const form = $('#settings-form');
+  if (!pane || !form) return false;
+  return !pane.contains(form);
 }
 
 function urlOf(name) {
@@ -36,10 +40,8 @@ export function syncCoverThumb() {
   const empty = $('#cover-empty');
   const slot = $('#btn-cover');
   if (slot) {
-    slot.disabled = !story || readonlyHere();
-    slot.title = readonlyHere()
-      ? '封面属于设定，去「故事」里改'
-      : '封面图：上传或生成';
+    slot.disabled = !story;
+    slot.title = readonlyHere() ? '看大图' : '封面图：上传或生成';
   }
   if (img) {
     if (name) {
@@ -101,22 +103,37 @@ function afterChange(payload) {
   document.dispatchEvent(new CustomEvent('rp:stories-changed'));
 }
 
+
+/** 对话里只看不改：按钮和提示词全隐掉，只留大图和一句说明。 */
+function applyReadonly() {
+  const ro = readonlyHere();
+  for (const id of ['#cover-pick', '#cover-gen', '#cover-undo', '#cover-manage']) {
+    const b = $(id);
+    if (b) b.classList.toggle('hidden', ro);
+  }
+  const field = $('#cover-prompt') ? $('#cover-prompt').closest('.field') : null;
+  if (field) field.classList.toggle('hidden', ro);
+  const panel = $('#cover-manage-panel');
+  if (panel && ro) panel.classList.add('hidden');
+  const h3 = $('#cover-modal') ? $('#cover-modal').querySelector('h3') : null;
+  if (h3) h3.textContent = ro ? '封面图（只读）' : '封面图';
+  if (ro) setMsg('封面属于设定本身，要换去「故事」里');
+}
+
 export function openCover() {
   const story = currentStory();
   if (!story) {
     toast('先选一份故事设定', 'error');
     return;
   }
-  if (readonlyHere()) {
-    toast('封面属于设定本身，去「故事」里换', 'error');
-    return;
-  }
+
   const prompt = story.cover_prompt || '';
   const input = $('#cover-prompt');
   if (input) input.value = prompt;
   syncStage(story.cover || '');
   syncUndo();
   setMsg('');
+  applyReadonly();
   $('#cover-modal').classList.remove('hidden');
   // 上次没生完就把窗关了：进来就接着看进度
   (async () => {

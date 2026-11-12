@@ -1246,3 +1246,8 @@ body.story-view #btn-io { display: none; }
   width: auto; padding: 2px 7px; border-radius: 4px;
   background: var(--danger); opacity: 1; font-size: .625rem;
 }
+
+/* 模式段跟在标题小字下面，比对话里那个紧凑 */
+.mode-seg { margin-top: 8px; }
+.mode-seg button { padding: 3px 10px; font-size: .75rem; }
+.mode-seg button:disabled { opacity: .45; cursor: default; }

@@ -69,7 +69,6 @@ window.addEventListener('unhandledrejection', function (e) {
         </div>
         <button id="btn-search" type="button" title="全文搜索：找某句话、某个名字出现在哪一轮"><i>🔍</i>搜索</button>
         <button id="btn-context" type="button" disabled title="上下文用量、压缩情况与在场角色"><i>📊</i>上下文</button>
-        <button id="btn-settings" type="button" disabled><i>⚙</i>设定</button>
         <button id="btn-compress" type="button" disabled><i>🗜</i>压缩</button>
         <button id="btn-clear" type="button" disabled><i>🧹</i>清空</button>
         <button id="btn-io" type="button" title="导入或导出这份对话"><i>📂</i>导入导出</button>
@@ -138,6 +137,10 @@ window.addEventListener('unhandledrejection', function (e) {
       <div class="pane-head-text">
         <h2 id="settings-title">故事设定</h2>
         <div class="hint" id="story-meta"></div>
+        <div class="seg mode-seg" id="f-mode">
+          <button type="button" data-mode-value="normal">一般（系统叙述）</button>
+          <button type="button" data-mode-value="rp">角色扮演</button>
+        </div>
       </div>
       <button class="cover-slot" id="btn-cover" type="button" title="封面图：上传或生成">
         <img id="cover-thumb" class="cover-thumb hidden" alt="">
@@ -145,15 +148,7 @@ window.addEventListener('unhandledrejection', function (e) {
       </button>
     </div>
 
-    <div class="grid2">
-      <div class="field"><label for="f-story-title">故事名（设定本身，可以开很多局）</label><input id="f-story-title" placeholder="例如：雨夜的旧城"></div>
-      <div class="field"><label>这个对话的模式</label>
-        <div class="seg" id="f-mode">
-          <button type="button" data-mode-value="normal">一般（系统叙述）</button>
-          <button type="button" data-mode-value="rp">角色扮演</button>
-        </div>
-      </div>
-    </div>
+    <div class="field"><label for="f-story-title">故事名（设定本身，可以开很多局）</label><input id="f-story-title" placeholder="例如：雨夜的旧城"></div>
 
     <div class="field"><label for="f-user-name">我扮演的角色名</label><input id="f-user-name" placeholder="例如：林晚"></div>
     <div class="field">
