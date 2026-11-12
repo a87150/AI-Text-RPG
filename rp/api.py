@@ -672,16 +672,26 @@ def api_story_cover_gen(story_sid):
     if not prompt:
         return jsonify({"error": "这份设定还不够写提示词，先填一下世界观或手写一句"}), 400
     negative = _str(data, "negative", 600)
-    try:
-        name = cover_store.generate(prompt, negative=negative)
-    except RuntimeError as exc:
-        return jsonify({"error": "生图失败：" + str(exc)}), 502
-    except requests.RequestException as exc:
-        return jsonify({"error": "连不上 ComfyUI（%s）" % exc}), 502
-    set_cover(story, name, prompt)
-    save_story(story)
-    return jsonify({"cover": name, "url": cover_store.url_of(name),
-                    "cover_prompt": prompt})
+    # 不在这里等。一张图四十多秒，请求卡着不放、超时又不好定，
+    # 改成交给后台线程，这里只回一个任务状态。
+    job = cover_store.start_job(story_sid, prompt, negative=negative)
+    if job and job.get("state") == "running" and job.get("started", 0) < time.time() - 1:
+        # 已经有一个在跑：不重复发，直接把它报回去
+        pass
+    return jsonify({"job": job, "cover_prompt": prompt}), 202
+
+
+@app.get("/api/stories/<story_sid>/cover/job")
+def api_story_cover_job(story_sid):
+    """查一次生图进度。前端每两秒问一下。"""
+    job = cover_store.job_of(story_sid)
+    if not job:
+        return jsonify({"job": None})
+    return jsonify({
+        "job": job,
+        "timeout": cover_store.GEN_TIMEOUT,
+        "elapsed": round(time.time() - float(job.get("started") or time.time()), 1),
+    })
 
 
 @app.post("/api/stories/<story_sid>/cover/undo")

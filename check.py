@@ -27,7 +27,8 @@ import rp.llm as rp_llm  # noqa: E402
 import rp.metrics as rp_metrics  # noqa: E402
 import rp.prompts as rp_prompts  # noqa: E402
 import rp.storage as rp_storage  # noqa: E402
-import rp.stories as rp_stories  # noqa: E402
+import rp.stories as rp_stories
+import rp.covers as rp_covers  # noqa: E402
 import rp.snapshots as rp_snapshots  # noqa: E402
 
 FAILED = []
@@ -2340,6 +2341,15 @@ def main():
     check("有设定时拼得出提示词", _pp and "甲" in _pp)
     check("提示词不会拼出句号加顿号", "。、" not in _pp)
     check("封面总长有上限", len(_pp) < 320, str(len(_pp)))
+
+    # 97. 生图不能阻塞请求：开一张图要几十秒，路由里等它就是超时
+    check("封面生图有后台任务入口", hasattr(rp_covers, "start_job"))
+    check("封面进度可查", hasattr(rp_covers, "job_of"))
+    check("未知任务返回 None", rp_covers.job_of("no-such-story") is None)
+    check("生图超时默认不低于 120 秒", rp_covers.GEN_TIMEOUT >= 120, str(rp_covers.GEN_TIMEOUT))
+    check("生图超时可配置",
+          "LT_COVER_TIMEOUT" in (pathlib.Path(__file__).parent / "rp" / "covers.py").read_text(encoding="utf-8"))
+    check("进度接口已公开", "/cover/job" in _api)
 
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:

@@ -95,12 +95,27 @@ export function openCover() {
   syncUndo();
   setMsg('');
   $('#cover-modal').classList.remove('hidden');
+  // 上次没生完就把窗关了：进来就接着看进度
+  (async () => {
+    try {
+      const data = await api('/api/stories/' + story.id + '/cover/job');
+      if (data.job && data.job.state === 'running') {
+        busy = true;
+        showGenerating(data.job.started);
+        watchJob();
+      }
+    } catch (e) { /* 查不到就当没任务 */ }
+  })();
   $('#cover-prompt').focus();
 }
 
 export function closeCover() {
   const m = $('#cover-modal');
   if (m) m.classList.add('hidden');
+  // 关窗不影响后台生成，但没必要继续打接口
+  stopPoll();
+  stopTicking();
+  busy = false;
 }
 
 async function upload(file) {
@@ -132,26 +147,110 @@ async function upload(file) {
   }
 }
 
+let pollTimer = 0;
+
+function stopPoll() {
+  if (pollTimer) {
+    clearTimeout(pollTimer);
+    pollTimer = 0;
+  }
+}
+
+/** 生成中：把舞台换成占位，按钮全禁掉，旁边跑秒数。 */
+function showGenerating(startedAt) {
+  const img = $('#cover-stage-img');
+  const empty = $('#cover-stage-empty');
+  if (img) {
+    img.removeAttribute('src');
+    img.classList.add('hidden');
+  }
+  if (empty) {
+    empty.classList.remove('hidden');
+    empty.textContent = '生成中…';
+  }
+  for (const id of ['#cover-gen', '#cover-pick', '#cover-undo', '#cover-remove']) {
+    const b = $(id);
+    if (b) b.disabled = true;
+  }
+  const t0 = startedAt || Date.now() / 1000;
+  clearInterval(tickTimer);
+  tickTimer = setInterval(() => {
+    const secs = Math.max(0, Math.round(Date.now() / 1000 - t0));
+    setMsg('生成中，已经 ' + secs + ' 秒…');
+  }, 1000);
+}
+
+function stopTicking() {
+  if (tickTimer) {
+    clearInterval(tickTimer);
+    tickTimer = 0;
+  }
+  for (const id of ['#cover-gen', '#cover-pick', '#cover-remove']) {
+    const b = $(id);
+    if (b) b.disabled = false;
+  }
+}
+
+let tickTimer = 0;
+
+/** 轮询进度。跑完就自己收工，把图换上。 */
+function watchJob() {
+  const sid = storyId();
+  stopPoll();
+  pollTimer = setTimeout(async () => {
+    if (storyId() !== sid) { stopTicking(); stopPoll(); return; }
+    let data;
+    try {
+      data = await api('/api/stories/' + sid + '/cover/job');
+    } catch (e) {
+      stopTicking();
+      setMsg('查不到进度：' + (e.message || e), 'error');
+      return;
+    }
+    const job = data.job;
+    if (!job) {
+      stopTicking();
+      setMsg('任务没了，可能服务重启过', 'error');
+      return;
+    }
+    if (job.state === 'running') {
+      const secs = data.elapsed !== undefined ? data.elapsed : Math.round(Date.now() / 1000 - job.started);
+      setMsg('生成中，已经 ' + Math.round(secs) + ' 秒…');
+      pollTimer = setTimeout(watchJob, 2000);
+      return;
+    }
+    stopTicking();
+    if (job.state === 'error') {
+      syncStage((currentStory() && currentStory().cover) || '');
+      setMsg(job.error || '生成失败', 'error');
+      syncUndo();
+      return;
+    }
+    afterChange({ cover: job.cover, cover_prompt: job.prompt, left: job.history_count });
+    setMsg('生成好了，不满意可以撤销重来', 'ok');
+    syncUndo();
+  }, 1200);
+}
+
 async function generate() {
   if (busy) return;
   const prompt = ($('#cover-prompt') && $('#cover-prompt').value.trim()) || '';
   busy = true;
-  const btn = $('#cover-gen');
-  if (btn) btn.disabled = true;
-  setMsg('正在生成，可能要几十秒…');
+  showGenerating();
   try {
     const data = await api('/api/stories/' + storyId() + '/cover/gen', {
       method: 'POST',
       body: prompt ? { prompt } : {},
     });
-    afterChange(data);
-    setMsg('生成好了，不满意可以撤销重来', 'ok');
+    watchJob();
+    if (data.job && data.job.state === 'running') {
+      setMsg('提交了，正在生成…');
+    }
   } catch (e) {
-    setMsg(e.message || '生成失败', 'error');
-  } finally {
     busy = false;
-    if (btn) btn.disabled = false;
-    syncUndo();
+    stopTicking();
+    syncStage((currentStory() && currentStory().cover) || '');
+    setMsg(e.message || '生成失败', 'error');
   }
 }
 

@@ -11,6 +11,7 @@ import json
 import os
 import random
 import tempfile
+import threading
 import time
 import uuid
 
@@ -32,7 +33,12 @@ NODE_SAVE = "30"
 
 # 封面是竖图：832x1216 在 SDXL 系的常见比例里不会糊
 COVER_W, COVER_H = 832, 1216
-GEN_TIMEOUT = 300
+# 生一张要多久取决于显卡。默认 180 秒，快卡三十几秒就出，慢卡也能撑到。
+# 要改用 LT_COVER_TIMEOUT 环境变量，不要改这个默认值。
+try:
+    GEN_TIMEOUT = max(30, int(os.environ.get("LT_COVER_TIMEOUT") or 180))
+except (TypeError, ValueError):
+    GEN_TIMEOUT = 180
 ALLOWED_EXT = (".png", ".jpg", ".jpeg", ".webp")
 
 os.makedirs(COVERS_DIR, exist_ok=True)
@@ -132,6 +138,61 @@ def generate(prompt, negative="", width=COVER_W, height=COVER_H, timeout=GEN_TIM
             os.unlink(tmp)
         raise
     return name
+
+
+# 正在生成的任务：story_id -> {状态、提示词、开始时间、结果或错误}
+# 只存内存。进程重启后没有任何任务在跑，落盘会把"生成中"永远留在文件里。
+_JOBS = {}
+_jobs_guard = threading.Lock()
+
+
+def job_of(story_id):
+    """看这份故事现在有没有正在生成的封面。没有就返回 None。"""
+    with _jobs_guard:
+        job = _JOBS.get(story_id)
+        return dict(job) if job else None
+
+
+def _set_job(story_id, **fields):
+    with _jobs_guard:
+        job = _JOBS.get(story_id) or {}
+        job.update(fields)
+        _JOBS[story_id] = job
+
+
+def _run_job(story_id, prompt, negative, timeout):
+    from .stories import load_story, save_story, set_cover
+
+    _set_job(story_id, state="running", started=time.time(), error="")
+    try:
+        name = generate(prompt, negative=negative, timeout=timeout)
+    except Exception as exc:                       # 后台线程里没人接异常
+        _set_job(story_id, state="error", error=str(exc) or "生成失败")
+        return
+    story = load_story(story_id)
+    if not story:
+        _set_job(story_id, state="error", error="故事已被删掉")
+        return
+    set_cover(story, name, prompt)
+    save_story(story)
+    _set_job(story_id, state="done", cover=name, url=url_of(name),
+             prompt=prompt, error="",
+             history_count=len(story.get("cover_history") or []))
+
+
+def start_job(story_id, prompt, negative="", timeout=None):
+    """提交一个生图任务，立即返回。已经有一个在跑就不重复发。"""
+    with _jobs_guard:
+        cur = _JOBS.get(story_id)
+        if cur and cur.get("state") == "running":
+            return dict(cur)
+        _JOBS[story_id] = {"state": "running", "started": time.time(),
+                           "prompt": prompt, "error": "", "cover": ""}
+    t = threading.Thread(target=_run_job,
+                         args=(story_id, prompt, negative, timeout or GEN_TIMEOUT),
+                         daemon=True)
+    t.start()
+    return job_of(story_id)
 
 
 def save_upload(stream):
