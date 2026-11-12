@@ -872,6 +872,31 @@ body.story-view #btn-search { display: none; }
   background: linear-gradient(90deg, var(--accent), var(--accent-2));
   transition: width .3s ease;
 }
+
+/* system prompt 按来源拆开的占比条：哪一块在膨胀，看一眼就知道 */
+/* 行数少的组用单列，两列会留一半空白 */
+.ctx-rows.one { grid-template-columns: 1fr; }
+.ctx-seg {
+  display: flex; height: 10px; border-radius: 5px; overflow: hidden;
+  margin: 9px 0 7px; background: var(--bg-hover);
+}
+.ctx-seg i { display: block; height: 100%; }
+.ctx-seg-legend {
+  display: flex; flex-wrap: wrap; gap: 4px 14px;
+  font-size: .75rem; color: var(--text-mute); margin-bottom: 4px;
+}
+.ctx-seg-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.ctx-seg-legend b { font-weight: 600; color: var(--text-dim); }
+.ctx-seg-dot { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+/* 底层诊断：日常不关心，收起来 */
+.ctx-more { margin-top: 8px; }
+.ctx-more summary {
+  cursor: pointer; font-size: .75rem; color: var(--text-mute);
+  padding: 4px 0; outline: none;
+}
+.ctx-more summary:hover { color: var(--text-dim); }
+/* 口径说明：数字为什么和上面那个不一样 */
+.ctx-note { font-size: .7188rem; color: var(--text-mute); margin: -2px 0 6px; line-height: 1.6; }
 .ctx-meter.warn i { background: var(--warn); }
 .ctx-meter.full i { background: var(--danger); }
 

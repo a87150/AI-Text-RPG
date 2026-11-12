@@ -216,7 +216,9 @@ LANGUAGE_LINES = {
            "original spelling."),
 }
 
-def build_system_prompt(sess, speaker=None):
+def build_system_prompt(sess, speaker=None, parts_out=None):
+    """拼这一轮的 system prompt。parts_out 传字典就顺手告一段落各占多少字，
+    面板要画占比条，分段统计只能在这儿做——拼完再切开就认不回来了。"""
     user_name, _ = role_labels(sess)
     chars = ensure_characters(sess)
     mode = mode_for(sess)
@@ -228,34 +230,40 @@ def build_system_prompt(sess, speaker=None):
     names = "、".join(c["name"] for c in chars)
 
     parts = []
+
+    def add(label, text):
+        parts.append(text)
+        if parts_out is not None:
+            # +2 是 join 时补的空行，差这一点不影响占比条观感
+            parts_out[label] = parts_out.get(label, 0) + len(text) + 2
+
     if mode == "rp" and speaker:
         # 先把身份钉死，再说别的。缺这一句模型就退化成全知叙述者，谁都不像
-        parts.append(
+        add("identity",
             "你这一轮就是【%s】本人，不是旁观者、不是作者。下面写的是你的处境、你的脾气、"
             "你和【%s】之间的账，不是给你参考的资料。用%s的眼睛看，用%s的语气说，"
             "只写这一轮，不解释、不总结、不跳出角色。"
-            % (speaker, user_name, speaker, speaker)
-        )
+            % (speaker, user_name, speaker, speaker))
     else:
-        parts.append("你正在写一段沉浸式的长篇故事叙述，用第三人称旁白的口吻，"
+        add("identity", "你正在写一段沉浸式的长篇故事叙述，用第三人称旁白的口吻，"
                      "把场景、动作和在场角色的反应写出来。")
 
     # 语言必须钉死。只靠用户输入带动的话，一遇上糊涂就开始夹英文句子。
-    parts.append(LANGUAGE_LINES.get(writing().get("language"), LANGUAGE_LINES["zh"]))
+    add("language", LANGUAGE_LINES.get(writing().get("language"), LANGUAGE_LINES["zh"]))
 
     # 主角 = 用户扮演的角色。不是角色表第一位（那是 AI 扮演的人）
     lead = (sess.get("user_name") or "").strip()
     if sess.get("world"):
-        parts.append("【故事背景与世界观】\n" + fill_names(sess["world"], lead))
-    parts.append(build_character_block(chars, speaker, sess.get("status")))
+        add("world", "【故事背景与世界观】" + "\n" + fill_names(sess["world"], lead))
+    add("characters", build_character_block(chars, speaker, sess.get("status")))
     if sess.get("user_role"):
         who = ("【%s（和你说话的人）】" % user_name) if mode == "rp" else ("【用户扮演的角色：%s】" % user_name)
-        parts.append(who + "\n" + sess["user_role"])
+        add("user_role", who + "\n" + sess["user_role"])
     if sess.get("summary"):
-        parts.append("【前情提要（更早发生过的事）】\n" + sess["summary"])
+        add("summary", "【前情提要（更早发生过的事）】" + "\n" + sess["summary"])
     scene = build_status_scene(sess)
     if scene:
-        parts.append("【此刻的处境】\n" + scene)
+        add("status", "【此刻的处境】" + "\n" + scene)
     book = active_facts(sess)
     if book:
         # 不带"第几轮"：模型本来就不知道现在是第几轮，给个数字它反而会当成
@@ -263,11 +271,11 @@ def build_system_prompt(sess, speaker=None):
         lines = ["【这些已经发生，不能当成没发生、也不能反悔】"]
         for f in book:
             lines.append("· %s" % (f.get("fact") or ""))
-        parts.append("\n".join(lines))
+        add("facts", "\n".join(lines))
     # 额外要求（sess["rules"]）是写设定时用的提示词，不进这里。
     # 故事推进时拿着它只会跟「写法」抢位置，真正要生效的地方是 _extra_block。
-    parts.append("【写法】\n" + build_rules(user_name, mode, names))
-    return "\n\n".join(parts)
+    add("rules", "【写法】" + "\n" + build_rules(user_name, mode, names))
+    return ("\n" + "\n").join(parts)
 
 
 LORE_MAX_ITEMS = 6
@@ -322,7 +330,8 @@ def build_anchor_block(sess):
 
 def build_context_debug(sess, speaker=None):
     """这一轮到底发了什么：给「上下文」面板用，先能看见才能调。"""
-    system = build_system_prompt(sess, speaker)
+    parts_out = {}
+    system = build_system_prompt(sess, speaker, parts_out)
     recent = " ".join(
         str(m.get("content") or m.get("narrator") or "")
         for m in (sess.get("messages") or [])[-LORE_SCAN_MESSAGES:]
@@ -349,6 +358,8 @@ def build_context_debug(sess, speaker=None):
         "anchored": anchored,
         "anchor_every": every,
         "chars": {"total": total, "system": len(system)},
+        # 系统提示词按来源拆开：面板画占比条，才知道是哪一段在膨胀
+        "system_parts": parts_out,
         # 按字数乘一个系数不行：中英比例不同精度差很多。
         # lore 是另一条 system 消息，走同一套估算
         "tokens": _tokens(system) + _tokens("".join(h["content"] for h in hits)),

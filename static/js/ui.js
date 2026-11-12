@@ -450,6 +450,13 @@ function tokenRows(st) {
   return rows;
 }
 
+const SEG_LABEL = {
+  rules: '写法', characters: '角色', user_role: '主角', summary: '前情',
+  status: '处境', world: '世界观', language: '语言', identity: '身份', facts: '账本',
+};
+const SEG_COLOR = ['#7aa2f7', '#9ece6a', '#e0af68', '#bb9af7', '#7dcfff',
+  '#f7768e', '#2ac3de', '#c0caf5', '#565f89'];
+
 export function renderContextDetail() {
   const box = $('#ctx-detail');
   if (!box) return;
@@ -464,89 +471,169 @@ export function renderContextDetail() {
   const limit = c.limit || 0;
   const pct = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
   const comp = c.compress || {};
+  const st = c.stream || {};
+  const d = c.debug || null;
 
+  const mkRow = (k, v) => {
+    const r = document.createElement('div');
+    r.className = 'ctx-row';
+    const a = document.createElement('span');
+    a.textContent = k;
+    const b = document.createElement('b');
+    b.textContent = v;
+    r.append(a, b);
+    return r;
+  };
+  const mkSub = (text) => {
+    const el = document.createElement('div');
+    el.className = 'ctx-sub';
+    el.textContent = text;
+    return el;
+  };
+  const mkNote = (text) => {
+    const el = document.createElement('div');
+    el.className = 'ctx-note';
+    el.textContent = text;
+    return el;
+  };
+
+  // 一、上下文占用：这里量的是会话数据，和下面「本轮请求」不是一个口径
   const head = document.createElement('div');
   head.className = 'ctx-head';
   head.innerHTML = '<b>' + fmtNumber(used) + '</b> / ' + fmtNumber(limit)
     + ' 字<span class="ctx-pct">' + pct + '%</span>';
-
   const meter = document.createElement('div');
-  meter.className = 'ctx-meter' + (pct >= 90 ? ' full' : (pct >= 70 ? ' warn' : ''));
+  meter.className = 'ctx-meter' + (pct >= 95 ? ' full' : (pct >= 80 ? ' warn' : ''));
   const fill = document.createElement('i');
   fill.style.width = pct + '%';
   meter.appendChild(fill);
+  box.append(head, meter,
+    mkNote('会话里的对话与设定，不含 system 模板。到上限会自动压缩。'));
 
-  const rows = document.createElement('div');
-  rows.className = 'ctx-rows';
-  const items = [
-    ['消息', (c.messages || 0) + ' 条'],
-    ['压缩', comp.times ? comp.times + ' 次' : '未压缩'],
-    ['已折叠', comp.times
-      ? comp.dropped + ' 条 / ' + fmtNumber(comp.dropped_chars) + ' 字' : '—'],
-    ['保留最近', (c.keep_recent || 0) + ' 条'],
-    ['前情提要', c.summary_chars ? fmtNumber(c.summary_chars) + ' 字' : '无'],
-    // 超过 100ms 就该拆数据层了，不要凭感觉提前重构
-    ['写盘耗时', c.io ? (Math.round(c.io.save_ms || 0) + ' ms') : '—'],
-    ['读盘耗时', c.io ? (Math.round(c.io.load_ms || 0) + ' ms') : '—'],
-    ['会话文件', c.io && c.io.bytes ? fmtNumber(Math.round(c.io.bytes / 1024)) + ' KB' : '—'],
-    // prefill 才是真正的瓶颈：上一轮发给模型多少字、第一个字等了多久
-    ['上轮 prompt', c.stream && c.stream.prompt_chars
-      ? fmtNumber(c.stream.prompt_chars) + ' 字（系统 ' + fmtNumber(c.stream.system_chars || 0) + '）' : '—'],
-    ['首字等待', c.stream && c.stream.first_token_ms
-      ? fmtNumber(c.stream.first_token_ms) + ' ms' : '—'],
-    ['上轮总耗时', c.stream && c.stream.total_ms
-      ? fmtNumber(c.stream.total_ms) + ' ms' : '—'],
-    ...tokenRows(c.stream || {}),
-  ];
-  for (const [k, v] of items) {
-    const row = document.createElement('div');
-    row.className = 'ctx-row';
-    const label = document.createElement('span');
-    label.textContent = k;
-    const value = document.createElement('b');
-    value.textContent = v;
-    row.append(label, value);
-    rows.appendChild(row);
+  // 二、真实请求体：一直是 system + 历史，把加数摆出来就不会觉得三个数字打架
+  const reqChars = st.prompt_chars || 0;
+  const sysChars = st.system_chars || (d && d.chars ? d.chars.system : 0);
+  const histChars = Math.max(0, reqChars - sysChars);
+  const inTok = (st.usage && st.usage.prompt_tokens) || 0;
+  const outTok = (st.usage && st.usage.completion_tokens) || 0;
+  const core = document.createElement('div');
+  core.className = 'ctx-rows one';
+  core.appendChild(mkRow('本轮请求', reqChars
+    ? fmtNumber(reqChars) + ' 字' + (inTok ? '（约 ' + fmtNumber(inTok) + ' token）' : '')
+    : '还没发过'));
+  if (reqChars) {
+    core.appendChild(mkRow('系统 + 历史', fmtNumber(sysChars) + ' + ' + fmtNumber(histChars)));
+  }
+  box.appendChild(core);
+
+  // 三、耗时拆成两段：卡在 prefill 还是卡在 decode，看这两个数就够了
+  const ttft = st.first_token_ms || 0;
+  const totalMs = st.total_ms || 0;
+  const decodeMs = st.decode_ms || (totalMs > ttft ? totalMs - ttft : 0);
+  const speed = (decodeMs > 0 && outTok) ? Math.round(outTok / (decodeMs / 1000)) : 0;
+  const time = document.createElement('div');
+  time.className = 'ctx-rows one';
+  time.appendChild(mkRow('首字等待', ttft ? fmtNumber(ttft) + ' ms' : '—'));
+  time.appendChild(mkRow('生成速度', speed
+    ? speed + ' token/s（' + fmtNumber(outTok) + ' 出 / ' + fmtNumber(decodeMs) + ' ms）' : '—'));
+  time.appendChild(mkRow('上轮总耗时', totalMs ? fmtNumber(totalMs) + ' ms' : '—'));
+  box.appendChild(time);
+
+  // 四、system prompt 构成：占比条只回答一个问题——哪一块在膨胀
+  const parts = (d && d.system_parts) || {};
+  const segs = Object.keys(parts)
+    .filter((k) => parts[k] > 0)
+    .map((k) => ({ k: k, v: parts[k], name: SEG_LABEL[k] || k }))
+    .sort((a, b) => b.v - a.v);
+  if (segs.length) {
+    const sysTotal = segs.reduce((n, x) => n + x.v, 0) || 1;
+    box.appendChild(mkSub('系统提示词构成 · ' + fmtNumber(sysTotal) + ' 字'));
+    const bar = document.createElement('div');
+    bar.className = 'ctx-seg';
+    const legend = document.createElement('div');
+    legend.className = 'ctx-seg-legend';
+    segs.forEach((seg, i) => {
+      const color = SEG_COLOR[i % SEG_COLOR.length];
+      const piece = document.createElement('i');
+      piece.style.width = (seg.v / sysTotal * 100) + '%';
+      piece.style.background = color;
+      piece.title = seg.name + ' ' + fmtNumber(seg.v) + ' 字';
+      bar.appendChild(piece);
+      const item = document.createElement('span');
+      const dot = document.createElement('i');
+      dot.className = 'ctx-seg-dot';
+      dot.style.background = color;
+      const nm = document.createElement('b');
+      nm.textContent = seg.name;
+      item.append(dot, nm, document.createTextNode(' ' + fmtNumber(seg.v)));
+      legend.appendChild(item);
+    });
+    box.append(bar, legend);
+    const top = segs[0];
+    const topPct = Math.round((top.v / sysTotal) * 100);
+    if (topPct >= 40) {
+      box.appendChild(mkNote('最大一块是「' + top.name + '」，占 ' + topPct
+        + '%。想压缩 token，从这里下手最有效。'));
+    }
   }
 
-  box.append(head, meter, rows);
-
-  const d = c.debug || null;
-  if (d && (d.system || (d.lore || []).length || (d.facts || []).length)) {
+  // 五、策略与状态：偶尔看一眼，不看也不影响聊天
+  if (d) {
     const facts = d.facts || [];
-    const extra = document.createElement('div');
-    extra.className = 'ctx-rows';
-    for (const [k, v] of [
-      ['本轮发给模型', fmtNumber(d.chars ? d.chars.total : 0) + ' 字 · 约 ' + fmtNumber(d.tokens || 0) + ' token'],
-      ['世界书命中', (d.lore || []).length ? (d.lore || []).length + ' 条 / ' + fmtNumber(d.lore_chars) + ' 字' : '无'],
-      ['事实账本', facts.length ? facts.length + ' 条 / ' + fmtNumber(d.facts_chars) + ' 字' : '无'],
-      ['人设锚定', d.anchored ? '本轮已重插角色核心' : '每 ' + (d.anchor_every || 15) + ' 轮重插一次'],
-    ]) {
-      const row = document.createElement('div');
-      row.className = 'ctx-row';
-      const label = document.createElement('span');
-      label.textContent = k;
-      const value = document.createElement('b');
-      value.textContent = v;
-      row.append(label, value);
-      extra.appendChild(row);
-    }
-    box.appendChild(extra);
+    box.appendChild(mkSub('策略'));
+    const pol = document.createElement('div');
+    pol.className = 'ctx-rows';
+    pol.appendChild(mkRow('世界书命中', (d.lore || []).length
+      ? (d.lore || []).length + ' 条 / ' + fmtNumber(d.lore_chars) + ' 字' : '无'));
+    pol.appendChild(mkRow('事实账本', facts.length
+      ? facts.length + ' 条 / ' + fmtNumber(d.facts_chars) + ' 字' : '无'));
+    pol.appendChild(mkRow('人设锚定', d.anchored
+      ? '本轮已重插角色核心' : '每 ' + (d.anchor_every || 15) + ' 轮重插一次'));
+    box.appendChild(pol);
+
+    // 六、底层诊断：对聊天体感没影响，收起来
+    const more = document.createElement('details');
+    more.className = 'ctx-more';
+    const sm = document.createElement('summary');
+    sm.textContent = '底层诊断（消息数、压缩、读写盘、费用）';
+    more.appendChild(sm);
+    const low = document.createElement('div');
+    low.className = 'ctx-rows';
+    low.appendChild(mkRow('消息', (c.messages || 0) + ' 条'));
+    low.appendChild(mkRow('保留上限', (c.keep_recent || 0) + ' 条'));
+    low.appendChild(mkRow('压缩', comp.times ? comp.times + ' 次' : '未压缩'));
+    low.appendChild(mkRow('已折叠', comp.times
+      ? comp.dropped + ' 条 / ' + fmtNumber(comp.dropped_chars) + ' 字' : '—'));
+    low.appendChild(mkRow('前情提要', c.summary_chars
+      ? fmtNumber(c.summary_chars) + ' 字' : '无'));
+    low.appendChild(mkRow('写盘 / 读盘', c.io
+      ? Math.round(c.io.save_ms || 0) + ' / ' + Math.round(c.io.load_ms || 0) + ' ms' : '—'));
+    low.appendChild(mkRow('会话文件', c.io && c.io.bytes
+      ? fmtNumber(Math.round(c.io.bytes / 1024)) + ' KB' : '—'));
+    const hit = (st.usage && (st.usage.prompt_cache_hit_tokens
+      || (st.usage.prompt_tokens_details || {}).cached_tokens)) || 0;
+    low.appendChild(mkRow('缓存命中', hit
+      ? fmtNumber(hit) + ' token（' + Math.round(hit / (inTok || 1) * 100) + '%）' : '无'));
+    low.appendChild(mkRow('上轮费用', st.cost
+      ? '$' + st.cost.total.toFixed(6) : '未配单价'));
+    const tot = st.total || {};
+    low.appendChild(mkRow('累计', tot.calls
+      ? tot.calls + ' 次 · ' + fmtNumber(tot.prompt_tokens) + ' 入 / '
+        + fmtNumber(tot.completion_tokens) + ' 出 · $' + (tot.cost || 0).toFixed(6) : '—'));
+    more.appendChild(low);
+    box.appendChild(more);
 
     if ((d.lore || []).length) {
-      const sub = document.createElement('div');
-      sub.className = 'ctx-sub';
-      sub.textContent = '命中的世界书';
-      box.appendChild(sub);
+      box.appendChild(mkSub('命中的世界书'));
       const list = document.createElement('div');
       list.className = 'ctx-lore';
-      for (const hit of d.lore) {
+      for (const hit2 of d.lore) {
         const row = document.createElement('div');
         row.className = 'ctx-lore-row';
         const key = document.createElement('code');
-        key.textContent = hit.keys || '';
+        key.textContent = hit2.keys || '';
         const body = document.createElement('span');
-        body.textContent = hit.content || '';
+        body.textContent = hit2.content || '';
         row.append(key, body);
         list.appendChild(row);
       }
@@ -554,10 +641,7 @@ export function renderContextDetail() {
     }
 
     if (facts.length) {
-      const sub = document.createElement('div');
-      sub.className = 'ctx-sub';
-      sub.textContent = '事实账本（最近 ' + facts.length + ' 条）';
-      box.appendChild(sub);
+      box.appendChild(mkSub('事实账本（最近 ' + facts.length + ' 条）'));
       const list = document.createElement('div');
       list.className = 'ctx-lore';
       for (const f of facts) {
@@ -584,10 +668,7 @@ export function renderContextDetail() {
   }
 
   if (s.id) {
-    const sub = document.createElement('div');
-    sub.className = 'ctx-sub';
-    sub.textContent = '历史版本（回滚用）';
-    box.appendChild(sub);
+    box.appendChild(mkSub('历史版本（回滚用）'));
     const list = document.createElement('div');
     list.className = 'ctx-snaps';
     list.id = 'ctx-snaps';
@@ -595,9 +676,7 @@ export function renderContextDetail() {
     box.appendChild(list);
     loadSnapshots(s.id, list);
   }
-
 }
-
 /* ------------------------------ 顶部信息 ------------------------------ */
 export function syncHeader() {
   // 故事视图里没有"当前对话"，这些操作只对对话有意义

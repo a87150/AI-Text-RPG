@@ -555,6 +555,25 @@ def main():
           rp_prompts._tokens("。。。。") > rp_prompts._tokens("...."),
           str(rp_prompts._tokens("。。。。")) + " vs " + str(rp_prompts._tokens("....")))
     check("上下文接口带 debug", "debug" in rp_context.context_info(dbg_sess))
+    # 面板要画「系统提示词构成」，分段得在后端拼的时候就记下来：
+    # 拼完再按标题切开，遇到用户自己写的正文就认错边界了
+    _parts = dbg.get("system_parts") or {}
+    check("面板能拆出系统提示词分段", bool(_parts), str(sorted(_parts)))
+    check("分段之和约等于 system 全文",
+          abs(sum(_parts.values()) - len(dbg["system"])) <= 2 * max(1, len(_parts)),
+          str((sum(_parts.values()), len(dbg["system"]))))
+    check("写法块能单独量出来", _parts.get("rules", 0) > 0, str(_parts.get("rules")))
+    # 三个字数口径各算各的：占用（会话数据）、本轮请求（system+历史）、系统构成。
+    # 面板混着说就会自相矛盾，所以措辞也一起钉住
+    _ui = pathlib.Path("static/js/ui.js").read_text(encoding="utf-8")
+    _css = pathlib.Path("static/css/app.css").read_text(encoding="utf-8")
+    check("面板画出系统提示词占比条", "ctx-seg" in _ui and ".ctx-seg" in _css)
+    check("面板把首字等待和生成速度分开",
+          "首字等待" in _ui and "生成速度" in _ui)
+    check("保留条数写成上限而不是实际条数",
+          "保留上限" in _ui and "保留最近" not in _ui)
+    check("面板写明占用口径不含 system 模板", "不含 system 模板" in _ui)
+    check("面板摆出 system+历史 的加数", "系统 + 历史" in _ui)
 
     # 21. 事实账本：旧说法让位，不双写
     book_sess = {"turn": 3}
