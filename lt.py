@@ -22,10 +22,13 @@ from rp.storage import load_session, save_session  # noqa: F401
 
 if __name__ == "__main__":
     from rp.backup import start_auto
-    from rp.config import VERSION, backup_conf
+    from rp.config import VERSION, LAN_IP, backup_conf
 
     start_auto(backup_conf)      # 定时备份：配置里没开就空转，开了一分钟内生效
     port = int(os.environ.get("PORT", "5000"))
     print("代面 %s 已启动：http://127.0.0.1:%d" % (VERSION, port))
+    if LAN_IP:
+        print("同一局域网：http://%s:%d" % (LAN_IP, port))
     print("Ollama：%s" % OLLAMA_HOST)
-    app.run(host="127.0.0.1", port=port, threaded=True, debug=False)
+    # 绑 0.0.0.0：127.0.0.1 只收本机连接，手机和平板连不进来
+    app.run(host="0.0.0.0", port=port, threaded=True, debug=False)

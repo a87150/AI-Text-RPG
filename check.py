@@ -2195,6 +2195,9 @@ def main():
     # 手机上 toolbar 不换行会把按钮压成竖排，整条撑到 800 多像素高
     check("手机顶部栏拆两行", ".topbar { flex-wrap: wrap;" in _cs)
     check("手机按钮组横向滚动不竖排", "overflow-x: auto" in _cs and "white-space: nowrap" in _cs)
+    _lt = (pathlib.Path(__file__).parent / "lt.py").read_text(encoding="utf-8")
+    # 绑 127.0.0.1 只有本机能连，手机和平板打不开
+    check("监听所有网卡，局域网可访问", "0.0.0.0" in _lt)
     _sj = (pathlib.Path(__file__).parent / "static" / "js" / "sessions.js").read_text(encoding="utf-8")
     # 条目实际 76px 高加 4px 间距，按 66 算会多塞几条：溢出出了滚动条却还没到翻页
     check("每页条数按真实条目高度算", "itemHeight = 80" in _sj)

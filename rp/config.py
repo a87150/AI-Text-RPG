@@ -2,6 +2,7 @@
 """常量、路径、Flask 实例与模型提供方配置。"""
 import json
 import os
+import socket
 import re
 import threading
 import uuid
@@ -40,13 +41,27 @@ app = Flask(
     static_folder=os.path.join(BASE_DIR, "static"),
 )
 # 本地小应用：改模板不该还要重启，模板缓存会让人以为是"代码没生效"
+def _lan_ip():
+    """本机的局域网地址。UDP connect 只让内核选路，不会真的发包。"""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        return s.getsockname()[0]
+    except OSError:
+        return ""
+    finally:
+        s.close()
+
+LAN_IP = _lan_ip()
+
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 app.jinja_env.auto_reload = True
 # 静态文件同理：改完 CSS/JS 刷新就该看到，不要让人硬刷新才能验证
 app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
-# 只服务本机。不限 Host 的话，外部域名指向 127.0.0.1 就能以
-# 同源身份读完所有会话正文。
-app.config["TRUSTED_HOSTS"] = ["127.0.0.1", "localhost", "::1"]
+# 只认本机地址。不限 Host 的话，外部域名指向 127.0.0.1 就能以
+# 同源身份读完所有会话正文。局域网 IP 也要列进来：手机用
+# http://<本机IP>:5000 打开时 Host 头就是这个 IP，不认就 400。
+app.config["TRUSTED_HOSTS"] = [h for h in ("127.0.0.1", "localhost", "::1", LAN_IP) if h]
 # 一份会话 JSON 再大也不该碰这个数；超了直接 413，不让它整份进内存
 app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024
 
