@@ -53,9 +53,13 @@ export function syncCoverThumb() {
     if (name) {
       // 这里是 192x264 的预览位，小图（160px）撑不住，会糊。
       // 160px 只给列表里那个 48px 格子用。
+      img.classList.add('hidden');
+      img.onload = () => img.classList.remove('hidden');
+      img.onerror = () => img.classList.add('hidden');
       img.src = urlOf(name);
-      img.classList.remove('hidden');
     } else {
+      img.onload = null;
+      img.onerror = null;
       img.removeAttribute('src');
       img.classList.add('hidden');
     }
@@ -75,8 +79,12 @@ function syncStage(name) {
   const empty = $('#cover-stage-empty');
   if (img) {
     if (name) {
+      // 图是异步加载的。不先藏的话，弹窗显示的那一帧还挂着上一张图，
+      // 等新图下完才换上去——看上去就是旧图闪了一下。
+      img.classList.add('hidden');
+      img.onload = () => img.classList.remove('hidden');
+      img.onerror = () => img.classList.add('hidden');
       img.src = urlOf(name) + '?t=' + Date.now();   // 同名文件换内容时不至于拿缓存
-      img.classList.remove('hidden');
     } else {
       img.removeAttribute('src');
       img.classList.add('hidden');
