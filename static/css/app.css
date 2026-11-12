@@ -481,9 +481,10 @@ body.story-view #btn-search { display: none; }
 .edit-bar button:first-child { border-color: var(--accent); color: var(--text); }
 .msg.user { align-self: flex-end; align-items: flex-end; }
 .msg.assistant { align-self: flex-start; align-items: flex-start; }
-/* 编辑一条消息时让它占满：气泡本身只有 78% 宽，在窄框里改整段太难受 */
-.msg.editing, .msg.editing .bubble { width: 100%; max-width: 100%; }
-.msg.editing { align-items: stretch; }
+/* 编辑时给气泡一个稳定宽度，别跟着内容缩成一条。上限仍用 .msg 自己的 78%，
+   和旁边 AI 的回复一样宽；再宽就压到对面去了 */
+.msg.editing { width: 100%; align-items: stretch; }
+.msg.editing .bubble { width: 100%; }
 .who {
   font-size: calc(var(--ui-fs) - 1.5px); color: var(--text-mute);
   margin-bottom: 5px; padding: 0 4px;
