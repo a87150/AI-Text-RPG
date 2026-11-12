@@ -468,9 +468,10 @@ body.story-view #btn-search { display: none; }
 .msg-tools button:hover { color: var(--text); border-color: var(--accent); }
 
 .edit-area {
-  width: 100%; min-height: 96px; resize: vertical; box-sizing: border-box;
+  width: 100%; resize: none; box-sizing: border-box;
   background: var(--bg-input); color: var(--text); border: 1px solid var(--border-strong);
   border-radius: 8px; padding: 8px 10px; font: inherit; line-height: 1.7;
+  max-height: 60vh; overflow-y: auto;
 }
 .edit-bar { display: flex; gap: 6px; margin-top: 6px; justify-content: flex-end; }
 .edit-bar button {

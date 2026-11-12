@@ -95,7 +95,8 @@ function startEdit(index, host) {
   area.className = 'edit-area';
   // 记住这是哪一局的编辑：renderMessages 的守卫只该拦同一局的重绘，
   // 否则切到别的会话时会被拦下，标题换了、消息区还是上一局的。
-  area.dataset.sid = (state.session && state.session.id) || '';  area.value = original;
+  area.dataset.sid = (state.session && state.session.id) || '';
+  area.value = original;
 
   const bar = document.createElement('div');
   bar.className = 'edit-bar';
@@ -106,9 +107,27 @@ function startEdit(index, host) {
   cancel.type = 'button';
   cancel.textContent = '取消';
 
+  bar.append(save, cancel);
+  bubble.innerHTML = '';
+  bubble.append(area, bar);
+
+  // 至少能看到 200 字：按当前宽度算一行放得下几个字，再按行高撑出底座；
+  // 内容更多就继续长，长到 60vh 打住（CSS 有 max-height，超出在里面滚）。
+  // 宽度按全角算，混进英文只会偏高——宁可多留白，也别让字压在滚动条下面。
+  const grow = () => {
+    const fs = parseFloat(getComputedStyle(area).fontSize) || 16;
+    const perLine = Math.max(10, Math.floor(Math.max(200, area.clientWidth - 20) / fs));
+    const floor = Math.ceil(200 / perLine) * fs * 1.7 + 18;
+    area.style.height = 'auto';
+    area.style.height = Math.max(area.scrollHeight, floor) + 'px';
+  };
+  area.addEventListener('input', grow);
+  window.addEventListener('resize', grow);
+
   // 编辑态只能从这里退出：renderMessages 见到 .edit-area 会跳过重绘，
   // 不先把它摘掉，保存完和取消都停在输入框上不动。
   const closeEdit = () => {
+    window.removeEventListener('resize', grow);
     host.querySelectorAll('.edit-area, .edit-bar').forEach((el) => el.remove());
   };
   const restore = () => { closeEdit(); renderMessages(); };
@@ -132,9 +151,7 @@ function startEdit(index, host) {
     }
   };
 
-  bar.append(save, cancel);
-  bubble.innerHTML = '';
-  bubble.append(area, bar);
+  grow();
   area.focus();
   area.setSelectionRange(area.value.length, area.value.length);
 }

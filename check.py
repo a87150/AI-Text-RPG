@@ -2178,6 +2178,14 @@ def main():
     check("编辑守卫只拦同一局的重绘",
           "editing.dataset.sid === ((state.session && state.session.id)" in _uj)
     check("编辑框记下所属会话", "area.dataset.sid" in _mj)
+    # 编辑框要看得清 200 字：底座按宽度算，内容多了自已长，上限在 CSS 里截
+    check("编辑框自底座算 200 字", "Math.ceil(200 / perLine)" in _mj)
+    check("编辑框输入时自已长", "area.addEventListener('input', grow)" in _mj)
+    check("编辑框关闭时卸掉 resize 监听", "window.removeEventListener('resize', grow)" in _mj)
+    _cs = (pathlib.Path(__file__).parent / "static" / "css" / "app.css").read_text(encoding="utf-8")
+    check("编辑框有高度上限", "max-height: 60vh" in _cs, "")
+    check("编辑框不再手动拖大", "resize: none" in _cs, "")
+    check("静态文件不缓存", rp_config.app.config["SEND_FILE_MAX_AGE_DEFAULT"] == 0)
     # 查进度失败、任务丢失这两条路不放锁的话，封面功能会永久静默失效
     _cv = (pathlib.Path(__file__).parent / "static" / "js" / "cover.js").read_text(encoding="utf-8")
     check("封面轮询出错也要放锁", _cv.count("busy = false;") >= 10, str(_cv.count("busy = false;")))
