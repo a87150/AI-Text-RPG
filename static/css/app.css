@@ -1248,15 +1248,14 @@ body.story-view #btn-io { display: none; }
 }
 
 /* 模式段跟在标题小字下面，比对话里那个紧凑 */
-/* 模式：小字下面一行，左边标题右边两个按钮 */
-.mode-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
-.mode-label { flex: none; font-size: .75rem; color: var(--text-mute); }
-.mode-seg { margin-top: 0; }
-.mode-seg button { padding: 3px 10px; font-size: .75rem; }
+/* 模式：两个按钮平分整行，标题在按钮下面，字号与其他字段标题一致 */
+.field.mode-field { margin-top: 12px; }
+.mode-seg { display: flex; gap: 6px; width: 100%; margin-top: 0; }
+.mode-seg button { flex: 1 1 0; min-width: 0; padding: 6px 10px; font-size: .75rem; }
 .mode-seg button:disabled { opacity: .45; cursor: default; }
-/* 故事名缩窄，跟在模式下面，不再占一整行 */
-.field.story-name { margin-top: 10px; max-width: 260px; }
-.field.story-name input { padding: 5px 9px; font-size: .8125rem; }
+.mode-label { display: block; margin-top: 6px; }
+/* 故事名占满整行，跟在模式下面 */
+.field.story-name { margin-top: 12px; max-width: none; }
 
 /* 两段式确认的那一步：变红、变宽，一眼看出它在等确认 */
 .cover-actions button.armed {
