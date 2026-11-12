@@ -2351,6 +2351,24 @@ def main():
           "LT_COVER_TIMEOUT" in (pathlib.Path(__file__).parent / "rp" / "covers.py").read_text(encoding="utf-8"))
     check("进度接口已公开", "/cover/job" in _api)
 
+    # 98. 删故事要连带删它的封面，否则 covers 里全是孤儿图
+    _ds = rp_stories.new_story("删图测试")
+    rp_stories.save_story(_ds)
+    _dn1, _dn2 = "zz_chk_live.jpg", "zz_chk_hist.jpg"
+    for _n in (_dn1, _dn2):
+        (_cov.COVERS_DIR and open(os.path.join(_cov.COVERS_DIR, _n), "wb").write(b"x"))
+    rp_stories.set_cover(_ds, _dn1, "p1")
+    rp_stories.set_cover(_ds, _dn2, "p2")
+    rp_stories.save_story(_ds)
+    check("删前两张图都在", _cov.exists(_dn1) and _cov.exists(_dn2))
+    rp_stories.delete_story(_ds["id"])
+    check("删故事后当前封面也没了", not _cov.exists(_dn2))
+    check("删故事后历史封面也没了", not _cov.exists(_dn1))
+
+    # 文件被手删了也不能把坏引用回给前端
+    check("不存在的封面当没封面", rp_stories._live_cover("nope.jpg") == "")
+    check("真存在的封面照旧返回", rp_stories._live_cover(_dn1) == "")
+
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")

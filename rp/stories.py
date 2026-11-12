@@ -136,6 +136,14 @@ def save_story(story):
     return story
 
 
+
+def _live_cover(name):
+    """存的是文件名，但文件可能已经不在了。不在就当没封面。"""
+    if not name:
+        return ""
+    from . import covers as cover_store
+    return name if cover_store.exists(name) else ""
+
 def list_stories():
     with _lock:
         try:
@@ -153,7 +161,7 @@ def list_stories():
                 "user_name": story.get("user_name") or "",
                 "ai_name": story.get("ai_name") or "",
                 "character_count": len(story.get("characters") or []),
-                "cover": story.get("cover") or "",
+                "cover": _live_cover(story.get("cover")),
                 "cover_prompt": story.get("cover_prompt") or "",
                 "cover_history_count": len(story.get("cover_history") or []),
             })
@@ -165,11 +173,19 @@ def delete_story(sid):
     path = story_path(sid)
     if not path or not os.path.isfile(path):
         return False
+    story = load_story(sid) or {}
     with _lock:
         try:
             os.remove(path)
         except OSError:
             return False
+    # 故事没了，它独占的封面也没人用了。历史里那几张一样清掉，
+    # 不然删完故事还有图躺在 covers 里。
+    from . import covers as cover_store
+    names = [story.get("cover") or ""]
+    names += [h.get("name") or "" for h in (story.get("cover_history") or [])]
+    for name in names:
+        cover_store.drop(name)
     return True
 
 def update_from(story, sess):
