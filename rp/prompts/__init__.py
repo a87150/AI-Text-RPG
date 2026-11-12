@@ -275,9 +275,9 @@ def build_system_prompt(sess, speaker=None):
         for f in book:
             lines.append("· %s" % (f.get("fact") or ""))
         parts.append("\n".join(lines))
+    # 额外要求（sess["rules"]）是写设定时用的提示词，不进这里。
+    # 故事推进时拿着它只会跟「写法」抢位置，真正要生效的地方是 _extra_block。
     parts.append("【写法】\n" + build_rules(user_name, mode, names))
-    if sess.get("rules"):
-        parts.append("【额外要求】\n" + fill_names(sess["rules"], lead))
     return "\n\n".join(parts)
 
 

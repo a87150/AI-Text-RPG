@@ -1718,7 +1718,11 @@ def main():
     _phs = rp_storage.load_session(_ph["id"])
     _sys = rp_prompts.build_system_prompt(_phs)
     check("系统提示里世界观已替换", "甲是守灯人，甲怕黑。" in _sys)
-    check("系统提示里额外要求已替换", "不要让甲轻易妥协。" in _sys)
+    # 额外要求是写设定用的，不该跟着故事推进跑
+    check("额外要求不进故事提示", "不要让甲轻易妥协。" not in _sys)
+    check("额外要求仍在写设定时生效",
+          rp_prompts._extra_block("不要写血腥。", "", "")
+          == "\n\n· 额外要求：\n不要写血腥。")
     check("AI 角色按真名出现，不被占位符吃掉", "丙" in _sys)
     check("存下来的仍是占位符",
           _phs["world"] == "{主角}是守灯人，{主角}怕黑。", _phs.get("world"))
