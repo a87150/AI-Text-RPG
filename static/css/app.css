@@ -1251,3 +1251,9 @@ body.story-view #btn-io { display: none; }
 .mode-seg { margin-top: 8px; }
 .mode-seg button { padding: 3px 10px; font-size: .75rem; }
 .mode-seg button:disabled { opacity: .45; cursor: default; }
+
+/* 两段式确认的那一步：变红、变宽，一眼看出它在等确认 */
+.cover-actions button.armed {
+  background: var(--danger); border-color: var(--danger); color: #fff;
+  padding-left: 16px; padding-right: 16px;
+}

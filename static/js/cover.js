@@ -79,13 +79,33 @@ function syncStage(name) {
   if (empty) empty.classList.toggle('hidden', !!name);
 }
 
-function syncUndo() {
-  const story = currentStory();
-  const left = (story && story.cover_history_count) || 0;
+/* 撤销不可逆，两段式：第一次点变成“确认撤销”，三秒内再点才真撤 */
+let undoArmed = 0;
+
+function disarmUndo() {
+  if (undoArmed) {
+    clearTimeout(undoArmed);
+    undoArmed = 0;
+  }
   const btn = $('#cover-undo');
   if (btn) {
-    btn.disabled = busy || !left;
-    btn.title = left ? '回到上一张（还有 ' + left + ' 张）' : '没有可回退的图';
+    btn.classList.remove('armed');
+    btn.textContent = '撤销重来';
+  }
+}
+
+function syncUndo() {
+  const story = currentStory();
+  const has = !!(story && story.cover);
+  const left = (story && story.cover_history_count) || 0;
+  disarmUndo();
+  const btn = $('#cover-undo');
+  if (btn) {
+    // 只要现在有图就能撤。第一张生成完历史是空的，但"撤回没封面"依然有意义。
+    // 之前拿 left>0 当条件，结果第一张永远撤不了。
+    btn.disabled = busy || !has;
+    btn.title = !has ? '没有可撤的图'
+      : (left ? '回到上一张（还有 ' + left + ' 张）' : '撤掉这张，回到没封面');
   }
 }
 
@@ -201,6 +221,7 @@ function stopPoll() {
 
 /** 生成中：把舞台换成占位，按钮全禁掉，旁边跑秒数。 */
 function showGenerating(startedAt) {
+  disarmUndo();
   const img = $('#cover-stage-img');
   const empty = $('#cover-stage-empty');
   if (img) {
@@ -339,7 +360,19 @@ export function bindCover() {
   const gen = $('#cover-gen');
   if (gen) gen.onclick = generate;
   const back = $('#cover-undo');
-  if (back) back.onclick = undo;
+  if (back) {
+    back.onclick = () => {
+      if (busy || back.disabled) return;
+      if (!undoArmed) {
+        undoArmed = setTimeout(disarmUndo, 3000);
+        back.classList.add('armed');
+        back.textContent = '确认撤销？';
+        return;
+      }
+      disarmUndo();
+      undo();
+    };
+  }
   const mg = $('#cover-manage');
   if (mg) mg.onclick = () => openManage();
 }
