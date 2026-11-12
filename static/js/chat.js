@@ -322,7 +322,6 @@ async function sendMessage(text, { isRetry, isContinue }) {
                 }
               }
               if (turnBox.parentNode) turnBox.remove();
-              renderMessages();
             } else {
               // 完成后重排：先画外音，再按发言顺序排角色气泡
               current = renderTurn(turnBox, turn) || current;
@@ -360,6 +359,12 @@ async function sendMessage(text, { isRetry, isContinue }) {
           if (ev.attempts && ev.attempts > 1) {
             toast('已在自动重试 ' + (ev.attempts - 1) + ' 次后成功', 'ok');
           }
+          // 数据已经齐了，立即重绘。流式期间那个 turnBox 是临时容器，
+          // 没有消息下方那条工具栏；只有重绘过才有。
+          //
+          // 只在还停在这一局时才画：renderMessages 读的是 state.session，
+          // 中途切走了的话画出来的是你正看着的那一局，不是刚写完的这一局。
+          if (state.session === s) renderMessages();
         }
       },
       { idleTimeout: WAIT_MS, signal: stopper.signal }
@@ -405,17 +410,17 @@ async function sendMessage(text, { isRetry, isContinue }) {
     // 停止也算没答上，只是把话说清楚，别让人以为是模型挂了
     if (!success && !(draftShown)) appendRetryHint(text, state.stopped);
 
+    // 首次渲染已经在 done 里做完了，这里只校准差异。
+    // 任何抛出都不能把已经画好的界面拖垮，所以各自包住。
     (async () => {
-      const fresh = await refreshCurrentSession();
-      if (fresh) {
-        updateSub();
-        // 无条件重绘。之前靠"消息数变了没"来决定，但流式成功时前端自己
-        // 已经 push 过一条，长度比对永远是"没变"，于是永远不重绘。而发送时
-        // 粘上去的那份用户消息 DOM 是没有工具条的（renderMessages 才给），
-        // 所以它就一直光着。
-        renderMessages();
-      }
-      loadSessions();
+      try {
+        const fresh = await refreshCurrentSession();
+        if (fresh) {
+          updateSub();
+          syncAll();
+        }
+      } catch (e) { /* 校准失败不影响已经显示的内容 */ }
+      try { await loadSessions(); } catch (e) { /* 列表没刷新就等下一次 */ }
     })();
   }
 }

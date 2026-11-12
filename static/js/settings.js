@@ -182,6 +182,9 @@ export async function openSettings(opts = {}) {
       toast('读取故事失败：' + e.message, 'error');
       return;
     }
+    // 等数据的这几百毫秒里可能已经点了另一个故事；
+    // 旧响应回来再填表就是把你正在看的那份冲掉了。
+    if (state.selectedStory !== opts.storyId) return;
     editingStory = s.id;
     s.mode = (state.conf && state.conf.mode) || 'normal';
   } else {

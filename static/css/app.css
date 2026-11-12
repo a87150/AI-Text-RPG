@@ -961,7 +961,9 @@ body.story-view #btn-search { display: none; }
 
 /* 触摸设备没有 hover，删除按钮得常显，否则根本没入口 */
 @media (hover: none) {
-  .si-del { opacity: 1; }
+  /* 没有 hover 的设备上，靠 hover 显形的东西等于不存在。
+     列表删除、消息工具条、封面格子的删除都要常显。 */
+  .si-del, .msg-tools, .cover-cell-del { opacity: 1; }
 }
 
 @media (max-width: 820px) {

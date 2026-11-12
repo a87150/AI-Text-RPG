@@ -418,8 +418,9 @@ export async function selectStory(storyId) {
   closeNav();
   const empty = $('#pane-empty');
   if (empty) empty.classList.add('hidden');
-  // 表单的搬移由 switchSideView 负责，这里不再重复加载
-  await openSettings({ storyId });
+  // switchSideView 已经按新的 selectedStory 打开过一次设定。
+  // 这里再调一次就是两个并发请求，后回的覆盖先回的，
+     // 表现就是快速点两个故事时看到上一个。
   syncCoverThumb();
 }
 

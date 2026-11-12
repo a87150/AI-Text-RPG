@@ -2113,6 +2113,18 @@ def main():
     # syncHeader 报 ReferenceError，界面误报后端不可用。
     check("设定按钮先声明后使用",
           _uj.index("const settingsBtn = $('#btn-settings')") < _uj.index("if (settingsBtn) {"))
+
+    # 生成完必须立刻重绘。之前只在 finally 的异步回调里重绘，
+    # 而那个回调还有 if (fresh) 前置条件，请求一开小差就永远不画，
+    # 流式期间那个临时容器没有工具栏，于是要刷新才能看到。
+    _cj = (pathlib.Path(__file__).parent / "static" / "js" / "chat.js").read_text(encoding="utf-8")
+    check("生成完立刻重绘", "if (state.session === s) renderMessages();" in _cj)
+    check("重绘排在网络校准之前",
+          _cj.index("if (state.session === s) renderMessages();")
+          < _cj.index("const fresh = await refreshCurrentSession();"))
+    # 切故事只该发一次设定请求
+    check("切故事不再重复请求", "await openSettings({ storyId })" not in _sj)
+
     check("切视图时也算一次", "setBtn.classList.toggle('hidden', storyView)" in _sj)
     check("导入导出是弹窗", 'id="io-modal"' in _html and 'id="io-menu"' not in _html)
     check("弹窗里两个操作都在",
