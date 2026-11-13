@@ -156,6 +156,9 @@ def compress_session(sid, force=False, max_attempts=2):
             summary = model_text(
                 [{"role": "user", "content": prompt}],
                 temperature=0.3 + 0.1 * (attempt - 1),
+                # 压缩是照着原文重组，不是推演。用全局档位会让模型先想一大段，
+                # 白烧 token，还有把思考混进摘要的风险
+                reasoning="low",
             )
         except Exception as exc:
             app.logger.warning("压缩第 %d 次失败：%s", attempt, exc)
