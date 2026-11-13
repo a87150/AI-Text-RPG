@@ -107,8 +107,30 @@ def looks_like_name(name):
 # 它聊到后面就把规则当没看见，建卡这件事得自己做。
 _ADD_CAST_RE = re.compile(
     r"(?:加入角色|新增角色|加个角色|加一个角色|新角色|加个人)"
-    r"[：: ]*【?([^\s，。；,;、【】\[\]]{1,10})")
+    r"[：: ]*【?([^\s。；;【】\[\]]{1,10})")
 
+
+# 一句话里点两个名字时的分隔符。只在拆完每一段都像名字时才采用
+_CAST_SPLIT_RE = re.compile(r"[、,，和与跟及]\s*")
+
+def _clean_name(raw, allow_single=False):
+    """把捕获到的片段洗成名字，洗不出来就返回空。"""
+    nm = str(raw or "").strip()
+    # 剥两层：「我朋友」→「朋友」→ 仍然不是名字，就在下面被筛掉
+    for _ in range(2):
+        for _pre in sorted(_NOT_NAMES | set(_LEAD_STRIP), key=len, reverse=True):
+            if _pre and nm.startswith(_pre):
+                nm = nm[len(_pre):].strip()
+                break
+        nm = re.sub(r"^[吧呢吗啊呀了的]", "", nm).strip()
+    if not nm or nm in _NOT_NAMES:
+        return ""
+    # 名字最多四个字；以动词开头的不是名字。拆分场景额外要求至少两个字：
+    # 「林和平」被「和」拆成「林」「平」，两段都太短，说明拆错了
+    lo = 1 if allow_single else 2
+    if not lo <= len(nm) <= 4 or nm[0] in _VERB_LEAD:
+        return ""
+    return nm if looks_like_name(nm) else ""
 
 def parse_add_cast(text):
     """从用户这句话里拿出要加的名字，不靠模型。
@@ -117,21 +139,21 @@ def parse_add_cast(text):
     """
     out = []
     for m in _ADD_CAST_RE.finditer(str(text or "")):
-        nm = m.group(1).strip()
-        # 剥两层：「我朋友」→「朋友」→ 仍然不是名字，就在下面被筛掉
-        for _ in range(2):
-            for _pre in sorted(_NOT_NAMES | set(_LEAD_STRIP), key=len, reverse=True):
-                if _pre and nm.startswith(_pre):
-                    nm = nm[len(_pre):].strip()
-                    break
-            nm = re.sub(r"^[吧呢吗啊呀了的]", "", nm).strip()
-        if not nm or nm in _NOT_NAMES:
+        raw = m.group(1).strip()
+        # 一句话点两个名字：「新增角色：阿杰和沈知微」。先按分隔符拆，
+        # 拆完每一段都像名字才认——「林和平」这种本身带「和」的名字
+        # 拆出来有一段不像名字，就退回整条，不硬拆
+        parts = [x for x in _CAST_SPLIT_RE.split(raw) if x.strip()]
+        names = [x for x in (_clean_name(x) for x in parts) if x]
+        # 拆不出完整的两段就退回整条：「林和平」被「和」拆成「林」「平」，
+        # 单字不算名字，这时按整条再判一次，它是个正常的三字名
+        if len(parts) < 2 or len(names) != len(parts):
+            names = [x for x in [_clean_name(raw, allow_single=True)] if x]
+        if not names:
             continue
-        # 名字最多四个字；以动词开头的不是名字
-        if len(nm) > 4 or nm[0] in _VERB_LEAD:
-            continue
-        if looks_like_name(nm) and nm not in out:
-            out.append(nm)
+        for nm in names:
+            if nm not in out:
+                out.append(nm)
     return out
 
 def upsert_character(sess, data):
