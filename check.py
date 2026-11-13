@@ -1812,6 +1812,14 @@ def main():
     check("状态提示写明事实上限", "一轮最多三条" in rp_prompts.status_prompt())
     check("写设定时不把占位符当真名",
           "必须叫「{主角}」" not in rp_prompts.build_locked_block("{主角}", ""))
+    # role_chars 是「注入多少给模型」的档位策略，不是存储上限。
+    # 在归一化里截，等于把用户写的设定真删掉，还写回文件救不回来
+    _long_role = "身世与脾气的详细设定。" * 200
+    _s = {"characters": [{"name": "甲", "role": _long_role, "state": "", "history": []}]}
+    rp_characters.ensure_characters(_s)
+    check("角色设定原样保存不被截断",
+          len(_s["characters"][0]["role"]) == len(_long_role),
+          str(len(_s["characters"][0]["role"])))
     check("真名场景照旧钉死", "必须叫「甲」" in rp_prompts.build_locked_block("甲", ""))
     # 生成某个名字时，不能把那个名字锁住
     check("生成 AI 名字时不锁 AI 名字",

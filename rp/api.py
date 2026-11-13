@@ -861,14 +861,14 @@ def api_update_session(sid):
             role = (sess.get("ai_role") or "").strip()
             if not chars:
                 if name:
-                    chars = [{"name": name[:24], "role": role[:400],
+                    chars = [{"name": name[:24], "role": role,
                               "state": "", "history": []}]
                     sess["characters"] = chars
             else:
                 if name:
                     chars[0]["name"] = name[:24]
                 if role:
-                    chars[0]["role"] = role[:400]
+                    chars[0]["role"] = role
         seed_opening(sess)
         save_session(sess)
         sess["context_tokens"] = context_tokens(sess)

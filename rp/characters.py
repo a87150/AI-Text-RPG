@@ -41,7 +41,10 @@ def ensure_characters(sess):
                 continue
             cleaned.append({
                 "name": name,
-                "role": (item.get("role") or "").strip()[:400],
+                # 不截。role_chars 是「注入多少给模型」的档位策略，
+                # 不是存储上限——在这里截等于把用户写的设定真删掉，
+                # 而且截完还写回文件，救不回来
+                "role": (item.get("role") or "").strip(),
                 "state": (item.get("state") or "").strip()[:200],
                 "history": [h for h in (item.get("history") or [])
                             if isinstance(h, str)][-CHARACTER_HISTORY_KEEP:],
