@@ -589,6 +589,18 @@ def main():
     rp_metrics.TOTAL.update(_before)
     rp_metrics._save_totals()
     check("面板显示累计 token", "累计 token" in _ui)
+    # 角色登记的门槛：路人不能占名额。中文人名基本不带「的」，
+    # 带上就是「卖面的老头」这类临时描述，建了卡会挤掉真正的主要角色
+    check("描述性称呼不算人名", not rp_characters.looks_like_name("卖面的老头"))
+    check("穿红衣服的女人不是角色", not rp_characters.looks_like_name("穿红衣服的女人"))
+    check("正常名字仍然算人名",
+          rp_characters.looks_like_name("林姐") and rp_characters.looks_like_name("老陈"))
+    check("登记条件只针对主要角色",
+          "只登记「主要角色」" in rp_prompts.build_rules("我", "normal", "甲"))
+    check("角色扮演规则用同一道门槛",
+          "只登记「主要角色」" in rp_prompts.build_rules("我", "rp", "甲"))
+    check("状态判定不再把路人算进在场",
+          "名单外的人一律不写" in rp_characters.STATE_SYSTEM)
 
     # 21. 事实账本：旧说法让位，不双写
     book_sess = {"turn": 3}
@@ -1503,7 +1515,13 @@ def main():
     _ui63 = (pathlib.Path(__file__).parent / "static" / "js" / "ui.js").read_text(encoding="utf-8")
     check("人物只留一条状况", "['近况'" not in _ui63)
     check("所有角色都有状况行", "rows.push(['状况'" in _ui63)
-    check("状况不再和近况重复", "t !== c.state" in _ui63)
+    check("状况只有当前一条，不再拼此前", "此前：" not in _ui63)
+    # 后端也一样：state 就是 history 最后一条，两行都写等于同一句话喂两遍
+    _blk63 = rp_prompts.build_character_block(
+        [{"name": "甲", "role": "守灯人。", "state": "刚醒", "history": ["刚醒", "睡着了"]}],
+        "", {"present": ["甲"], "away": []})
+    check("角色卡只写一条状态", "｜状态：刚醒" in _blk63 and "近况" not in _blk63, _blk63)
+    check("同一句状态不出现两次", _blk63.count("刚醒") == 1, _blk63)
     check("顶栏那行不再列物品", "['items', '物品']" not in _ui63)
     check("物品进角色弹层", "status.items[name]" in _ui63)
 

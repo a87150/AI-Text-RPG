@@ -878,16 +878,12 @@ export function toggleCharPop(name, anchor) {
     carried = status.items.trim() + '（公共）';
   }
   if (carried) rows.push(['物品', carried]);
-  // 状况统一一条：state 是最近这次变化，history 是之前几次，接起来读，不重复
-  const beats = [];
-  for (const line of (c.history || [])) {
-    const t = String(line || '').trim();
-    if (t && t !== c.state && !beats.includes(t)) beats.push(t);
-  }
+  // 状况只要一条：state 就是当前状态。history 只在它缺失时兜底，
+  // 一起读会把同一句话重复一遍
   // 不能叫 state：模块顶部导入了 state（当前会话），同名会在 TDZ 里把上面的 state.session 弄崩
-  const nowText = String(c.state || '').trim();
-  const tail = beats.length ? '（此前：' + beats.slice(-2).join('；') + '）' : '';
-  rows.push(['状况', (nowText || '还没记下来，模型写了【变化】之后这里会有内容') + tail]);
+  const nowText = String(c.state || '').trim()
+    || String((c.history || []).slice(-1)[0] || '').trim();
+  rows.push(['状况', nowText || '还没记下来，模型写了【变化】之后这里会有内容']);
   if (name === me) rows.unshift(['身份', '你这一局演的就是 TA']);
 
   pop.textContent = '';

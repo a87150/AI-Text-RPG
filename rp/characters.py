@@ -73,6 +73,10 @@ def looks_like_name(name):
     text = str(name or "").strip()
     if not text or is_bad_name(text) or len(text) > 8:
         return False
+    # 「卖面的老头」「穿红衣服的女人」是描述，不是名字。中文人名基本不带「的」，
+    # 带上就是临时称呼——放它建卡会占掉名额，主要角色反而进不来。
+    if "的" in text:
+        return False
     return not re.search(r"[，,。；;：:！？!?\s0-9]", text)
 
 # 用户在消息里直接点名要加的人。靠模型写【新角色】靠不住，
@@ -129,10 +133,11 @@ def upsert_character(sess, data):
 STATE_SYSTEM = (
     '你在给一段故事做状态更新。读正文，只输出 JSON，不要任何解释：'
     '{"changes":[{"name":"名字","state":"40 字以内"}],'    
-    '"present":["现在和主角在同一个地方的人"],'    
-    '"away":["已经分开、不在这个场景里的人"],'    
+    '"present":["现在和主角在同一个地方的角色"],'    
+    '"away":["已经分开、不在这个场景里的角色"],'    
     '"place":"此刻的地点，6 字以内"}'
-    '规则：只写【角色】名单里的名字，名单外的人一律不写。'
+    '规则：present 和 away 只写【角色】名单里的名字。名单外的人一律不写——'
+    '跑堂的、路过的、只露一面的，都不是角色，写进来会占掉名额。'
     'present 和 away 必须把所有人分完，一个不能漏：不在 present 就在 away。'
     '有人走开、跟上、分头行动、换了地点，就要照实改。'
     '不要把不在现场的人写进 present——他们不在这里，不该发言。'
@@ -143,10 +148,11 @@ STATE_SYSTEM = (
 STATE_SYSTEM_EN = (
     'You are updating the state of a story. Read the text and output JSON only: '
     '{"changes":[{"name":"name","state":"under 40 characters"}],'
-    '"present":["people in the same place as the protagonist right now"],'
-    '"away":["people who have left this scene"],'
+    '"present":["characters in the same place as the protagonist right now"],'
+    '"away":["characters who have left this scene"],'
     '"place":"where this is happening, under 6 characters"}'
     'Rules: only use names from the character list. '
+    'Passers-by with no name are not characters; listing them wastes a slot. '
     'present and away must cover everyone exactly once. '
     'If someone leaves, follows, splits off, or the location changes, say so.'
 )

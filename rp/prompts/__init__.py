@@ -171,13 +171,13 @@ def build_character_block(chars, speaker=None, status=None):
             lines.append("◆ 你这一轮演的就是：%s\n%s" % (c["name"], role))
         else:
             lines.append("◆ 在场：%s\n%s" % (c["name"], role))
-        extra = []
-        if c.get("state"):
-            extra.append("此刻：%s" % c["state"])
-        if c.get("history"):
-            extra.append("近况：%s" % "；".join(c["history"][-2:]))
-        if extra:
-            lines.append("｜" + "｜".join(extra))
+        # 只给一条当前状态。state 就是最近这次变化，history 里存的是同一句加上更早的，
+        # 两行都写等于把同一句话喂给模型两遍，白占字数还容易让它以为有两件事
+        state = (c.get("state") or "").strip()
+        if not state and c.get("history"):
+            state = (c["history"][-1] or "").strip()      # 老会话只写过 history
+        if state:
+            lines.append("｜状态：%s" % state)
     if off:
         lines.append("◆ 不在这一场（已经离开，不要让他们出现在这一轮）：%s"
                      % "、".join(c["name"] for c in off))
