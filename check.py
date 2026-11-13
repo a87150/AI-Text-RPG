@@ -1417,8 +1417,11 @@ def main():
     rp_config.save_tier("basic", persist=False)
     _nb = rp_prompts.build_system_prompt(dict(_ws, mode="normal"), None)
     # 一般模式是一整段连贯叙述，没有「每个角色一段」，所以不叠加角色言行
-    check("一般模式只用旁白那份字数",
-          ("%d~%d 字" % (_w["narrator_min"], _w["narrator_max"])) in _nb,
+    # 一般模式是把 rp 拆开的那几段合成一段，字数也该是合计：
+    # 只算旁白的话人物干脆不说话了，等于换个方式写 rp
+    check("一般模式用旁白加角色言行的合计",
+          ("%d~%d 字" % (_w["narrator_min"] + _w["line_min"],
+                          _w["narrator_max"] + _w["line_max"])) in _nb,
           _nb[_nb.find("每次"):][:40])
     # 改设置，规则和尾巴都要跟着变
     rp_config.save_writing({"line_max": 120}, persist=False)
@@ -1427,8 +1430,12 @@ def main():
           ("不超过 %d 字" % (_w["narrator_max"] + 120)) in _bd2)
     _tl = rp_prompts.build_messages(_ws, "甲")[-1]["content"]
     _tl_hi = rp_prompts.input_density(_ws)[1][1]
-    check("尾巴里的上限也跟着降", ("最多 %d 字" % _tl_hi) in _tl, _tl[-120:])
-    check("尾巴上限是密度缩放后的值", _tl_hi >= _w["narrator_max"] + 120, str(_tl_hi))
+    _tl_lo = rp_prompts.input_density(_ws)[1][0]
+    check("尾巴里写了区间两头", ("%d~%d 字" % (_tl_lo, _tl_hi)) in _tl, _tl[-120:])
+    _wn = rp_config.writing()
+    check("尾巴上限等于设置里的合计",
+          _tl_hi == _wn["narrator_max"] + _wn["line_max"],
+          "%s vs %s" % (_tl_hi, _wn["narrator_max"] + _wn["line_max"]))
     rp_config.save_writing({"line_max": _w["line_max"]}, persist=False)
 
     # 53. 一般模式也要认【新角色】【变化】，这两块以前被整段跳过

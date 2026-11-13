@@ -138,15 +138,15 @@ def build_rules(user_name, mode=None, names="", sess=None):
     # DENSITY_HINT 那几句话让模型自己控制往区间的哪一端写。
 
     if mode == "normal":
-        # 一般模式是一整段连贯叙述，没有「每个角色一段」这回事，
-        # 所以只用旁白那份字数。「角色言行」是 rp 模式的量，
-        # 叠进来会让用户设的 300 变成 450
+        # 一般模式是把 rp 里拆开的那几段合成一段：旁白 + 每个角色说的话，
+        # 合起来才是同一段情节。所以字数也要用合计，不是只用旁白那份——
+        # 只算旁白的话，人物干脆不说话了，等于换个方式写 rp
         return render(
             "normal.md",
             user_name=user_name or "用户角色",
             character_names=names or "（暂无）",
-            line_min=narrator_min,
-            line_max=narrator_max,
+            line_min=narrator_min + line_min,
+            line_max=narrator_max + line_max,
             max_characters=w["max_characters"],
             status_block=status_block,
         )
@@ -485,7 +485,10 @@ def build_messages(sess, speaker=None):
             else:
                 messages.append({"role": "assistant", "content": head + content})
     level, (tlo, thi) = input_density(sess)
-    pace = "（这一轮最多 %d 字，写到 %d 字也够；宁短勿凑。）" % (thi, tlo)
+    # 原句是「最多 thi 字，写到 tlo 字也够」：模型照着 tlo 写，用户把下限
+    # 从 50 调到 200、输出几乎没变，因为下限被当成了目标。这里是区间，两头都说清
+    pace = "（这一轮 %d~%d 字：少于 %d 字算没写完，超过 %d 字算替他往下写。）" % (
+        tlo, thi, tlo, thi)
     tail = (TAIL_HINT.get(tier(), "") + CREATIVE_HINT.get(creativity(), "")
             + pace + DENSITY_HINT[level] + STEP_HINT + timeline_hint(sess)
             + cast_hint(sess))
