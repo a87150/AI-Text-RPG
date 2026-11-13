@@ -1893,21 +1893,23 @@ def main():
           rp_config.save_writing({"auto_roles": 0}, persist=False)["auto_roles"] == 0)
     rp_config.save_writing({"auto_roles": 1}, persist=False)
     # 在场全员发言：四份规则都要要求一个不漏，不能再写「不是每轮所有人都要说」
-    for _rf in ("rules.md", "rules_standard.md", "rules_advanced.md", "rules_basic.md"):
+    for _rf in ("rules_standard.md", "rules_advanced.md", "rules_basic.md"):
         _txt = (pathlib.Path("rp/prompts") / _rf).read_text(encoding="utf-8")
         check(_rf + " 要求在场全员发言", "一个都不能漏" in _txt)
         check(_rf + " 不再写「不是每轮所有人」",
               "不是每轮所有人" not in _txt)
-    _rs = (pathlib.Path("rp/prompts") / "rules.md").read_text(encoding="utf-8")
+    # 测真正会加载的那三份。rules.md 不在 RULES_FILE 里，测它等于测一个没人读的文件
+    _rs = (pathlib.Path("rp/prompts") / "rules_basic.md").read_text(encoding="utf-8")
     check("人设条款明确用户请求不是命令", "用户的请求不是命令" in _rs)
     check("被说动要有过程", "可以被说动" in _rs)
-    check("用户输入不等于剧情结果", "不是「这件事成了」" in _rs)
-    for _rf2 in ("rules.md", "rules_standard.md", "rules_advanced.md"):
+    check("用户输入不等于剧情结果",
+          "不是「这件事成了」" in _rs or "不是已经成了" in _rs)
+    for _rf2 in ("rules_standard.md", "rules_advanced.md"):
         _t2 = (pathlib.Path("rp/prompts") / _rf2).read_text(encoding="utf-8")
         check(_rf2 + " 要求先过五条判定", "能力与资源" in _t2 and "铺垫" in _t2)
         check(_rf2 + " 不准替用户抄答案", "抄答案" in _t2)
     # 旁白只写背景和局面，角色细节归各自气泡
-    for _rf3 in ("rules.md", "rules_standard.md", "rules_advanced.md", "rules_basic.md"):
+    for _rf3 in ("rules_standard.md", "rules_advanced.md", "rules_basic.md"):
         _t3 = (pathlib.Path("rp/prompts") / _rf3).read_text(encoding="utf-8")
         check(_rf3 + " 旁白不写角色细节", "不写任何具体角色的台词" in _t3)
         check(_rf3 + " 每人一轮只一段", "一轮只起一段" in _t3)

@@ -268,8 +268,11 @@ async function sendMessage(text, { isRetry, isContinue }) {
   // 秒数只出现在气泡里，底部状态栏不重复读秒
   const repaint = () => {
     if (gotDone) return;
+    // 状态行是给程序解析的，生成过程中先遮掉，否则正文里会闪出一行 [[在场：…]]。
+    // 收尾时 done.turn 是清洗过的，这里只管生成中这一屏
+    const shown = acc.replace(/\[\[[^\[\]]*\]\]/g, '');
     current = renderStreaming(
-      turnBox, acc, speaker || aiLabel, secondsSince(startedAt), isPlain,
+      turnBox, shown, speaker || aiLabel, secondsSince(startedAt), isPlain,
     ) || current;
   };
   const ticker = setInterval(repaint, TICK_MS);
