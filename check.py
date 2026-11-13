@@ -2122,6 +2122,14 @@ def main():
         check("「%s」点名" % _two,
               rp_characters.parse_add_cast(_two) == _want2,
               str(rp_characters.parse_add_cast(_two)))
+    # 顿号是明确的列举符号，优先级高于「和」：名字本身带和时不能先被它拆
+    for _list, _want3 in (("加个角色 张和平、张三", ["张和平", "张三"]),
+                          ("新建角色 张和平、张三、李四", ["张和平", "张三", "李四"]),
+                          ("加个角色 林和平", ["林和平"]),
+                          ("加入角色 阿杰和沈知微", ["阿杰", "沈知微"])):
+        check("列举「%s」" % _list,
+              rp_characters.parse_add_cast(_list) == _want3,
+              str(rp_characters.parse_add_cast(_list)))
     for _good, _want in (("加个角色 老张", ["老张"]),
                          ("加入角色【沈知微】", ["沈知微"]),
                          ("新角色林晚", ["林晚"])):

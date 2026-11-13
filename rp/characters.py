@@ -106,12 +106,14 @@ def looks_like_name(name):
 # 用户在消息里直接点名要加的人。靠模型写【新角色】靠不住，
 # 它聊到后面就把规则当没看见，建卡这件事得自己做。
 _ADD_CAST_RE = re.compile(
-    r"(?:加入角色|新增角色|加个角色|加一个角色|新角色|加个人)"
+    r"(?:加入角色|新增角色|新建角色|加个角色|加一个角色|新角色|加个人)"
     r"[：: ]*【?([^\s。；;【】\[\]]{1,10})")
 
 
-# 一句话里点两个名字时的分隔符。只在拆完每一段都像名字时才采用
-_CAST_SPLIT_RE = re.compile(r"[、,，和与跟及]\s*")
+# 拆名字用的分隔符，分两档。顿号和逗号是明确的列举符号，先用它们；
+# 「和/与/跟/及」在名字里也常见（张和平），只在明确符号拆不出来时才动
+_CAST_STRICT_RE = re.compile(r"[、,，]\s*")
+_CAST_WEAK_RE = re.compile(r"[和与跟及]\s*")
 
 def _clean_name(raw, allow_single=False):
     """把捕获到的片段洗成名字，洗不出来就返回空。"""
@@ -140,10 +142,12 @@ def parse_add_cast(text):
     out = []
     for m in _ADD_CAST_RE.finditer(str(text or "")):
         raw = m.group(1).strip()
-        # 一句话点两个名字：「新增角色：阿杰和沈知微」。先按分隔符拆，
-        # 拆完每一段都像名字才认——「林和平」这种本身带「和」的名字
-        # 拆出来有一段不像名字，就退回整条，不硬拆
-        parts = [x for x in _CAST_SPLIT_RE.split(raw) if x.strip()]
+        # 一句话点两个名字：「新增角色：阿杰和沈知微」。顿号先拆，拆不动
+        # 再用「和」；拆完每一段都像名字才认——「林和平」被「和」拆成
+        # 「林」「平」，两段太短说明拆错，退回整条
+        parts = [x for x in _CAST_STRICT_RE.split(raw) if x.strip()]
+        if len(parts) < 2:
+            parts = [x for x in _CAST_WEAK_RE.split(raw) if x.strip()]
         names = [x for x in (_clean_name(x) for x in parts) if x]
         # 拆不出完整的两段就退回整条：「林和平」被「和」拆成「林」「平」，
         # 单字不算名字，这时按整条再判一次，它是个正常的三字名
