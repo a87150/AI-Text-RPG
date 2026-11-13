@@ -74,6 +74,22 @@ def _str(data, key, limit=0):
 _SAFE_METHODS = frozenset(("GET", "HEAD", "OPTIONS"))
 _LOCAL_HOSTS = frozenset(("127.0.0.1", "localhost", "::1"))
 
+def _same_origin(origin):
+    """来源和这次请求的目标是同一个地址，就算同源。
+
+    只认回环地址是不够的：手机从 192.168.x.x 打开页面，浏览器发 POST 时
+    Origin 就是那个局域网地址本身，那是自己，不是跨站。真正要拦的是
+    别的站点伪造的请求——它们的 Origin 永远是别人的域名。
+    """
+    try:
+        src = (urlsplit(origin).hostname or "").lower()
+        dst = (urlsplit("//" + (request.host or "")).hostname or "").lower()
+    except ValueError:
+        return False
+    if not src:
+        return False
+    return src == dst or src in _LOCAL_HOSTS
+
 @app.before_request
 def _reject_cross_site():
     if request.method in _SAFE_METHODS:
@@ -91,10 +107,8 @@ def _reject_cross_site():
         return jsonify({"error": "拒绝非 JSON 写请求"}), 403
     # 有来源头的话再校一层，作为纵深
     origin = request.headers.get("Origin") or request.headers.get("Referer") or ""
-    if origin:
-        host = (urlsplit(origin).hostname or "").lower()
-        if host not in _LOCAL_HOSTS:
-            return jsonify({"error": "拒绝跨站请求"}), 403
+    if origin and not _same_origin(origin):
+        return jsonify({"error": "拒绝跨站请求"}), 403
     return None
 
 @app.after_request

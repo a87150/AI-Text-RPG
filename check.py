@@ -601,6 +601,14 @@ def main():
           "只登记「主要角色」" in rp_prompts.build_rules("我", "rp", "甲"))
     check("状态判定不再把路人算进在场",
           "名单外的人一律不写" in rp_characters.STATE_SYSTEM)
+    check("状态判定不再把路人算进在场",
+          "名单外的人一律不写" in rp_characters.STATE_SYSTEM)
+    # 局域网访问不是跨站：手机从 192.168.x.x 打开页面，Origin 就是这个地址本身。
+    # 只认回环地址会把正常的手机请求当成伪造，真正该拦的是别人的域名
+    with rp_api.app.test_request_context("/api/x", headers={"Host": "192.168.5.10:5000"}):
+        check("局域网来源算同源", rp_api._same_origin("http://192.168.5.10:5000"))
+        check("回环来源算同源", rp_api._same_origin("http://localhost:5000"))
+        check("外站来源不算同源", not rp_api._same_origin("https://evil.example"))
 
     # 21. 事实账本：旧说法让位，不双写
     book_sess = {"turn": 3}
