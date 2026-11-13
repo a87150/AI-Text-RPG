@@ -462,6 +462,10 @@ window.addEventListener('unhandledrejection', function (e) {
                 <div class="field"><label for="w-summary">剧情摘要字数（压缩时生成，越长越细但越费 token；换模型档位会重置成该档的值）</label><input id="w-summary" type="number" min="150" max="2000" step="50"></div>
               </div>
               <div class="grid2">
+                <div class="field"><label for="w-gen-min">AI 补设定最少字数（角色卡 / 世界观 / 开场白共用；0 = 跟随模型档位）</label><input id="w-gen-min" type="number" min="0" max="800" step="10" placeholder="0"></div>
+                <div class="field"><label for="w-gen-max">AI 补设定最多字数（0 = 跟随模型档位）</label><input id="w-gen-max" type="number" min="0" max="1500" step="10" placeholder="0"></div>
+              </div>
+              <div class="grid2">
                 <div class="field"></div>
               </div>
         <div class="prefs-actions">

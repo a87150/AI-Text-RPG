@@ -1438,6 +1438,23 @@ def main():
     _tl = rp_prompts.build_messages(_ws, "甲")[-1]["content"]
     _tl_hi = rp_prompts.input_density(_ws)[1][1]
     _tl_lo = rp_prompts.input_density(_ws)[1][0]
+    # 设定生成的字数：默认跟着模型档位走，用户设了数字就盖过档位
+    import re as _re
+    def _gen_range():
+        _p = rp_prompts.build_field_prompt("world", world="海边的灯塔")
+        _m = _re.search(r"补全成 (\d+)~(\d+) 字", _p)
+        return (int(_m.group(1)), int(_m.group(2))) if _m else None
+    _backup_gen = (rp_config.writing()["gen_min"], rp_config.writing()["gen_max"])
+    rp_config.save_writing({"gen_min": 0, "gen_max": 0}, persist=False)
+    for _t2, _want4 in (("basic", (120, 180)), ("standard", (240, 360)),
+                        ("advanced", (320, 520))):
+        rp_config.save_tier(_t2, persist=False)
+        check("%s档的设定字数跟着档位" % _t2, _gen_range() == _want4, str(_gen_range()))
+    rp_config.save_writing({"gen_min": 200, "gen_max": 300}, persist=False)
+    rp_config.save_tier("basic", persist=False)
+    check("设了数字就盖过档位", _gen_range() == (200, 300), str(_gen_range()))
+    rp_config.save_writing({"gen_min": _backup_gen[0], "gen_max": _backup_gen[1]},
+                             persist=False)
     check("尾巴里写了区间两头", ("这一轮写 %d~%d 字" % (_tl_lo, _tl_hi)) in _tl, _tl[-120:])
     _wn = rp_config.writing()
     check("尾巴上限等于设置里的合计",
