@@ -11,7 +11,7 @@ import requests
 from flask import Flask
 
 # ============================== 版本 ==============================
-VERSION = "0.90"
+VERSION = "1.00"
 
 # ============================== 模型配置 ==============================
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
@@ -374,15 +374,17 @@ def save_writing(data, persist=True):
                 continue
             lo, hi = WRITING_BOUNDS[key]
             # 下限是 0 的参数（比如自动起角色数）0 是合法值，不能当“没填”跳过
-            if number < 0 and lo > 0:
-                continue
             if number <= 0 and lo > 0:
                 continue
             _writing[key] = max(lo, min(hi, number))
-        if _writing["narrator_min"] > _writing["narrator_max"]:
-            _writing["narrator_max"] = _writing["narrator_min"]
-        if _writing["line_min"] > _writing["line_max"]:
-            _writing["line_max"] = _writing["line_min"]
+        # min 撞上 max 就抬 max：不然提示词里会写出「800~60 字」
+        for _lo_k, _hi_k in (("narrator_min", "narrator_max"),
+                             ("line_min", "line_max"),
+                             ("gen_role_min", "gen_role_max"),
+                             ("gen_world_min", "gen_world_max"),
+                             ("gen_open_min", "gen_open_max")):
+            if _writing[_lo_k] > _writing[_hi_k]:
+                _writing[_hi_k] = _writing[_lo_k]
         snapshot = dict(_writing)
     if persist:
         persist_settings()

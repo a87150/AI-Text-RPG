@@ -76,19 +76,6 @@ def clip(text, limit, tail="…"):
             return head[:pos + 1] + tail
     return head.rstrip("，、, ") + tail
 
-def role_range(cap=None):
-    """AI 生成角色卡的目标字数，落在这一档实际能注入的上限之内。
-
-    写超了就白写：超出 role_chars 的部分在注入时会被 clip 掉，
-    用户看到的是一张卡，模型看到的是前半张。
-    """
-    if cap is None:
-        d = gen_defaults()
-        return d["gen_role_min"], d["gen_role_max"]
-    if not cap:
-        return 320, 520
-    return max(60, int(cap * 0.6)), max(120, int(cap * 0.9))
-
 _GEN_GROUP = {"character": "role", "user_role": "role",
               "world": "world", "opening": "open"}
 
