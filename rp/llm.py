@@ -199,12 +199,28 @@ def sse(obj):
 
 THINK_RE = re.compile(r"<think(?:ing)?>.*?</think(?:ing)?>", re.S | re.I)
 
+# 模型有时候不写 <thinking> 标签，直接把分析过程当正文交上来：
+# 「用户想让我写一个故事背景……让我想想需要什么……等等，重新读一下」。
+# 这类输出以第一人称分析开头，最后才给结果。
+_THINK_HEAD = re.compile(
+    r"^\s*(?:用户想让我|用户想要|用户希望|我需要|让我想想|让我再|我们先|首先我"
+    r"|好的[，,]\s*(?:我|让我|先)|嗯[，,]\s*(?:我|让)|等等[，,]|重新读一下|再读一遍)",
+    re.M)
+
 def strip_thinking(text):
     if not text:
         return ""
     t = THINK_RE.sub("", text).strip()
     # 推理字段常在正文前带一段分隔线，去掉
-    return re.sub(r"^(?:[-*_]{3,}[ \t]*\n+)+", "", t).strip()
+    t = re.sub(r"^(?:[-*_]{3,}[ \t]*\n+)+", "", t).strip()
+    if not _THINK_HEAD.match(t):
+        return t
+    # 命中分析口吻：找最后一个「X：」式标题，取它后面那段当正文。
+    # 找不到标题就不猜，原样返回，交给 validate 判长度和口吻
+    marks = list(re.finditer(r"(?:故事背景|背景|世界观|设定正文)\s*[:：]", t, re.M))
+    if marks:
+        return t[marks[-1].end():].strip()
+    return t
 
 # 模型常把状态写成裸 JSON 而不是带标签，或者标签只写了一半；这些都会漏进正文
 _LEAK_BLOCK = re.compile(r"<StatusBlock>.*?(?:</StatusBlock>|$)", re.S | re.I)

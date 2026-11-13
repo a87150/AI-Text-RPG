@@ -2114,6 +2114,16 @@ def main():
     check("真名字还是能建卡",
           rp_characters.upsert_character({"characters": [], "user_name": "", "ai_name": ""},
                                         {"name": "林姐"}) is not None)
+    # 模型有时不写 <thinking> 标签就把分析过程当正文交上来
+    _raw = ("用户想让我写一个故事背景。让我想想需要什么：我需要先定时代。"
+            "故事背景：老小区六楼的一套两居室，客厅的沙发塌了一角。")
+    check("带标题的自言自语被剥掉",
+          rp_llm.strip_thinking(_raw).startswith("老小区六楼"),
+          rp_llm.strip_thinking(_raw)[:40])
+    check("正常正文不动",
+          rp_llm.strip_thinking("老小区六楼的一套两居室。") == "老小区六楼的一套两居室。")
+    check("带标签的思考照旧剥",
+          rp_llm.strip_thinking("<thinking>想半天</thinking>正文") == "正文")
     check("没点名就不猜", rp_characters.parse_add_cast("你好呀") == [])
     # 分隔符是可选的，「加个角色我」里的「我」会被当成名字建卡，占满上限。
     # 代词、虚词、动词开头、超过四个字的，一律不当名字

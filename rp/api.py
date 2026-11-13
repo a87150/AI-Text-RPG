@@ -37,6 +37,13 @@ from .context import (
     context_info, context_tokens, total_tokens,
 )
 from .llm import completion_events, extract_json, sse, strip_thinking
+
+# 这些词出现在正文里，说明模型把分析过程当结果交上来了。一个不算——
+# 设定里本来就可能写「他需要」；两个以上基本就是在自言自语。
+# strip_thinking 能剥掉带「故事背景：」标题的那种，剥不掉的在这里退回重试。
+_THINK_MARKS = ("让我想想", "我需要", "等等，", "让我再想", "重新读一下",
+                "用户想让我", "从上下文来看", "好吧，我")
+
 from .prompts import (
     FIELD_TASKS, build_field_prompt, build_messages, build_system_prompt,
     clean_generated, ensure_original_kept, input_density,
@@ -1304,6 +1311,8 @@ def api_enhance():
             body = body.strip('"“”「」『』').strip()[:8]
         if len(body) < min_len:
             return "内容太短（%d 字）" % len(body)
+        if not is_name and sum(1 for m in _THINK_MARKS if m in body) >= 2:
+            return "写了分析过程，只要设定正文"
         parsed["text"] = body
         return None
 
