@@ -15,7 +15,7 @@ import os
 import threading
 import time
 
-from .config import BASE_DIR
+from .config import BASE_DIR, DATA_DIR
 
 LOG_DIR = os.environ.get("LT_LOG_DIR") or os.path.join(BASE_DIR, "logs")
 
@@ -37,6 +37,30 @@ LAST = {
 # 累计：这一会话问过多少次、花了多少
 TOTAL = {"calls": 0, "prompt_tokens": 0, "completion_tokens": 0,
          "cached_tokens": 0, "cost": 0.0, "ms": 0}
+# 累计要跨重启：只放内存的话，一重启面板就全变横杠，
+# 用户想问的「总共花了多少」直接查不到。
+TOTAL_FILE = os.path.join(DATA_DIR, "totals.json")
+
+def _load_totals():
+    try:
+        with open(TOTAL_FILE, encoding="utf-8") as f:
+            saved = json.load(f)
+    except Exception:
+        return
+    if not isinstance(saved, dict):
+        return
+    for key in TOTAL:
+        value = saved.get(key)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            TOTAL[key] = value
+
+def _save_totals():
+    try:
+        with open(TOTAL_FILE, "w", encoding="utf-8") as f:
+            json.dump(TOTAL, f, ensure_ascii=False)
+    except Exception:
+        pass        # 统计写不进去不能耽误聊天
+
 
 
 KEEP_DAYS = 14          # 一天一个文件，单日实测 400KB 左右，两周就是一个上限
@@ -110,6 +134,9 @@ def end(session_id, ok=True, **extra):
     t0 = slot.get("t0")
     total = int((time.perf_counter() - t0) * 1000) if t0 else 0
     LAST["total_ms"] = total
+    if t0:
+        TOTAL["ms"] += total
+    _save_totals()
     note("chat.done", sid=session_id, ok=ok, total_ms=total,
          first_token_ms=LAST["first_token_ms"],
          prompt_chars=LAST["prompt_chars"], **extra)
@@ -129,7 +156,11 @@ def record(usage, model=""):
     TOTAL["cached_tokens"] += hit
     if LAST["cost"]:
         TOTAL["cost"] = round(TOTAL["cost"] + LAST["cost"]["total"], 6)
+    _save_totals()
     note("chat.usage", model=LAST["model"], usage=usage, cost=LAST["cost"])
+
+_load_totals()
+
 
 def snapshot():
     """面板要读的数字。"""

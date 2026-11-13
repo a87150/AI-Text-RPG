@@ -517,7 +517,7 @@ export function renderContextDetail() {
   const inTok = (st.usage && st.usage.prompt_tokens) || 0;
   const outTok = (st.usage && st.usage.completion_tokens) || 0;
   const core = document.createElement('div');
-  core.className = 'ctx-rows one';
+  core.className = 'ctx-rows';
   core.appendChild(mkRow('本轮请求', reqChars
     ? fmtNumber(reqChars) + ' 字' + (inTok ? '（约 ' + fmtNumber(inTok) + ' token）' : '')
     : '还没发过'));
@@ -526,13 +526,24 @@ export function renderContextDetail() {
   }
   box.appendChild(core);
 
+  // token 用量单独一组：本轮是这一次的，累计是落盘的，重启也不清零
+  const tot = st.total || {};
+  const tok = document.createElement('div');
+  tok.className = 'ctx-rows';
+  tok.appendChild(mkRow('本轮 token', (inTok || outTok)
+    ? '入 ' + fmtNumber(inTok) + ' · 出 ' + fmtNumber(outTok) : '还没发过'));
+  tok.appendChild(mkRow('累计 token', tot.calls
+    ? tot.calls + ' 次 · 入 ' + fmtNumber(tot.prompt_tokens)
+      + ' · 出 ' + fmtNumber(tot.completion_tokens) : '—'));
+  box.appendChild(tok);
+
   // 三、耗时拆成两段：卡在 prefill 还是卡在 decode，看这两个数就够了
   const ttft = st.first_token_ms || 0;
   const totalMs = st.total_ms || 0;
   const decodeMs = st.decode_ms || (totalMs > ttft ? totalMs - ttft : 0);
   const speed = (decodeMs > 0 && outTok) ? Math.round(outTok / (decodeMs / 1000)) : 0;
   const time = document.createElement('div');
-  time.className = 'ctx-rows one';
+  time.className = 'ctx-rows';
   time.appendChild(mkRow('首字等待', ttft ? fmtNumber(ttft) + ' ms' : '—'));
   time.appendChild(mkRow('生成速度', speed
     ? speed + ' token/s（' + fmtNumber(outTok) + ' 出 / ' + fmtNumber(decodeMs) + ' ms）' : '—'));
@@ -617,9 +628,6 @@ export function renderContextDetail() {
     low.appendChild(mkRow('上轮费用', st.cost
       ? '$' + st.cost.total.toFixed(6) : '未配单价'));
     const tot = st.total || {};
-    low.appendChild(mkRow('累计', tot.calls
-      ? tot.calls + ' 次 · ' + fmtNumber(tot.prompt_tokens) + ' 入 / '
-        + fmtNumber(tot.completion_tokens) + ' 出 · $' + (tot.cost || 0).toFixed(6) : '—'));
     more.appendChild(low);
     box.appendChild(more);
 

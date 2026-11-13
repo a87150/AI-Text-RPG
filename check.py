@@ -574,6 +574,21 @@ def main():
           "保留上限" in _ui and "保留最近" not in _ui)
     check("面板写明占用口径不含 system 模板", "不含 system 模板" in _ui)
     check("面板摆出 system+历史 的加数", "系统 + 历史" in _ui)
+    # 累计用量必须落盘：只放内存的话，重启后面板全是横杠，
+    # 「总共用了多少 token」这个问题就永远答不上来
+    _before = dict(rp_metrics.TOTAL)
+    rp_metrics.TOTAL["calls"] = 7
+    rp_metrics.TOTAL["prompt_tokens"] = 1234
+    rp_metrics._save_totals()
+    rp_metrics.TOTAL["calls"] = 0
+    rp_metrics.TOTAL["prompt_tokens"] = 0
+    rp_metrics._load_totals()
+    check("累计用量能跨重启读回",
+          rp_metrics.TOTAL["calls"] == 7 and rp_metrics.TOTAL["prompt_tokens"] == 1234,
+          str(rp_metrics.TOTAL))
+    rp_metrics.TOTAL.update(_before)
+    rp_metrics._save_totals()
+    check("面板显示累计 token", "累计 token" in _ui)
 
     # 21. 事实账本：旧说法让位，不双写
     book_sess = {"turn": 3}
