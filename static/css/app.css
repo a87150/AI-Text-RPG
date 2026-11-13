@@ -267,11 +267,13 @@ body.story-view #btn-search { display: none; }
 .story-item .si-del { align-self: center; }
 
 /* 点「AI 帮我完善设定」时浮出来，写完再开始 */
-/* 收到屏幕中间偏下、固定宽度：铺满整行时文字行长太宽，读起来累；
-   高度按内容撑，但留够写字的空地 */
+/* 固定宽度收窄：铺满整行时文字行长太宽，读起来累。
+   居中用左右等距 + margin-inline:auto，不用 left:50% + translateX(-50%)——
+   那种写法依赖父级 padding 对称、也不吃 transform 被别处覆盖的亏，
+   而这层是 .story-pane 的绝对定位子元素，左右各留 26px 就是正的 */
 .idea-pop {
-  position: absolute; left: 50%; bottom: 76px; transform: translateX(-50%);
-  width: min(520px, calc(100% - 48px));
+  position: absolute; left: 26px; right: 26px; bottom: 76px;
+  width: auto; max-width: 520px; margin-inline: auto;
   max-height: calc(100% - 130px); overflow-y: auto;
   z-index: 6;
   display: flex; flex-direction: column; gap: 10px;
@@ -1046,7 +1048,7 @@ body.story-view #btn-search { display: none; }
   #story-pane #settings-form { max-width: none; }
   .field-head { flex-wrap: wrap; }
   .pick-list { grid-template-columns: 1fr; max-height: 40vh; }
-  .idea-pop { width: calc(100% - 24px); bottom: 12px; max-height: calc(100% - 90px); padding: 16px 16px 12px; }
+  .idea-pop { left: 12px; right: 12px; width: auto; max-width: none; bottom: 12px; max-height: calc(100% - 90px); padding: 16px 16px 12px; }
   .composer { padding: 8px 12px; }
 
   .messages { padding: 12px; }
