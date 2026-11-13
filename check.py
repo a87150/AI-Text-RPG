@@ -1106,8 +1106,15 @@ def main():
         return rp_prompts.build_messages(sess, "甲")[-1]["content"]
 
     check("极短时要求别替用户往下写", "别替我把后面几步走完" in _tail_of(_sess("我点头。")))
-    check("长段时要求不复述", "不要复述我刚写过的动作" in _tail_of(_sess("我推开门，抬手挡了一下灯，转身把包扔在椅子上，走过去拉开窗帘。")))
-    check("中等时不多加节奏要求", "别替我把后面几步走完" not in _tail_of(_sess("我把外套挂在门边，问他今晚还走不走。")))
+    check("长段时要求接着往下写",
+          "接着写接下来的反应和后果" in _tail_of(_sess(
+              "我推开门，抬手挡了一下灯，转身把包扔在椅子上，走过去拉开窗帘。")))
+    # 三档的推进量提示各不相同：短句收着写，中等对齐，长段跟上
+    check("长段时要跟上跨度",
+          "跟上这个跨度" in _tail_of(_sess(
+              "我推开门，抬手挡了一下灯，转身把包扔在椅子上，走过去拉开窗帘。")))
+    check("中等时要求同跨度对齐",
+          "按同样的跨度往下接" in _tail_of(_sess("我把外套挂在门边，问他今晚还走不走。")))
 
     check("没有时间就不提时间", "上一轮结束时是" not in _tail_of(_sess("我点头。")))
     check("有时间就把上一轮的时间写进去", "上一轮结束时是「深夜」" in _tail_of(_sess("我点头。", "深夜")))
@@ -1431,7 +1438,7 @@ def main():
     _tl = rp_prompts.build_messages(_ws, "甲")[-1]["content"]
     _tl_hi = rp_prompts.input_density(_ws)[1][1]
     _tl_lo = rp_prompts.input_density(_ws)[1][0]
-    check("尾巴里写了区间两头", ("%d~%d 字" % (_tl_lo, _tl_hi)) in _tl, _tl[-120:])
+    check("尾巴里写了区间两头", ("这一轮写 %d~%d 字" % (_tl_lo, _tl_hi)) in _tl, _tl[-120:])
     _wn = rp_config.writing()
     check("尾巴上限等于设置里的合计",
           _tl_hi == _wn["narrator_max"] + _wn["line_max"],
@@ -1915,7 +1922,7 @@ def main():
         _tailn = rp_prompts.build_messages(_sn, "")[-1]["content"]
         check("%d 人同场时尾巴和 rules 的合计一致" % _nn,
               ("不超过 %d 字" % _want[1]) in _spn
-              and ("这一轮 %d~%d 字" % _want) in _tailn,
+              and ("这一轮写 %d~%d 字" % _want) in _tailn,
               str(_want))
     check("真名场景照旧钉死", "必须叫「甲」" in rp_prompts.build_locked_block("甲", ""))
     # 生成某个名字时，不能把那个名字锁住

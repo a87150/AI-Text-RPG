@@ -285,8 +285,9 @@ def build_system_prompt(sess, speaker=None, parts_out=None):
     # 额外要求（sess["rules"]）是写设定时用的提示词，不进这里。
     # 故事推进时拿着它只会跟「写法」抢位置，真正要生效的地方是 _extra_block。
     _density, _ = input_density(sess)
-    _tail = chr(10).join(x for x in (DENSITY_HINT.get(_density, ""), STEP_HINT,
-                                  timeline_hint(sess)) if x)
+    _tail = chr(10).join(x for x in (DENSITY_HINT.get(_density, ""),
+                                     STEP_HINT.get(_density, ""),
+                                     timeline_hint(sess)) if x)
     add("rules", "【写法】" + "\n" + build_rules(user_name, mode, names, sess)
         + (("\n\n" + _tail) if _tail else ""))
     return ("\n" + "\n").join(parts)
@@ -415,14 +416,26 @@ def input_density(sess):
         return "thick", (int(lo), int(hi))
     return "normal", (int(lo), int(hi))
 
-# 强模型会把一轮写成一场完整的戏：铺景、对话、转折、收束一气写完。
-# 用户还没接话，故事就翻篇了——这条把它按住
-STEP_HINT = ("（这一轮只往前挪一小步：一个动作、一段对话或一个反应就收住。"
-             "别跨场景、别跳时间，也别把几件事一次办完。）")
+# 推进量跟着用户这一轮的输入走，不是一个固定值。
+# 原来这里是一句恒定的「只往前挪一小步」，不管用户写了一句还是一整段：
+# 用户连推十二步，模型也只回一个反应就收住，读起来像卡住了。
+# 短输入才该收——那是用户自己只走了一步。
+STEP_HINT = {
+    "thin": ("（我这一轮只写了一个动作。别替我把后面几步走完："
+             "只写眼前这一个反应就收住，剩下的留给我接。）"),
+    "normal": ("（我这一轮写了一小段。你按同样的跨度往下接：一个动作配一个反应，"
+               "别只回半句就停，也别把后面好几步一次走完。）"),
+    "thick": ("（我这一轮写了好几件事，时间在往前走。跟上这个跨度："
+              "该发生的让它发生，该接的话接上，别只回我一个反应就停住。"
+              "但别跨场景、别跳时段。）"),
+}
 
 DENSITY_HINT = {
-    "thin": "（我这一句很短。别替我把后面几步走完：只写眼前这一个反应，剩下的留给我接。）",
-    "thick": "（我这段写得细。只写角色的反应和场景的变化，不要复述我刚写过的动作。）",
+    # thin 不再重复 STEP_HINT 的意思，改成一句只说长度的话
+    "thin": "（我这一句很短，别写成长篇。）",
+    # thick 原来是「不要复述我刚写过的动作」，模型连提都不敢提，
+    # 读起来像它没看见用户干了什么。改成要求衔接而不是回避
+    "thick": "（我这段写完了，就停在那儿。你从这里往下接，接着写接下来的反应和后果。）",
     "normal": "",
 }
 
@@ -495,10 +508,9 @@ def build_messages(sess, speaker=None):
         thi = _w2["narrator_max"] + _w2["line_max"] * _n
     # 原句是「最多 thi 字，写到 tlo 字也够」：模型照着 tlo 写，用户把下限
     # 从 50 调到 200、输出几乎没变，因为下限被当成了目标。这里是区间，两头都说清
-    pace = "（这一轮 %d~%d 字：少于 %d 字算没写完，超过 %d 字算替他往下写。）" % (
-        tlo, thi, tlo, thi)
+    pace = "（这一轮写 %d~%d 字。这是篇幅要求，不是情节量——"            "写多长由你定，但该发生的别省。）" % (tlo, thi)
     tail = (TAIL_HINT.get(tier(), "") + CREATIVE_HINT.get(creativity(), "")
-            + pace + DENSITY_HINT[level] + STEP_HINT + timeline_hint(sess)
+            + pace + DENSITY_HINT[level] + STEP_HINT[level] + timeline_hint(sess)
             + cast_hint(sess))
     if tail:
         # 格式要求写在 system 里离生成点太远，小模型容易忘；补在最后一条 user 尾巴上
