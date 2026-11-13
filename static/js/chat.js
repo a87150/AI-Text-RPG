@@ -358,7 +358,7 @@ async function sendMessage(text, { isRetry, isContinue }) {
             });
           }
           if (ev.status) { s.status = ev.status; updateStatusCard(ev.status); }
-          s.context_chars = ev.context_chars;
+          s.context_tokens = ev.context_tokens;
           if (ev.context) s.context = ev.context;
           updateSub();
           setAiStatus('已完成', 'ok');

@@ -466,7 +466,7 @@ export function renderContextDetail() {
     box.innerHTML = '<div class="char-empty">还没有选择故事。</div>';
     return;
   }
-  const c = s.context || { used: s.context_chars || 0, limit: 0 };
+  const c = s.context || { used: s.context_tokens || 0, limit: 0 };
   const used = c.used || 0;
   const limit = c.limit || 0;
   const pct = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
@@ -497,45 +497,34 @@ export function renderContextDetail() {
     return el;
   };
 
-  // 一、上下文占用：这里量的是会话数据，和下面「本轮请求」不是一个口径
+  // 一、上下文占用：会话数据 + system 模板，就是这一轮真正要发出去的量
   const head = document.createElement('div');
   head.className = 'ctx-head';
   head.innerHTML = '<b>' + fmtNumber(used) + '</b> / ' + fmtNumber(limit)
-    + ' 字<span class="ctx-pct">' + pct + '%</span>';
+    + ' token<span class="ctx-pct">' + pct + '%</span>';
   const meter = document.createElement('div');
+  // 到八成就会压缩，所以八成既是警告线，也是实际能用到的天花板
   meter.className = 'ctx-meter' + (pct >= 95 ? ' full' : (pct >= 80 ? ' warn' : ''));
   const fill = document.createElement('i');
   fill.style.width = pct + '%';
   meter.appendChild(fill);
   box.append(head, meter,
-    mkNote('会话里的对话与设定，不含 system 模板。到上限会自动压缩。'));
+    mkNote('会话数据加 system 模板一起算，到八成自动压缩。'));
 
-  // 二、真实请求体：一直是 system + 历史，把加数摆出来就不会觉得三个数字打架
-  const reqChars = st.prompt_chars || 0;
-  const sysChars = st.system_chars || (d && d.chars ? d.chars.system : 0);
-  const histChars = Math.max(0, reqChars - sysChars);
+  // 二、上轮真实用量：模型自己报的数，和上面的估算对得上才说明没算错
   const inTok = (st.usage && st.usage.prompt_tokens) || 0;
   const outTok = (st.usage && st.usage.completion_tokens) || 0;
+  // 上轮是模型自己报的数，累计是落盘的。和上面的估算对得上，才说明没算错
+  const tot = st.total || {};
   const core = document.createElement('div');
   core.className = 'ctx-rows';
-  core.appendChild(mkRow('本轮请求', reqChars
-    ? fmtNumber(reqChars) + ' 字' + (inTok ? '（约 ' + fmtNumber(inTok) + ' token）' : '')
+  core.appendChild(mkRow('上轮真实', inTok
+    ? '入 ' + fmtNumber(inTok) + ' · 出 ' + fmtNumber(outTok)
     : '还没发过'));
-  if (reqChars) {
-    core.appendChild(mkRow('系统 + 历史', fmtNumber(sysChars) + ' + ' + fmtNumber(histChars)));
-  }
-  box.appendChild(core);
-
-  // token 用量单独一组：本轮是这一次的，累计是落盘的，重启也不清零
-  const tot = st.total || {};
-  const tok = document.createElement('div');
-  tok.className = 'ctx-rows';
-  tok.appendChild(mkRow('本轮 token', (inTok || outTok)
-    ? '入 ' + fmtNumber(inTok) + ' · 出 ' + fmtNumber(outTok) : '还没发过'));
-  tok.appendChild(mkRow('累计 token', tot.calls
+  core.appendChild(mkRow('累计 token', tot.calls
     ? tot.calls + ' 次 · 入 ' + fmtNumber(tot.prompt_tokens)
       + ' · 出 ' + fmtNumber(tot.completion_tokens) : '—'));
-  box.appendChild(tok);
+  box.appendChild(core);
 
   // 三、耗时拆成两段：卡在 prefill 还是卡在 decode，看这两个数就够了
   const ttft = st.first_token_ms || 0;
@@ -558,7 +547,7 @@ export function renderContextDetail() {
     .sort((a, b) => b.v - a.v);
   if (segs.length) {
     const sysTotal = segs.reduce((n, x) => n + x.v, 0) || 1;
-    box.appendChild(mkSub('系统提示词构成 · ' + fmtNumber(sysTotal) + ' 字'));
+    box.appendChild(mkSub('系统提示词构成 · ' + fmtNumber(sysTotal) + ' token'));
     const bar = document.createElement('div');
     bar.className = 'ctx-seg';
     const legend = document.createElement('div');
@@ -568,7 +557,7 @@ export function renderContextDetail() {
       const piece = document.createElement('i');
       piece.style.width = (seg.v / sysTotal * 100) + '%';
       piece.style.background = color;
-      piece.title = seg.name + ' ' + fmtNumber(seg.v) + ' 字';
+      piece.title = seg.name + ' ' + fmtNumber(seg.v) + ' token';
       bar.appendChild(piece);
       const item = document.createElement('span');
       const dot = document.createElement('i');

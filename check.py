@@ -96,7 +96,7 @@ def main():
     created = client.post("/api/sessions", json={}).get_json()
     sid = created["id"]
     check("创建会话返回完整上下文统计",
-          created["context"]["limit"] == lt.MAX_CONTEXT_CHARS
+          created["context"]["limit"] == lt.MAX_CONTEXT_TOKENS
           and created["context"]["keep_recent"] == lt.KEEP_RECENT_MESSAGES,
           created.get("context"))
 
@@ -109,8 +109,8 @@ def main():
           [m["role"] for m in sess["messages"]] == ["assistant"],
           sess["messages"])
     check("上下文用量与实际内容一致",
-          sess["context"]["used"] == lt.context_chars(sess),
-          (sess["context"]["used"], lt.context_chars(sess)))
+          sess["context"]["used"] == rp_context.total_tokens(sess),
+          (sess["context"]["used"], rp_context.total_tokens(sess)))
 
     # 2. 回归：消息列表为空时，首条用户消息必须落盘
     empty = client.post("/api/sessions", json={}).get_json()
@@ -560,8 +560,8 @@ def main():
     _parts = dbg.get("system_parts") or {}
     check("面板能拆出系统提示词分段", bool(_parts), str(sorted(_parts)))
     check("分段之和约等于 system 全文",
-          abs(sum(_parts.values()) - len(dbg["system"])) <= 2 * max(1, len(_parts)),
-          str((sum(_parts.values()), len(dbg["system"]))))
+          abs(sum(_parts.values()) - dbg["tokens"]) <= 3 * max(1, len(_parts)),
+          str((sum(_parts.values()), dbg["tokens"])))
     check("写法块能单独量出来", _parts.get("rules", 0) > 0, str(_parts.get("rules")))
     # 三个字数口径各算各的：占用（会话数据）、本轮请求（system+历史）、系统构成。
     # 面板混着说就会自相矛盾，所以措辞也一起钉住
@@ -572,8 +572,8 @@ def main():
           "首字等待" in _ui and "生成速度" in _ui)
     check("保留条数写成上限而不是实际条数",
           "保留上限" in _ui and "保留最近" not in _ui)
-    check("面板写明占用口径不含 system 模板", "不含 system 模板" in _ui)
-    check("面板摆出 system+历史 的加数", "系统 + 历史" in _ui)
+    check("面板写明占用口径含 system 模板", "会话数据加 system 模板" in _ui)
+    check("面板给出上轮真实用量", "上轮真实" in _ui)
     # 累计用量必须落盘：只放内存的话，重启后面板全是横杠，
     # 「总共用了多少 token」这个问题就永远答不上来
     _before = dict(rp_metrics.TOTAL)
@@ -1262,7 +1262,7 @@ def main():
         _cs["messages"] = _cmsgs
         _cs["turn"] = 10
         rp_storage.save_session(_cs)
-        _chars = rp_context.context_chars(_cs)
+        _chars = rp_context.context_tokens(_cs)
         check("短消息几十条时字符远没到上限", _chars < rp_config.writing()["context_limit"],
               str(_chars))
         check("条数超了历史能带的量", len(_cmsgs) > rp_config.tier_limits()["history_msgs"])
@@ -1282,7 +1282,7 @@ def main():
         check("游标落在用户发言上",
               _after["messages"][int(_after["compressed_upto"])].get("role") == "user",
               _after["messages"][int(_after["compressed_upto"])].get("role"))
-        check("压缩后字符变少", rp_context.context_chars(_after) < _chars)
+        check("压缩后字符变少", rp_context.context_tokens(_after) < _chars)
         check("刚压完不会重复压", rp_context.compress_session(_cs["id"]) is False)
         check("没有白调第二次模型", len(_calls) == 1, str(len(_calls)))
         # 摘要要进 system 提示，否则等于没留

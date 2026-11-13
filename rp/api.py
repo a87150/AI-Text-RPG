@@ -33,7 +33,7 @@ from .config import (
     tier, tier_context, tier_keep, tier_limits, writing, VERSION,
 )
 from .context import (
-    background_compress, build_summary_prompt, compress_session, context_chars,
+    background_compress, build_summary_prompt, compress_session, context_tokens,
     context_info,
 )
 from .llm import completion_events, extract_json, sse, strip_thinking
@@ -133,7 +133,7 @@ def api_config():
         "model": model,
         "mode": mode_of(),
         "writing": conf,
-        "max_context_chars": conf["context_limit"],
+        "max_context_tokens": conf["context_limit"],
         "keep_recent": conf["keep_recent"],
         "max_chat_attempts": MAX_CHAT_ATTEMPTS,
         "max_enhance_attempts": MAX_ENHANCE_ATTEMPTS,
@@ -392,7 +392,7 @@ def api_create_session():
     _bind_story(sess, story)
     seed_opening(sess)
     save_session(sess)
-    sess["context_chars"] = context_chars(sess)
+    sess["context_tokens"] = context_tokens(sess)
     sess["context"] = context_info(sess)
     return jsonify(sess)
 
@@ -598,7 +598,7 @@ def api_get_session(sid):
     sess = load_session(sid)
     if not sess:
         return jsonify({"error": "会话不存在"}), 404
-    sess["context_chars"] = context_chars(sess)
+    sess["context_tokens"] = context_tokens(sess)
     sess["context"] = context_info(sess)
     if sess.get("story_id"):
         sess["story"] = load_story(sess["story_id"])
@@ -871,7 +871,7 @@ def api_update_session(sid):
                     chars[0]["role"] = role[:400]
         seed_opening(sess)
         save_session(sess)
-        sess["context_chars"] = context_chars(sess)
+        sess["context_tokens"] = context_tokens(sess)
         sess["context"] = context_info(sess)
         return jsonify(sess)
 
@@ -1013,7 +1013,7 @@ def api_rewind(sid):
             return jsonify({"error": "索引超出范围"}), 400
         _rewind_to(sess, index)
         save_session(sess)
-        sess["context_chars"] = context_chars(sess)
+        sess["context_tokens"] = context_tokens(sess)
         sess["context"] = context_info(sess)
         return jsonify(sess)
 
@@ -1045,7 +1045,7 @@ def api_branch(sid):
     cloned["created_at"] = now
     cloned["updated_at"] = now
     save_session(cloned)
-    cloned["context_chars"] = context_chars(cloned)
+    cloned["context_tokens"] = context_tokens(cloned)
     cloned["context"] = context_info(cloned)
     return jsonify(cloned)
 
@@ -1075,7 +1075,7 @@ def api_commit_partial(sid):
             existing = (last.get("content") or "").strip()
             if existing and (existing.startswith(content) or content.startswith(existing)):
                 out = dict(sess)
-                out["context_chars"] = context_chars(sess)
+                out["context_tokens"] = context_tokens(sess)
                 out["context"] = context_info(sess)
                 return jsonify(out)
         msg = {"role": "assistant", "content": content, "partial": True}
@@ -1090,7 +1090,7 @@ def api_commit_partial(sid):
             return jsonify({"error": "这个对话在别处更新过，已重新读取",
                             "conflict": True}), 409
         out = dict(sess)
-        out["context_chars"] = context_chars(sess)
+        out["context_tokens"] = context_tokens(sess)
         out["context"] = context_info(sess)
         return jsonify(out)
 
@@ -1121,7 +1121,7 @@ def api_edit_message(sid):
             msg["content"] = text
             msg["edited"] = True    # 界面上留个记号：后面的回复是对着旧话写的
         save_session(sess)
-        sess["context_chars"] = context_chars(sess)
+        sess["context_tokens"] = context_tokens(sess)
         sess["context"] = context_info(sess)
         return jsonify(sess)
 
@@ -1155,7 +1155,7 @@ def api_clear_session(sid):
         sess["summary"] = ""
         sess.pop("compress", None)  # 清空对话后压缩统计也归零
         save_session(sess)
-    return jsonify({"ok": True, "context_chars": context_chars(sess),
+    return jsonify({"ok": True, "context_tokens": context_tokens(sess),
                     "context": context_info(sess)})
 
 @app.post("/api/sessions/<sid>/character-pick")
@@ -1196,7 +1196,7 @@ def api_compress_session(sid):
         "ok": ok,
         "summary": (sess or {}).get("summary", ""),
         "message_count": len((sess or {}).get("messages") or []),
-        "context_chars": context_chars(sess) if sess else 0,
+        "context_tokens": context_tokens(sess) if sess else 0,
         "context": context_info(sess),
     })
 
@@ -1383,7 +1383,7 @@ def api_opening(sid):
             yield sse({
                 "type": "done",
                 "attempts": attempts_used,
-                "context_chars": context_chars(sess),
+                "context_tokens": context_tokens(sess),
                 "context": context_info(sess),
                 "message_count": len(sess.get("messages") or []),
                 "turn": turn,
@@ -1634,7 +1634,7 @@ def api_chat():
                 s2 = load_session(sid)
                 if s2 is not None:
                     _commit_turn(s2, turn, use_rp, resume=bool(resume_from))
-                    context = context_chars(s2)
+                    context = context_tokens(s2)
                     count = len(s2.get("messages") or [])
                     characters = ensure_characters(s2)
                 else:
@@ -1643,7 +1643,7 @@ def api_chat():
             yield sse({
                 "type": "done",
                 "title": (s2 or {}).get("title", ""),
-                "context_chars": context,
+                "context_tokens": context,
                 "context": context_info(s2),
                 "message_count": count,
                 "attempts": attempts_used,

@@ -12,10 +12,10 @@ from rp.characters import (  # noqa: F401
 )
 from rp.config import (  # noqa: F401
     DATA_DIR, DEFAULT_MODEL, KEEP_RECENT_MESSAGES, MAX_CHAT_ATTEMPTS,
-    MAX_CONTEXT_CHARS, MAX_ENHANCE_ATTEMPTS, MAX_OPENING_ATTEMPTS,
+    MAX_CONTEXT_TOKENS, MAX_ENHANCE_ATTEMPTS, MAX_OPENING_ATTEMPTS,
     MIN_CHAT_CHARS, OLLAMA_HOST, PROVIDERS, SETTINGS_PATH,
 )
-from rp.context import background_compress, compress_session, context_chars, context_info  # noqa: F401
+from rp.context import background_compress, compress_session, context_tokens, context_info  # noqa: F401
 from rp.llm import completion_events, model_call  # noqa: F401
 from rp.prompts import build_messages, build_system_prompt  # noqa: F401
 from rp.storage import load_session, save_session  # noqa: F401

@@ -20,7 +20,7 @@ OLLAMA_TAGS_URL = OLLAMA_HOST + "/api/tags"
 DEFAULT_MODEL = "dmtx/qwen3.5-9b-abliterated:latest"
 
 # ============================== 参数 ==============================
-MAX_CONTEXT_CHARS = 8000
+MAX_CONTEXT_TOKENS = 8000
 KEEP_RECENT_MESSAGES = 16
 KEEP_RECENT_MAX = 60        # 高级档不限条数，压缩后最多留这么多
 REQUEST_TIMEOUT = (15, 300)

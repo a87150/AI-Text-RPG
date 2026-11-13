@@ -7,38 +7,71 @@ from .characters import role_labels
 from . import metrics
 from .config import MAX_ENHANCE_ATTEMPTS, app, tier_limits, writing
 from .llm import model_text
-from .prompts import build_context_debug, build_summary_prompt
+from .prompts import _tokens, build_context_debug, build_summary_prompt
 from .snapshots import snapshot
 from .storage import (
     IO_TIMING, get_session_lock, load_session, save_session,
 )
 
-def context_chars(sess):
+# 到上限八成压。真等撞线才压，那一轮已经是贴着 num_ctx 在跑，
+# 最早的历史被 Ollama 悄悄丢了，还没摘要兜着
+COMPRESS_AT = 0.80
+
+
+
+
+def context_tokens(sess):
+    """这一局会发给模型的量，按 token 估。
+
+    以前数的是字符，跟模型窗口不是一个量纲：中文一个字约 0.65 个 token，
+    英文能到 1.3，同一套阈值在两种语言下差一倍。统一成 token 才对得上 num_ctx，
+    也才看得出「还剩多少余量」。
+    """
     total = 0
     for key in ("user_role", "ai_role", "world", "rules", "summary"):
-        total += len(sess.get(key) or "")
+        total += _tokens(sess.get(key) or "")
     for c in sess.get("characters") or []:
         if isinstance(c, dict):
-            total += len(c.get("name") or "") + len(c.get("role") or "")
-            total += len(c.get("state") or "")
-            total += sum(len(h) for h in (c.get("history") or []) if isinstance(h, str))
+            total += _tokens(c.get("name") or "") + _tokens(c.get("role") or "")
+            # 只算会进 prompt 的那一条。state 就是 history 的最后一条，
+            # 全量 history 早就不发给模型了，算进来是虚报
+            state = (c.get("state") or "").strip()
+            if not state and c.get("history"):
+                state = (c["history"][-1] or "")
+            total += _tokens(state)
     # 世界书、事实账本、状态行也会随消息一起发给模型，
     # 不计进来的话阈值会偏低，真正的 prompt 可能撞破模型窗。
     for e in sess.get("lore") or []:
         if isinstance(e, dict):
-            total += len(e.get("content") or "") + len(e.get("keys") or "")
+            total += _tokens(e.get("content") or "") + _tokens(e.get("keys") or "")
     for f in sess.get("facts") or []:
         if isinstance(f, dict):
-            total += len(f.get("fact") or "")
+            total += _tokens(f.get("fact") or "")
     st = sess.get("status")
     if isinstance(st, dict):
         for v in st.values():
-            total += len(v) if isinstance(v, str) else 0
+            if isinstance(v, str):
+                total += _tokens(v)
     # 已经写进摘要的那些不再计：它们不再发给模型，算进去会让阈值永远撞线
     start = int(sess.get("compressed_upto") or 0)
     for m in (sess.get("messages") or [])[start:]:
-        total += len(m.get("content") or "") + len(m.get("narrator") or "")
+        total += _tokens(m.get("content") or "") + _tokens(m.get("narrator") or "")
     return total
+
+def total_tokens(sess):
+    """真正会发出去的量：会话数据 + system 模板。
+
+    context_tokens 只数会话自己带的内容，system 那两千 token 是另外算的。
+    压缩阈值和面板的占用条都该看这个总数——只看会话数据会以为还早，
+    实际上已经贴着 num_ctx 在跑了。
+    """
+    body = context_tokens(sess)
+    try:
+        system = build_context_debug(sess).get("system") or ""
+    except Exception:
+        return body
+    return body + _tokens(system)
+
 
 def context_info(sess):
     """上下文用量与压缩统计，供前端展示。"""
@@ -50,7 +83,7 @@ def context_info(sess):
     except Exception:      # 检查器坏了也不能挡住正常对话
         debug = {}
     return {
-        "used": context_chars(sess),
+        "used": total_tokens(sess),
         "limit": writing()["context_limit"],
         "debug": debug,
         "messages": len(msgs),
@@ -90,7 +123,7 @@ def compress_session(sid, force=False, max_attempts=2):
         # 于是压缩不触发、早期消息被 build_messages 悄悄截掉，连摘要都没有
         hist_cap = tier_limits()["history_msgs"]
         too_many = bool(hist_cap) and len(messages) > hist_cap
-        if not force and context_chars(sess) <= limit and not too_many:
+        if not force and total_tokens(sess) <= limit * COMPRESS_AT and not too_many:
             return False
         snapshot(sess, "compress")     # 压缩不可逆，先留退路
         # 切点对齐到一条用户发言，否则留下的大半是半截对话，

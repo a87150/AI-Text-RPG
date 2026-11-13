@@ -234,8 +234,9 @@ def build_system_prompt(sess, speaker=None, parts_out=None):
     def add(label, text):
         parts.append(text)
         if parts_out is not None:
-            # +2 是 join 时补的空行，差这一点不影响占比条观感
-            parts_out[label] = parts_out.get(label, 0) + len(text) + 2
+            # 记 token 不记字数：占比条要跟模型窗口对齐，中文 0.65、英文 1.3，
+            # 按字数画出来的比例会骗人
+            parts_out[label] = parts_out.get(label, 0) + _tokens(text) + 1
 
     if mode == "rp" and speaker:
         # 先把身份钉死，再说别的。缺这一句模型就退化成全知叙述者，谁都不像

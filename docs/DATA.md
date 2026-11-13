@@ -195,7 +195,7 @@ cover 只存文件名，路径由 DATA_DIR 推，换机器能跑。cover_history
     {"type": "thinking", "chars": 128}
     {"type": "delta", "content": "正文增量", "chars": 42}
     {"type": "retry", "attempt": 2, "max": 3, "reason": "内容太短"}
-    {"type": "done", "attempts": 1, "context_chars": 1830, "context": {...},
+    {"type": "done", "attempts": 1, "context_tokens": 1830, "context": {...},
      "message_count": 4, "turn": 3, "characters": [...]}
     {"type": "error", "message": "生成失败", "attempts": 3, "raw": "..."}
 
