@@ -1444,17 +1444,27 @@ def main():
         _p = rp_prompts.build_field_prompt("world", world="海边的灯塔")
         _m = _re.search(r"补全成 (\d+)~(\d+) 字", _p)
         return (int(_m.group(1)), int(_m.group(2))) if _m else None
-    _backup_gen = (rp_config.writing()["gen_min"], rp_config.writing()["gen_max"])
-    rp_config.save_writing({"gen_min": 0, "gen_max": 0}, persist=False)
-    for _t2, _want4 in (("basic", (120, 180)), ("standard", (240, 360)),
-                        ("advanced", (320, 520))):
+    _GEN_KEYS = ("gen_role_min", "gen_role_max", "gen_world_min",
+                 "gen_world_max", "gen_open_min", "gen_open_max")
+    _backup_gen = {k: rp_config.writing()[k] for k in _GEN_KEYS}
+    rp_config.save_writing({k: 0 for k in _GEN_KEYS}, persist=False)
+    # 三类各一组，跟随档位时的比例是 1 : 1.67 : 1.33（初级 120~180 / 200~300 / 160~240）
+    for _t2, _want4 in (("basic", ((120, 180), (200, 300), (160, 240))),
+                        ("standard", ((240, 360), (400, 600), (320, 480))),
+                        ("advanced", ((320, 520), (533, 866), (426, 693)))):
         rp_config.save_tier(_t2, persist=False)
-        check("%s档的设定字数跟着档位" % _t2, _gen_range() == _want4, str(_gen_range()))
-    rp_config.save_writing({"gen_min": 200, "gen_max": 300}, persist=False)
+        _got = (rp_prompts.gen_range("character"), rp_prompts.gen_range("world"),
+                rp_prompts.gen_range("opening"))
+        check("%s档三类设定字数跟着档位" % _t2, _got == _want4, str(_got))
+    # 只设世界观，不该影响角色卡和开场白
     rp_config.save_tier("basic", persist=False)
-    check("设了数字就盖过档位", _gen_range() == (200, 300), str(_gen_range()))
-    rp_config.save_writing({"gen_min": _backup_gen[0], "gen_max": _backup_gen[1]},
-                             persist=False)
+    rp_config.save_writing({"gen_world_min": 300, "gen_world_max": 400}, persist=False)
+    check("只覆盖世界观",
+          (rp_prompts.gen_range("world"), rp_prompts.gen_range("character"),
+           rp_prompts.gen_range("opening"))
+          == ((300, 400), (120, 180), (160, 240)))
+    check("世界观 prompt 用覆盖值", _gen_range() == (300, 400), str(_gen_range()))
+    rp_config.save_writing(_backup_gen, persist=False)
     check("尾巴里写了区间两头", ("这一轮写 %d~%d 字" % (_tl_lo, _tl_hi)) in _tl, _tl[-120:])
     _wn = rp_config.writing()
     check("尾巴上限等于设置里的合计",

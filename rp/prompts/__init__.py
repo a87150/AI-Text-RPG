@@ -87,6 +87,31 @@ def role_range(cap=None):
         return 320, 520
     return max(60, int(cap * 0.6)), max(120, int(cap * 0.9))
 
+# 三类设定的相对篇幅：角色卡是基准（受 role_chars 限制），
+# 世界观要铺时代地点规则，开场白要留出第一段互动，都比一张卡长。
+# 初级档 role_range 是 120~180，乘出来正好 200~300 和 160~240。
+_GEN_GROUP = {"character": "role", "user_role": "role",
+              "world": "world", "opening": "open"}
+_GEN_SCALE = {"role": (1, 1), "world": (5, 3), "open": (4, 3)}
+
+def gen_range(field):
+    """AI 补设定的目标字数，三类各一组设置。
+
+    没设（0）就跟模型档位走：档位决定人设能注入多少字，写超了注入时会被
+    截断，所以默认区间本来就该贴着档位。
+    """
+    group = _GEN_GROUP.get(field, "world")
+    w = writing()
+    lo = int(w.get("gen_%s_min" % group) or 0)
+    hi = int(w.get("gen_%s_max" % group) or 0)
+    if lo and hi:
+        return lo, hi
+    rlo, rhi = role_range()
+    num, den = _GEN_SCALE.get(group, (1, 1))
+    if num == den:
+        return rlo, rhi
+    return rlo * num // den, rhi * num // den
+
 def active_facts(sess, limit=None):
     """已确立且没被推翻的事实，按档位取最近若干条。"""
     cap = limit if limit is not None else tier_limits()["facts"]
@@ -640,7 +665,7 @@ def build_field_prompt(field, name="", user_name="", ai_name="", user_role="",
                        opening="", lore=None, mode="", ai_state=""):
     if field == "character":
         who = (name or "").strip() or "AI 角色"
-        lo, hi = role_range()
+        lo, hi = gen_range("character")
         task = ("把「%s」写成 %d~%d 字的角色卡：外貌、性格、说话方式与口头禅、"
                 "和用户角色的关系与张力。用户写过的这个人设要合并进结果，不要另起一段重复。"
                 % (who, lo, hi))
@@ -652,11 +677,7 @@ def build_field_prompt(field, name="", user_name="", ai_name="", user_role="",
         # CAST_TAIL 里本来就有花括号（{主角}）
         # 用户没设（0）就跟模型档位走：档位决定人设注入多少字，写超了会被截断，
         # 所以默认区间本来就该贴着档位。设了具体数字就用用户的
-        _w = writing()
-        _lo = int(_w.get("gen_min") or 0)
-        _hi = int(_w.get("gen_max") or 0)
-        if not _lo or not _hi:
-            _lo, _hi = role_range()
+        _lo, _hi = gen_range(field)
         task = task.replace("{lo}", str(_lo)).replace("{hi}", str(_hi))
     if (user_name or "").strip():
         # 生成设定时主角（= 用户扮演的角色）只给占位符。

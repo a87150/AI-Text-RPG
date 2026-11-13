@@ -48,7 +48,7 @@ _THINK_MARKS = ("让我想想", "我需要", "等等，", "让我再想", "重�
 
 from .prompts import (
     FIELD_TASKS, build_field_prompt, build_messages, build_system_prompt,
-    clean_generated, ensure_original_kept, input_density,
+    clean_generated, ensure_original_kept, gen_range, input_density,
 )
 from . import covers as cover_store
 from .stories import (
@@ -142,6 +142,7 @@ def api_config():
         "model": model,
         "mode": mode_of(),
         "writing": conf,
+        "gen_follow": _gen_follow(),
         "max_context_tokens": conf["context_limit"],
         "keep_recent": conf["keep_recent"],
         "max_chat_attempts": MAX_CHAT_ATTEMPTS,
@@ -202,6 +203,12 @@ def _reclaim_context():
     return freed
 
 
+def _gen_follow():
+    """三类设定「跟随档位」时各是多少，前端拿它填输入框的 placeholder。"""
+    return {g: list(gen_range(f)) for f, g in
+            (("character", "role"), ("world", "world"), ("opening", "open"))}
+
+
 @app.post("/api/writing")
 def api_writing():
     data = request.get_json(silent=True) or {}
@@ -223,7 +230,7 @@ def api_writing():
         save_creativity(data["creativity"])
     return jsonify({"writing": conf, "mode": mode_of(),
                     "reasoning_effort": reasoning_effort(), "tier": tier(),
-                    "creativity": creativity()})
+                    "creativity": creativity(), "gen_follow": _gen_follow()})
 
 @app.post("/api/writing/reset")
 def api_writing_reset():

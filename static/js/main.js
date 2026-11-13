@@ -260,11 +260,27 @@ function fillWritingForm() {
     ['#w-line-min', 'line_min'], ['#w-line-max', 'line_max'],
     ['#w-context', 'context_limit'], ['#w-keep', 'keep_recent'],
     ['#w-chars', 'max_characters'], ['#w-summary', 'summary_chars'],
-  ['#w-gen-min', 'gen_min'], ['#w-gen-max', 'gen_max'],
+  ['#w-gen-role-min', 'gen_role_min'], ['#w-gen-role-max', 'gen_role_max'],
+  ['#w-gen-world-min', 'gen_world_min'], ['#w-gen-world-max', 'gen_world_max'],
+  ['#w-gen-open-min', 'gen_open_min'], ['#w-gen-open-max', 'gen_open_max'],
   ]) {
     const el = $(id);
-    if (el) el.value = w[key] == null ? '' : w[key];
+    // 设定字数 0 表示「跟随档位」，显示成空让 placeholder 说话
+    if (el) el.value = w[key] == null || w[key] === 0 ? '' : w[key];
   }
+  // 留空的设定字数显示跟随档位时的实际值，切档位能看出差别
+  const follow = (state.conf && state.conf.gen_follow) || {};
+  for (const [id, group] of [
+    ['#w-gen-role-min', 'role'], ['#w-gen-role-max', 'role'],
+    ['#w-gen-world-min', 'world'], ['#w-gen-world-max', 'world'],
+    ['#w-gen-open-min', 'open'], ['#w-gen-open-max', 'open'],
+  ]) {
+    const el = $(id);
+    const span = follow[group];
+    if (!el || !span) continue;
+    el.placeholder = '跟随 ' + span[id.endsWith('-min') ? 0 : 1];
+  }
+
   const font = $('#prefs-font');
   if (font) font.value = localStorage.getItem(FONT_KEY) || 'md';
   syncLanguageSeg();
@@ -407,7 +423,9 @@ async function saveWriting(quiet = false) {
     ['#w-line-min', 'line_min'], ['#w-line-max', 'line_max'],
     ['#w-context', 'context_limit'], ['#w-keep', 'keep_recent'],
     ['#w-chars', 'max_characters'], ['#w-summary', 'summary_chars'],
-  ['#w-gen-min', 'gen_min'], ['#w-gen-max', 'gen_max'],
+  ['#w-gen-role-min', 'gen_role_min'], ['#w-gen-role-max', 'gen_role_max'],
+  ['#w-gen-world-min', 'gen_world_min'], ['#w-gen-world-max', 'gen_world_max'],
+  ['#w-gen-open-min', 'gen_open_min'], ['#w-gen-open-max', 'gen_open_max'],
   ]) {
     const el = $(id);
     const raw = el ? String(el.value || '').trim() : '';
@@ -428,6 +446,7 @@ async function saveWriting(quiet = false) {
         ? res.reasoning_supported : (state.conf && state.conf.reasoning_supported),
       tier: res.tier || currentTier(),
       creativity: res.creativity || currentCreativity(),
+      gen_follow: res.gen_follow || (state.conf && state.conf.gen_follow),
     });
     fillWritingForm();
     syncTierSeg();

@@ -98,8 +98,10 @@ WRITING_DEFAULTS = {
     "keep_recent": 16,
     "max_characters": 4,
     "auto_roles": 1,        # AI 补设定时自己起几个角色；0 = 不起，用 {主角} 指代
-    "gen_min": 0,          # AI 补设定的目标字数下限；0 = 跟随模型档位
-    "gen_max": 0,          # 上限；0 = 跟随档位。这是提示词里给模型的量
+    # AI 补设定的目标字数，三类各一组；0 = 跟随模型档位（role_range）
+    "gen_role_min": 0, "gen_role_max": 0,     # 角色卡
+    "gen_world_min": 0, "gen_world_max": 0,   # 世界观
+    "gen_open_min": 0, "gen_open_max": 0,     # 开场白
     "summary_chars": 400,
     "language": "zh",       # 正文语言：zh 中文 / en English
 }
@@ -114,8 +116,9 @@ WRITING_BOUNDS = {
     "keep_recent": (4, 60),
     "max_characters": (1, 10),
     "auto_roles": (0, 4),
-    "gen_min": (0, 800),
-    "gen_max": (0, 1500),
+    "gen_role_min": (0, 800), "gen_role_max": (0, 1500),
+    "gen_world_min": (0, 800), "gen_world_max": (0, 2000),
+    "gen_open_min": (0, 800), "gen_open_max": (0, 1500),
     "summary_chars": (150, 2000),
 }
 _writing = dict(WRITING_DEFAULTS)
