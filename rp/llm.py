@@ -81,9 +81,10 @@ def model_text(messages, temperature=0.8, reasoning=None):
         raise RuntimeError("Ollama 返回 %s：%s" % (resp.status_code, resp.text[:300]))
     data = resp.json()
     msg = data["choices"][0]["message"]
-    # 有些本地模型把正文整段写进 reasoning，content 是空的
-    content = (msg.get("content") or "").strip() \
-        or (msg.get("reasoning_content") or msg.get("reasoning") or "").strip()
+    # 只认 content。reasoning 是草稿不是结果，拿它顶替等于把思考写进摘要和状态
+    content = (msg.get("content") or "").strip()
+    if not content and (msg.get("reasoning_content") or msg.get("reasoning")):
+        raise RuntimeError("模型只输出了思考，没有正文")
     return strip_thinking(content)
 
 def iter_sse_parts(resp, usage=None):
@@ -143,9 +144,20 @@ def completion_events(messages, base_temp, max_attempts, min_chars=0,
         usage = {}
         think_chars = 0
         content_chars = 0
+        # 重试光调温度不够：模型不知道上次错在哪，会用同样的方式再错一遍。
+        # 把失败原因写回最后一条用户消息，等于把返工理由摆在它眼前。
+        msgs = messages
+        if attempt > 1 and last_error:
+            msgs = [dict(m) for m in messages]
+            for _m in reversed(msgs):
+                if _m.get("role") == "user":
+                    _m["content"] = ((_m.get("content") or "")
+                                     + chr(10) + chr(10) + "（上一次没通过：%s。"
+                                     "这次直接写正文，不要复述任务要求，不要自问自答。）" % last_error)
+                    break
         try:
             resp = model_call(
-                messages,
+                msgs,
                 temperature=min(1.5, base_temp + RETRY_TEMP_STEP * (attempt - 1)),
                 stream=True,
                 extra=extra,
@@ -174,11 +186,12 @@ def completion_events(messages, base_temp, max_attempts, min_chars=0,
             continue
 
         last_raw = strip_thinking("".join(collected)).strip()
+        # 不能拿 reasoning 顶替正文。推理模型的 reasoning 是草稿——
+        # 「用户要求写角色卡，我需要……任务说……」，它不是结果。
+        # 预算不够时正文会是空的，那时候该重试，不该把草稿存进设定。
         if not last_raw:
-            # content 为空时用 reasoning 兜底：部分模型只往这里写正文
-            last_raw = strip_thinking("".join(reasonings)).strip()
-        if not last_raw:
-            last_error = "模型返回空内容"
+            last_error = ("模型只输出了思考，没有正文"
+                          if reasonings else "模型返回空内容")
             continue
         # 量长度要剥掉状态行：二十字正文配一百字 [[在场：…]]，
         # 按原文长度算就合格了，短回复被放过去。这里只影响判定，

@@ -41,10 +41,16 @@ from .llm import completion_events, extract_json, sse, strip_thinking
 # 这些词出现在正文里，说明模型把分析过程当结果交上来了。一个不算——
 # 设定里本来就可能写「他需要」；两个以上基本就是在自言自语。
 # strip_thinking 能剥掉带「故事背景：」标题的那种，剥不掉的在这里退回重试。
-_THINK_MARKS = ("让我想想", "我需要", "等等，", "让我再想", "重新读一下",
-                "用户想让我", "用户要求", "用户想要", "用户希望", "从上下文来看",
-                "好吧，我", "注意格式", "字数要控制", "检查事实", "让我构思",
-                "内容：", "可以。", "不行，", "要求说")
+# 一类是「只可能出现在分析里」的词，正文绝不会写，命中一个就够——
+# 模型复述任务时会写「任务说」「本次任务」「用户说」，写设定时不会。
+_THINK_HARD = ("用户说", "任务说", "本次任务", "用户要求", "用户想让我",
+               "用户想要", "用户希望", "让我想想", "让我构思", "重新读一下",
+               "再读一遍", "不要复述", "只输出正文", "不要加戏", "别加戏",
+               "检查事实", "字数要控制", "这似乎是", "别的部分", "需要注意的是")
+# 另一类在正文里偶尔也可能出现（「他需要」和「我需要」只差一个字），
+# 得凑够两个才判，不然会误杀正常输出
+_THINK_SOFT = ("我需要", "等等，", "让我再想", "从上下文来看", "好吧，我",
+               "内容：", "可以。", "不行，", "要求说", "注意格式")
 
 from .prompts import (
     FIELD_TASKS, build_field_prompt, build_messages, build_system_prompt,
@@ -1313,8 +1319,9 @@ def api_enhance():
             body = body.strip('"“”「」『』').strip()[:8]
         if len(body) < min_len:
             return "内容太短（%d 字）" % len(body)
-        if not is_name and sum(1 for m in _THINK_MARKS if m in body) >= 2:
-            return "写了分析过程，只要设定正文"
+        if not is_name and (any(m in body for m in _THINK_HARD)
+                            or sum(1 for m in _THINK_SOFT if m in body) >= 2):
+            return "写了分析过程，只要正文"
         parsed["text"] = body
         return None
 
@@ -1324,12 +1331,14 @@ def api_enhance():
             # 设定整理要贴着用户原话走，温度压住发散
             base_temp=0.45,
             max_attempts=MAX_ENHANCE_ATTEMPTS,
-            extra={"max_tokens": 800},
+            # 800 装不下「思考 + 正文」：推理模型的思考先花掉预算，正文就空了。
+            # 最长一类是世界观 866 字，正文约 1000 token，留够思考的余量
+            extra={"max_tokens": 8000},
             validate=validate,
             with_reasoning=True,
-            # 设定生成是「照着用户的话重组」，不需要推演。开着推理时
-            # deepseek 会把分析过程写进 content，整段自言自语被当正文存下来
-            reasoning="none",
+            # deepseek 不认 none，传了等于没传，推理关不掉，只能压低档位：
+            # 思考短一点，剩下的预算才够写正文
+            reasoning="low",
         ):
             if ev["type"] == "final":
                 parsed["attempts"] = ev["attempts"]
