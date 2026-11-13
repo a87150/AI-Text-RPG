@@ -28,6 +28,30 @@ def default_character(sess):
         "history": [],
     }
 
+# 模型会把「无」「暂无」当成名字写出来，这些不是人
+_BAD_NAMES = {"无", "没有", "暂无", "未知", "不详", "空", "none", "null",
+              "-", "—", "（无）", "无。", "无人物", "路人", "众人"}
+
+_NOT_NAMES = {
+    "我", "你", "他", "她", "它", "咱们", "我们", "你们",
+    "他们", "她们", "自己", "主角", "别人", "对方", "大家",
+    "朋友", "路人", "众人", "老头", "女人", "男人", "家伙",
+    "吧", "呢", "吗", "啊", "呀", "了", "的", ""
+}
+
+def is_bad_name(name):
+    text = str(name or "").strip()
+    return text.lower() in _BAD_NAMES or text in _NOT_NAMES
+
+# 代词和虛词不是人名。分隔符是可选的，所以「加个角色我说两句」里的「我」
+# 会被当成名字建卡——用户设了角色上限，这些假人把名额占满了。
+
+# 名字开头不是这些字。中文人名很少以动词或指示词开头，「说两句」这种
+# 从动词起头的其实是用户话的残片，不是人
+_VERB_LEAD = "说想要会能是在就也都还又只走去来问看让给拿放做叫喊答回点站坐转"
+# 剥掉开头的连接词，和开头的代词
+_LEAD_STRIP = "叫做是为把让给么这那以及和跟"
+
 def ensure_characters(sess):
     """归一化角色表；老会话没有角色表时用 ai_name/ai_role 兜底成一个。"""
     chars = sess.get("characters")
@@ -37,7 +61,10 @@ def ensure_characters(sess):
             if not isinstance(item, dict):
                 continue
             name = (item.get("name") or "").strip()[:24]
-            if not name:
+            # 这里是角色表唯一的归一化入口，四条写入路径（新建、更新、
+            # 保存设定、兜底建卡）最后都过这儿。模型会把「我」当成角色名
+            # 交上来，存进去就占掉一个位置，而且用户删了下次还会回来
+            if not name or is_bad_name(name):
                 continue
             cleaned.append({
                 "name": name,
@@ -63,30 +90,6 @@ def next_speaker(sess):
 
 def advance_turn(sess):
     sess["turn"] = int(sess.get("turn") or 0) + 1
-
-# 模型会把「无」「暂无」当成名字写出来，这些不是人
-_BAD_NAMES = {"无", "没有", "暂无", "未知", "不详", "空", "none", "null",
-              "-", "—", "（无）", "无。", "无人物", "路人", "众人"}
-
-_NOT_NAMES = {
-    "我", "你", "他", "她", "它", "咱们", "我们", "你们",
-    "他们", "她们", "自己", "主角", "别人", "对方", "大家",
-    "朋友", "路人", "众人", "老头", "女人", "男人", "家伙",
-    "吧", "呢", "吗", "啊", "呀", "了", "的", ""
-}
-
-def is_bad_name(name):
-    text = str(name or "").strip()
-    return text.lower() in _BAD_NAMES or text in _NOT_NAMES
-
-# 代词和虛词不是人名。分隔符是可选的，所以「加个角色我说两句」里的「我」
-# 会被当成名字建卡——用户设了角色上限，这些假人把名额占满了。
-
-# 名字开头不是这些字。中文人名很少以动词或指示词开头，「说两句」这种
-# 从动词起头的其实是用户话的残片，不是人
-_VERB_LEAD = "说想要会能是在就也都还又只走去来问看让给拿放做叫喊答回点站坐转"
-# 剥掉开头的连接词，和开头的代词
-_LEAD_STRIP = "叫做是为把让给么这那以及和跟"
 
 def looks_like_name(name):
     """从在场名单里捞人用：像人名才建卡，免得把整句话塞进角色列。"""

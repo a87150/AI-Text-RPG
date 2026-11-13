@@ -2101,6 +2101,16 @@ def main():
         check("「%s」建不了卡" % _pn,
               rp_characters.upsert_character(_sp, {"name": _pn}) is None
               and rp_characters.ensure_characters(_sp) == [])
+    # 角色表唯一的归一化入口要挡住代词：四条写入路径（新建、更新、保存设定、
+    # 兜底建卡）最后都过 ensure_characters，一处挡住全都干净
+    _sd = {"characters": [{"name": "我", "role": "主角"},
+                       {"name": "乙", "role": "守灯人"},
+                       {"name": "你"}, {"name": "林姐"}]}
+    check("脏角色表里的人和虚词被清掉",
+          [c["name"] for c in rp_characters.ensure_characters(_sd)] == ["乙", "林姐"],
+          str([c["name"] for c in rp_characters.ensure_characters(_sd)]))
+    check("全是虚词就剩空表",
+          rp_characters.ensure_characters({"characters": [{"name": "我"}]}) == [])
     check("真名字还是能建卡",
           rp_characters.upsert_character({"characters": [], "user_name": "", "ai_name": ""},
                                         {"name": "林姐"}) is not None)
