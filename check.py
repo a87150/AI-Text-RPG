@@ -1901,6 +1901,22 @@ def main():
     check("长输入的字数上限跟用户设的上限走",
           _d2 == "thick" and _sp2[1] > _ws2["narrator_max"] * 0.5,
           str((_d2, _sp2, _ws2["narrator_max"])))
+    # 尾巴和 rules 必须同一个口径：rules 的合计按「旁白 + 每人一份」算，
+    # 尾巴只给单人量的话，人数越多两处差得越远，模型会挑窄的那个听
+    _wn2 = rp_config.writing()
+    for _nn in (1, 2, 3):
+        _sn = {"mode": "rp", "user_name": "甲",
+               "characters": [{"name": x, "role": ""} for x in ["乙", "丙", "丁"][:_nn]],
+               "lore": [], "status": {}, "turn": 3,
+               "messages": [{"role": "user", "content": "我抬头看了他一眼，问他走不走。"}]}
+        _want = (_wn2["narrator_min"] + _wn2["line_min"] * _nn,
+                 _wn2["narrator_max"] + _wn2["line_max"] * _nn)
+        _spn = rp_prompts.build_system_prompt(_sn, "")
+        _tailn = rp_prompts.build_messages(_sn, "")[-1]["content"]
+        check("%d 人同场时尾巴和 rules 的合计一致" % _nn,
+              ("不超过 %d 字" % _want[1]) in _spn
+              and ("这一轮 %d~%d 字" % _want) in _tailn,
+              str(_want))
     check("真名场景照旧钉死", "必须叫「甲」" in rp_prompts.build_locked_block("甲", ""))
     # 生成某个名字时，不能把那个名字锁住
     check("生成 AI 名字时不锁 AI 名字",

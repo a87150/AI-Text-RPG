@@ -485,6 +485,14 @@ def build_messages(sess, speaker=None):
             else:
                 messages.append({"role": "assistant", "content": head + content})
     level, (tlo, thi) = input_density(sess)
+    if mode_for(sess) == "rp":
+        # 尾巴和 rules 必须同一个口径。rules 里的合计上限按「旁白 + 每人一份」
+        # 算（narrator_max + line_max × 人数），而 input_density 只给单人量；
+        # 两处说法不一致时模型挑窄的那个听，人数越多差得越远
+        _n = max(1, len(ensure_characters(sess)))
+        _w2 = writing()
+        tlo = _w2["narrator_min"] + _w2["line_min"] * _n
+        thi = _w2["narrator_max"] + _w2["line_max"] * _n
     # 原句是「最多 thi 字，写到 tlo 字也够」：模型照着 tlo 写，用户把下限
     # 从 50 调到 200、输出几乎没变，因为下限被当成了目标。这里是区间，两头都说清
     pace = "（这一轮 %d~%d 字：少于 %d 字算没写完，超过 %d 字算替他往下写。）" % (
