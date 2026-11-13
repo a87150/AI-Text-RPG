@@ -423,7 +423,9 @@ def input_density(sess):
         # 写一个完整的短反应，好过写一长段跳三格
         return "thin", (int(lo * 0.45), int(lo * 0.9))
     if n > 120 or acts >= 4:
-        return "thick", (int(lo * 0.9), int(lo * 1.6))
+        # 上限跟着用户设的上限走，不是下限的倍数：写 74 字带 9 个动作，
+        # 却只准回 80 字，对话就卡死了。留一成余量，别让模型顶格写
+        return "thick", (int(lo * 0.9), int(hi * 0.9))
     return "normal", (int(lo * 1.0), int(hi * 1.0))
 
 # 强模型会把一轮写成一场完整的戏：铺景、对话、转折、收束一气写完。

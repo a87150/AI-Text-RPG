@@ -1854,6 +1854,16 @@ def main():
           len(rp_llm.strip_status_leaks(_padded)) == len(_short)
           and len(_padded) > 40 > len(_short),
           str((len(_short), len(rp_llm.strip_status_leaks(_padded)))))
+    # thick 的上限要跟着用户设的上限走。曾经写成下限的 1.6 倍，
+    # 用户写 74 字却只准回 80 字，比 normal 档还紧
+    _ws2 = rp_config.writing()
+    _s_thick = {"mode": "normal", "user_name": "甲", "characters": [{"name": "乙"}],
+               "messages": [{"role": "user", "content": "推门，拉椅，坐下，倒茶，点烟，抬头看他。" * 4}],
+               "status": {}, "lore": [], "turn": 1}
+    _d2, _sp2 = rp_prompts.input_density(_s_thick)
+    check("长输入的字数上限跟用户设的上限走",
+          _d2 == "thick" and _sp2[1] > _ws2["narrator_max"] * 0.5,
+          str((_d2, _sp2, _ws2["narrator_max"])))
     check("真名场景照旧钉死", "必须叫「甲」" in rp_prompts.build_locked_block("甲", ""))
     # 生成某个名字时，不能把那个名字锁住
     check("生成 AI 名字时不锁 AI 名字",
