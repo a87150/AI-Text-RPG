@@ -1833,6 +1833,13 @@ def main():
     rp_characters.merge_facts(_mf, ["甲拿到了地图"])
     check("相似但不同的事实不被合并",
           sum(1 for _f in _mf["facts"] if _f.get("state") == "active") == 2, str(_mf))
+    # 字数校验要剥掉状态行，否则二十字正文配一百字状态行也算合格
+    _short = "她没动。"
+    _padded = _short + "[[在场：甲|离场：无|地点：某酒馆门廊|时间：深夜|关系：戒备|目标：等他开口]]"
+    check("字数校验不吃状态行",
+          len(rp_llm.strip_status_leaks(_padded)) == len(_short)
+          and len(_padded) > 40 > len(_short),
+          str((len(_short), len(rp_llm.strip_status_leaks(_padded)))))
     check("真名场景照旧钉死", "必须叫「甲」" in rp_prompts.build_locked_block("甲", ""))
     # 生成某个名字时，不能把那个名字锁住
     check("生成 AI 名字时不锁 AI 名字",

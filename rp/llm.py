@@ -174,7 +174,10 @@ def completion_events(messages, base_temp, max_attempts, min_chars=0,
         if not last_raw:
             last_error = "模型返回空内容"
             continue
-        if min_chars and len(last_raw) < min_chars:
+        # 量长度要剥掉状态行：二十字正文配一百字 [[在场：…]]，
+        # 按原文长度算就合格了，短回复被放过去。这里只影响判定，
+        # 不动 last_raw——下游 parse_turn 还要从里面读状态
+        if min_chars and len(strip_status_leaks(last_raw)) < min_chars:
             last_error = "输出过短"
             continue
         if validate:
