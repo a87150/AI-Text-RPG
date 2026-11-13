@@ -1822,6 +1822,17 @@ def main():
     check("角色设定原样保存不被截断",
           len(_s["characters"][0]["role"]) == len(_long_role),
           str(len(_s["characters"][0]["role"])))
+    # 物品有两种形态：按人分的 dict、不带人名的公共字符串。
+    # 字符串直接覆盖会把每个人手里的东西全清掉
+    _mi = rp_characters.merge_status({"items": {"甲": "铜钥匙"}}, {"items": "湿伞"})
+    check("公共物品不冲掉别人的东西",
+          _mi["items"].get("甲") == "铜钥匙" and _mi["items"].get("") == "湿伞", str(_mi))
+    # 相似度阈值放太松会把不同的事实判成同一条，已发生的会被标成 resolved
+    _mf = {}
+    rp_characters.merge_facts(_mf, ["甲拿到了钥匙"])
+    rp_characters.merge_facts(_mf, ["甲拿到了地图"])
+    check("相似但不同的事实不被合并",
+          sum(1 for _f in _mf["facts"] if _f.get("state") == "active") == 2, str(_mf))
     check("真名场景照旧钉死", "必须叫「甲」" in rp_prompts.build_locked_block("甲", ""))
     # 生成某个名字时，不能把那个名字锁住
     check("生成 AI 名字时不锁 AI 名字",

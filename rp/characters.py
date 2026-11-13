@@ -378,10 +378,17 @@ def merge_status(old, new):
             continue
         if not value:
             continue
-        # 物品是按人分的字典：新的一轮可能只提到一个人，别把别人的东西冲掉
-        if key == "items" and isinstance(value, dict):
-            merged = dict(out.get("items") or {}) if isinstance(out.get("items"), dict) else {}
-            merged.update({k: v for k, v in value.items() if v})
+        # 物品两种形态都会来：按人分的 dict，和不带人名的公共物品字符串。
+        # 字符串原样覆盖会把每个人手里的东西全清掉——模型只要有一轮
+        # 没写「名字=东西」，账本就退化成一行公共物品
+        if key == "items":
+            prev = out.get("items")
+            merged = dict(prev) if isinstance(prev, dict) else ({
+                "": prev} if prev else {})
+            if isinstance(value, dict):
+                merged.update({k: v for k, v in value.items() if v})
+            else:
+                merged[""] = value
             out[key] = merged
             continue
         out[key] = value
@@ -504,6 +511,19 @@ FACTS_KEEP = 12
 def _norm(text):
     return re.sub(r"\s+", "", (text or "").lower())
 
+def _fact_sim(a, b):
+    """两句话是不是在说同一件事。
+
+    用字符集合的重合度，不用 SequenceMatcher：后者按顺序比，
+    「甲拿走了钥匙」和「钥匙被甲拿走了」明明是同一件事，它只给 0.62；
+    而「甲拿到了钥匙」和「甲拿到了地图」只差两个字，它给 0.67。
+    一正一反，阈值定在哪都会错一边。集合比法只看用了哪些字：
+    语序换了不掉分，换了对象才掉分（0.86 vs 0.50）。
+    """
+    A, B = set(a or ""), set(b or "")
+    return len(A & B) / max(1, len(A | B))
+
+
 def merge_facts(sess, new_facts, turn=None):
     """把这一轮声明的事实并进账本：相似的旧事实让位，总数封顶。"""
     if not new_facts:
@@ -521,7 +541,9 @@ def merge_facts(sess, new_facts, turn=None):
         for old in book:
             if not isinstance(old, dict) or old.get("state") != "active":
                 continue
-            if SequenceMatcher(None, norm, _norm(old.get("fact") or "")).ratio() > 0.55:
+            # 见 _fact_sim：顺序比对分不清「换语序」和「换对象」，
+            # 集合比对可以。0.7 是实测分界，两边都有余量
+            if _fact_sim(norm, _norm(old.get("fact") or "")) > 0.7:
                 superseded = old
                 break
         if superseded is not None:
