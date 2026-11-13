@@ -88,6 +88,20 @@ _ADD_CAST_RE = re.compile(
     r"(?:加入角色|新增角色|加个角色|加一个角色|新角色|加个人)"
     r"[：: ]*【?([^\s，。；,;、【】\[\]]{1,10})")
 
+# 代词和虛词不是人名。分隔符是可选的，所以「加个角色我说两句」里的「我」
+# 会被当成名字建卡——用户设了角色上限，这些假人把名额占满了。
+_NOT_NAMES = {
+    "我", "你", "他", "她", "它", "咱们", "我们", "你们",
+    "他们", "她们", "自己", "主角", "别人", "对方", "大家",
+    "朋友", "路人", "众人", "老头", "女人", "男人", "家伙",
+    "吧", "呢", "吗", "啊", "呀", "了", "的", ""
+}
+# 名字开头不是这些字。中文人名很少以动词或指示词开头，「说两句」这种
+# 从动词起头的其实是用户话的残片，不是人
+_VERB_LEAD = "说想要会能是在就也都还又只走去来问看让给拿放做叫喊答回点站坐转"
+# 剥掉开头的连接词，和开头的代词
+_LEAD_STRIP = "叫做是为把让给么这那以及和跟"
+
 def parse_add_cast(text):
     """从用户这句话里拿出要加的名字，不靠模型。
 
@@ -95,8 +109,20 @@ def parse_add_cast(text):
     """
     out = []
     for m in _ADD_CAST_RE.finditer(str(text or "")):
-        nm = re.sub(r"^[叫做是为]", "", m.group(1).strip())
-        if nm and looks_like_name(nm) and nm not in out:
+        nm = m.group(1).strip()
+        # 剥两层：「我朋友」→「朋友」→ 仍然不是名字，就在下面被筛掉
+        for _ in range(2):
+            for _pre in sorted(_NOT_NAMES | set(_LEAD_STRIP), key=len, reverse=True):
+                if _pre and nm.startswith(_pre):
+                    nm = nm[len(_pre):].strip()
+                    break
+            nm = re.sub(r"^[吧呢吗啊呀了的]", "", nm).strip()
+        if not nm or nm in _NOT_NAMES:
+            continue
+        # 名字最多四个字；以动词开头的不是名字
+        if len(nm) > 4 or nm[0] in _VERB_LEAD:
+            continue
+        if looks_like_name(nm) and nm not in out:
             out.append(nm)
     return out
 

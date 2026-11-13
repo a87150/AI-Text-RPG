@@ -2093,6 +2093,20 @@ def main():
     _c80 = rp_characters.parse_add_cast("加入角色：乙")
     check("点名加人能认出名字", _c80 == ["乙"], str(_c80))
     check("没点名就不猜", rp_characters.parse_add_cast("你好呀") == [])
+    # 分隔符是可选的，「加个角色我」里的「我」会被当成名字建卡，占满上限。
+    # 代词、虚词、动词开头、超过四个字的，一律不当名字
+    for _bad in ("这里加个角色我", "加个角色我", "新角色我说两句",
+                 "加个角色我朋友", "我说这件事加个角色吧", "这里新角色他",
+                 "加入角色 你", "加个人我", "新增角色：阿杰和沈知微"):
+        check("「%s」不加角色" % _bad,
+              rp_characters.parse_add_cast(_bad) == [],
+              str(rp_characters.parse_add_cast(_bad)))
+    for _good, _want in (("加个角色 老张", ["老张"]),
+                         ("加入角色【沈知微】", ["沈知微"]),
+                         ("新角色林晚", ["林晚"])):
+        check("「%s」加对人" % _good,
+              rp_characters.parse_add_cast(_good) == _want,
+              str(rp_characters.parse_add_cast(_good)))
     check("带「叫」字也能剥",
           rp_characters.parse_add_cast("加个角色叫丙") == ["丙"],
           str(rp_characters.parse_add_cast("加个角色叫丙")))
