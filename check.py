@@ -84,7 +84,7 @@ def main():
                            persist=False)
     clamped = rp_config.writing()
     check("写作参数越界被夹紧",
-          clamped["max_characters"] == 10 and clamped["line_min"] == 40
+          clamped["max_characters"] == 10 and clamped["line_min"] == 10
           and clamped["keep_recent"] == 60, clamped)
     rp_config.save_writing({"max_characters": 4, "line_min": 120, "keep_recent": 16},
                            persist=False)
@@ -1074,8 +1074,9 @@ def main():
           rp_prompts.input_density(_sess("我把外套挂在门边，问他今晚还走不走。"))[0] == "normal")
     _thin = rp_prompts.input_density(_sess("我点头。"))[1]
     _thick = rp_prompts.input_density(_sess("我推开门，抬手挡了一下灯，转身把包扔在椅子上，走过去拉开窗帘。"))[1]
-    check("极短时目标字数抬高", _thin[1] > _thick[1], "%s vs %s" % (_thin, _thick))
-    check("长段时目标字数收紧", _thick[1] < _thin[1] and _thick[1] <= 400, str(_thick))
+    check("极短时目标字数收紧", _thin[1] < _thick[1] and _thin[1] <= 200,
+          "%s vs %s" % (_thin, _thick))
+    check("长段也不铺开", _thick[1] <= 400, str(_thick))
     check("上限不再随极短输入暴涨",
           rp_prompts.input_density(_sess("我点头。"))[1][1] <= 460,
           str(rp_prompts.input_density(_sess("我点头。"))[1]))
@@ -1083,9 +1084,9 @@ def main():
     def _tail_of(sess):
         return rp_prompts.build_messages(sess, "甲")[-1]["content"]
 
-    check("极短时要求撑起场景", "别跟着变短" in _tail_of(_sess("我点头。")))
+    check("极短时要求别替用户往下写", "别替我把后面几步走完" in _tail_of(_sess("我点头。")))
     check("长段时要求不复述", "不要复述我刚写过的动作" in _tail_of(_sess("我推开门，抬手挡了一下灯，转身把包扔在椅子上，走过去拉开窗帘。")))
-    check("中等时不多加节奏要求", "别跟着变短" not in _tail_of(_sess("我把外套挂在门边，问他今晚还走不走。")))
+    check("中等时不多加节奏要求", "别替我把后面几步走完" not in _tail_of(_sess("我把外套挂在门边，问他今晚还走不走。")))
 
     check("没有时间就不提时间", "上一轮结束时是" not in _tail_of(_sess("我点头。")))
     check("有时间就把上一轮的时间写进去", "上一轮结束时是「深夜」" in _tail_of(_sess("我点头。", "深夜")))
@@ -1362,7 +1363,7 @@ def main():
     # 52. 四个字数设置合起来决定一轮的总量
     _ws = {"turn": 1, "mode": "rp", "user_name": "我",
            "characters": [{"name": "甲", "role": "守灯人"}],
-           "status": {}, "messages": [{"role": "user", "content": "我点头。"}]}
+           "status": {}, "messages": [{"role": "user", "content": "我把外套挂在门边，问他今晚还走不走。"}]}
     _w = rp_config.writing()
     _total = _w["narrator_max"] + _w["line_max"]
     for _t in ("basic", "standard", "advanced"):
@@ -1371,9 +1372,10 @@ def main():
         check("%s档的规则给出合计上限" % _t, ("不超过 %d 字" % _total) in _bd)
     rp_config.save_tier("basic", persist=False)
     _nb = rp_prompts.build_system_prompt(dict(_ws, mode="normal"), None)
-    _lo = _w["narrator_min"] + _w["line_min"]
-    check("一般模式用总量而不是只算台词",
-          ("%d~%d 字" % (_lo, _total)) in _nb, _nb[_nb.find("每次"):][:40])
+    # 一般模式是一整段连贯叙述，没有「每个角色一段」，所以不叠加角色言行
+    check("一般模式只用旁白那份字数",
+          ("%d~%d 字" % (_w["narrator_min"], _w["narrator_max"])) in _nb,
+          _nb[_nb.find("每次"):][:40])
     # 改设置，规则和尾巴都要跟着变
     rp_config.save_writing({"line_max": 120}, persist=False)
     _bd2 = rp_prompts.build_system_prompt(_ws, "甲")

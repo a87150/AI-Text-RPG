@@ -39,7 +39,7 @@ from .context import (
 from .llm import completion_events, extract_json, sse, strip_thinking
 from .prompts import (
     FIELD_TASKS, build_field_prompt, build_messages, build_system_prompt,
-    clean_generated, ensure_original_kept,
+    clean_generated, ensure_original_kept, input_density,
 )
 from . import covers as cover_store
 from .stories import (
@@ -1398,14 +1398,15 @@ def api_opening(sid):
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
-def _stream_model(messages, speaker, temperature, max_attempts, use_rp):
+def _stream_model(messages, speaker, temperature, max_attempts, use_rp,
+                  min_chars=None):
     """把 completion_events 包成 SSE 事件流；成功时返回 (正文, 尝试次数)。
 
     用 yield from 的返回值传结果，调用方不用再写一遍同样的循环。
     """
     for ev in completion_events(
         messages, base_temp=temperature, max_attempts=max_attempts,
-        min_chars=MIN_CHAT_CHARS,
+        min_chars=min_chars or MIN_CHAT_CHARS,
         validate=lambda t: None if (not use_rp or "【" in t)
         else "缺少【旁白】/【角色名】格式",
     ):
@@ -1605,8 +1606,12 @@ def api_chat():
         try:
             # 先告诉前端这轮由谁发言，流式渲染才能丢掉别人抢话的段落
             yield sse({"type": "speaker", "name": speaker})
+            # 硬下限会跟密度打架：thin 只要求写二十来字，却被五十字的门槛，
+            # 打回重试，重试只会往多里写
+            _floor = max(10, min(MIN_CHAT_CHARS, input_density(sess)[1][0]))
             answer, attempts_used = yield from _stream_model(
-                messages, speaker, temperature, tier_limits()["attempts"], use_rp)
+                messages, speaker, temperature, tier_limits()["attempts"], use_rp,
+                _floor)
             if answer is None:
                 return
 

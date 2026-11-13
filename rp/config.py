@@ -106,7 +106,7 @@ LANGUAGE_LABELS = {"zh": "中文", "en": "English"}
 WRITING_BOUNDS = {
     "narrator_min": (10, 300),
     "narrator_max": (20, 600),
-    "line_min": (40, 1200),
+    "line_min": (10, 1200),
     "line_max": (60, 2000),
     "context_limit": (2000, 60000),
     "keep_recent": (4, 60),

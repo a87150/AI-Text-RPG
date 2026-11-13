@@ -120,7 +120,7 @@ STATUS_FILE = {
 def status_prompt():
     return render(STATUS_FILE.get(tier(), "status.md"))
 
-def build_rules(user_name, mode=None, names=""):
+def build_rules(user_name, mode=None, names="", sess=None):
     w = writing()
     mode = mode or mode_for({})
     status_block = status_prompt()
@@ -130,28 +130,50 @@ def build_rules(user_name, mode=None, names=""):
     headcount = max(1, len([x for x in (names or "").split("、") if x.strip()]))
     total_min = w["narrator_min"] + w["line_min"] * headcount
     total_max = w["narrator_max"] + w["line_max"] * headcount
+    narrator_min, narrator_max = w["narrator_min"], w["narrator_max"]
+    line_min, line_max = w["line_min"], w["line_max"]
+
+    # 字数目标跟着用户这一轮的密度走。固定下限会让模型为了填满而自己往下编：
+    # 用户写「嗯」，它得凑够一百多字，就只能替人把后面几步走完
+    if sess is not None:
+        _d, span = input_density(sess)
+        whole_min = w["narrator_min"] if mode == "normal" else (
+            w["narrator_min"] + w["line_min"])
+        whole_max = w["narrator_max"] if mode == "normal" else (
+            w["narrator_max"] + w["line_max"])
+        k_lo = span[0] / max(1, whole_min)
+        k_hi = span[1] / max(1, whole_max)
+        total_min = max(20, int(total_min * k_lo))
+        total_max = max(total_min + 20, int(total_max * k_hi))
+        narrator_min = max(10, int(w["narrator_min"] * k_lo))
+        narrator_max = max(narrator_min + 10, int(w["narrator_max"] * k_hi))
+        line_min = max(20, int(w["line_min"] * k_lo))
+        line_max = max(line_min + 20, int(w["line_max"] * k_hi))
+
     if mode == "normal":
+        # 一般模式是一整段连贯叙述，没有「每个角色一段」这回事，
+        # 所以只用旁白那份字数。「角色言行」是 rp 模式的量，
+        # 叠进来会让用户设的 300 变成 450
         return render(
             "normal.md",
             user_name=user_name or "用户角色",
             character_names=names or "（暂无）",
-            line_min=total_min,
-            line_max=total_max,
+            line_min=narrator_min,
+            line_max=narrator_max,
             max_characters=w["max_characters"],
             status_block=status_block,
         )
     return render(
         RULES_FILE.get(tier(), "rules_standard.md"),
         user_name=user_name or "用户角色",
-        narrator_min=w["narrator_min"],
-        narrator_max=w["narrator_max"],
-        line_min=w["line_min"],
-        line_max=w["line_max"],
+        narrator_min=narrator_min,
+        narrator_max=narrator_max,
+        line_min=line_min,
+        line_max=line_max,
         total_max=total_max,
         max_characters=w["max_characters"],
         status_block=status_block,
     )
-
 def build_character_block(chars, speaker=None, status=None):
     """角色卡整段展开，并分「在场 / 不在场」。
 
@@ -275,7 +297,11 @@ def build_system_prompt(sess, speaker=None, parts_out=None):
         add("facts", "\n".join(lines))
     # 额外要求（sess["rules"]）是写设定时用的提示词，不进这里。
     # 故事推进时拿着它只会跟「写法」抢位置，真正要生效的地方是 _extra_block。
-    add("rules", "【写法】" + "\n" + build_rules(user_name, mode, names))
+    _density, _ = input_density(sess)
+    _tail = chr(10).join(x for x in (DENSITY_HINT.get(_density, ""), STEP_HINT,
+                                  timeline_hint(sess)) if x)
+    add("rules", "【写法】" + "\n" + build_rules(user_name, mode, names, sess)
+        + (("\n\n" + _tail) if _tail else ""))
     return ("\n" + "\n").join(parts)
 
 
@@ -383,11 +409,19 @@ def input_density(sess):
     n = len(last.strip())
     acts = sum(last.count(v) for v in _ACTIONS)
 
-    lo, hi = w["narrator_min"] + w["line_min"], w["narrator_max"] + w["line_max"]
+    if mode_for(sess) == "normal":
+        lo, hi = w["narrator_min"], w["narrator_max"]
+    else:
+        lo, hi = w["narrator_min"] + w["line_min"], w["narrator_max"] + w["line_max"]
+    # 还没有用户发言（开场、刚建会话）不算「只写了半句」，按正常长度走
+    if not last.strip():
+        return "normal", (int(lo), int(hi))
     # 这里定的是上限，不是目标值：能力强的模型一看到区间就往高处写，
     # 写成一场完整的戏，用户还没接话故事就翻篇了
     if n < 15 and acts == 0:
-        return "thin", (int(hi * 0.7), int(hi * 1.15))
+        # 用户只写了半句，就别替他把后面几步走完。给短一点的上限，
+        # 写一个完整的短反应，好过写一长段跳三格
+        return "thin", (int(lo * 0.45), int(lo * 0.9))
     if n > 120 or acts >= 4:
         return "thick", (int(lo * 0.9), int(lo * 1.6))
     return "normal", (int(lo * 1.0), int(hi * 1.0))
@@ -398,7 +432,7 @@ STEP_HINT = ("（这一轮只往前挪一小步：一个动作、一段对话或
              "别跨场景、别跳时间，也别把几件事一次办完。）")
 
 DENSITY_HINT = {
-    "thin": "（我这一句很短。别跟着变短：用环境、对手的反应和细节把这个场景撑起来。）",
+    "thin": "（我这一句很短。别替我把后面几步走完：只写眼前这一个反应，剩下的留给我接。）",
     "thick": "（我这段写得细。只写角色的反应和场景的变化，不要复述我刚写过的动作。）",
     "normal": "",
 }
