@@ -2092,6 +2092,18 @@ def main():
     _s80 = {"characters": [{"name": "甲", "role": "守灯人"}]}
     _c80 = rp_characters.parse_add_cast("加入角色：乙")
     check("点名加人能认出名字", _c80 == ["乙"], str(_c80))
+    # 状态块里的 present 会被当成在场名单补卡。模型把「我」写进去时，
+    # 那条路会给「我」开一张角色卡，占掉上限
+    for _pn in ("我", "你", "他", "她", "咱们", "自己", "主角", "朋友"):
+        check("「%s」不像名字" % _pn, not rp_characters.looks_like_name(_pn))
+        check("「%s」是坏名字" % _pn, rp_characters.is_bad_name(_pn))
+        _sp = {"characters": [], "user_name": "", "ai_name": ""}
+        check("「%s」建不了卡" % _pn,
+              rp_characters.upsert_character(_sp, {"name": _pn}) is None
+              and rp_characters.ensure_characters(_sp) == [])
+    check("真名字还是能建卡",
+          rp_characters.upsert_character({"characters": [], "user_name": "", "ai_name": ""},
+                                        {"name": "林姐"}) is not None)
     check("没点名就不猜", rp_characters.parse_add_cast("你好呀") == [])
     # 分隔符是可选的，「加个角色我」里的「我」会被当成名字建卡，占满上限。
     # 代词、虚词、动词开头、超过四个字的，一律不当名字
