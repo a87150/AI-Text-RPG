@@ -133,22 +133,9 @@ def build_rules(user_name, mode=None, names="", sess=None):
     narrator_min, narrator_max = w["narrator_min"], w["narrator_max"]
     line_min, line_max = w["line_min"], w["line_max"]
 
-    # 字数目标跟着用户这一轮的密度走。固定下限会让模型为了填满而自己往下编：
-    # 用户写「嗯」，它得凑够一百多字，就只能替人把后面几步走完
-    if sess is not None:
-        _d, span = input_density(sess)
-        whole_min = w["narrator_min"] if mode == "normal" else (
-            w["narrator_min"] + w["line_min"])
-        whole_max = w["narrator_max"] if mode == "normal" else (
-            w["narrator_max"] + w["line_max"])
-        k_lo = span[0] / max(1, whole_min)
-        k_hi = span[1] / max(1, whole_max)
-        total_min = max(20, int(total_min * k_lo))
-        total_max = max(total_min + 20, int(total_max * k_hi))
-        narrator_min = max(10, int(w["narrator_min"] * k_lo))
-        narrator_max = max(narrator_min + 10, int(w["narrator_max"] * k_hi))
-        line_min = max(20, int(w["line_min"] * k_lo))
-        line_max = max(line_min + 20, int(w["line_max"] * k_hi))
+    # 区间原样用设置里的数。按密度缩放的那套已经去掉：那是在替用户改他自己设的值，
+    # 用户填了旁白 50~300，thin 一触发就变成 22，等于程序盖过设置。现在靠
+    # DENSITY_HINT 那几句话让模型自己控制往区间的哪一端写。
 
     if mode == "normal":
         # 一般模式是一整段连贯叙述，没有「每个角色一段」这回事，
@@ -421,12 +408,12 @@ def input_density(sess):
     if n < 15 and acts == 0:
         # 用户只写了半句，就别替他把后面几步走完。给短一点的上限，
         # 写一个完整的短反应，好过写一长段跳三格
-        return "thin", (int(lo * 0.45), int(lo * 0.9))
+        return "thin", (int(lo), int(hi))
     if n > 120 or acts >= 4:
         # 上限跟着用户设的上限走，不是下限的倍数：写 74 字带 9 个动作，
         # 却只准回 80 字，对话就卡死了。留一成余量，别让模型顶格写
-        return "thick", (int(lo * 0.9), int(hi * 0.9))
-    return "normal", (int(lo * 1.0), int(hi * 1.0))
+        return "thick", (int(lo), int(hi))
+    return "normal", (int(lo), int(hi))
 
 # 强模型会把一轮写成一场完整的戏：铺景、对话、转折、收束一气写完。
 # 用户还没接话，故事就翻篇了——这条把它按住

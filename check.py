@@ -1088,9 +1088,16 @@ def main():
           rp_prompts.input_density(_sess("我把外套挂在门边，问他今晚还走不走。"))[0] == "normal")
     _thin = rp_prompts.input_density(_sess("我点头。"))[1]
     _thick = rp_prompts.input_density(_sess("我推开门，抬手挡了一下灯，转身把包扔在椅子上，走过去拉开窗帘。"))[1]
-    check("极短时目标字数收紧", _thin[1] < _thick[1] and _thin[1] <= 200,
-          "%s vs %s" % (_thin, _thick))
-    check("长段也不铺开", _thick[1] <= 400, str(_thick))
+    # 三档的目标区间必须是设置里那个原值：程序不替用户改他自己设的数。
+    # 曾经按下限换算过 thin 22~45 / thick 45~270，那是为只会凑字的模型压的
+    _mid = rp_prompts.input_density(_sess("我把外套挂在门边，抬头看了他一眼。"))[1]
+    # 这里 _sess 是 rp 模式，所以区间的上限是「旁白 + 角色言行」的合计
+    _wset = rp_config.writing()
+    _expect = (_wset["narrator_min"] + _wset["line_min"],
+               _wset["narrator_max"] + _wset["line_max"])
+    check("三档的字数区间都等于设置值",
+          _thin == _mid == _thick == _expect,
+          "%s / %s / %s vs 设置 %s" % (_thin, _mid, _thick, _expect))
     check("上限不再随极短输入暴涨",
           rp_prompts.input_density(_sess("我点头。"))[1][1] <= 460,
           str(rp_prompts.input_density(_sess("我点头。"))[1]))
