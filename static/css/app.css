@@ -255,11 +255,13 @@ body.story-view #btn-search { display: none; }
 .field-undo { color: var(--accent); }
 .field-undo.hidden { display: none !important; }
 
+/* 和 .session-item 对齐：同样 76px 高、同样 4px 行距、同样 flex 排列。
+   原来是 grid 且没有 margin-bottom，每页能多塞一条，切视图时看着高矮不一 */
 .story-item {
-  display: grid; grid-template-columns: 1fr auto; gap: 4px 6px;
-  padding: 10px 12px; border-radius: 10px; cursor: pointer;
-  border: 1px solid transparent;
-  height: 76px; box-sizing: border-box; overflow: hidden; align-content: center;
+  display: flex; align-items: center; gap: 6px; padding: 10px;
+  border-radius: 10px; margin-bottom: 4px; border: 1px solid transparent;
+  height: 76px; box-sizing: border-box; overflow: hidden; cursor: pointer;
+  transition: background .15s, border-color .15s;
 }
 .story-item:hover { background: var(--bg-elev); border-color: var(--border); }
 .story-item .si-del { align-self: center; }

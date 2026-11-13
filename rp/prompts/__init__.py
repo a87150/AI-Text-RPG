@@ -10,7 +10,7 @@ from difflib import SequenceMatcher
 from string import Template
 
 from ..characters import ensure_characters, guess_name, role_labels, scene_split
-from ..config import creativity, mode_for, tier, tier_limits, writing
+from ..config import creativity, gen_defaults, mode_for, tier, tier_limits, writing
 from ..llm import strip_status_leaks, strip_thinking
 from ..stories import PLACEHOLDER, fill_names
 
@@ -82,35 +82,24 @@ def role_range(cap=None):
     写超了就白写：超出 role_chars 的部分在注入时会被 clip 掉，
     用户看到的是一张卡，模型看到的是前半张。
     """
-    cap = tier_limits()["role_chars"] if cap is None else cap
+    if cap is None:
+        d = gen_defaults()
+        return d["gen_role_min"], d["gen_role_max"]
     if not cap:
         return 320, 520
     return max(60, int(cap * 0.6)), max(120, int(cap * 0.9))
 
-# 三类设定的相对篇幅：角色卡是基准（受 role_chars 限制），
-# 世界观要铺时代地点规则，开场白要留出第一段互动，都比一张卡长。
-# 初级档 role_range 是 120~180，乘出来正好 200~300 和 160~240。
 _GEN_GROUP = {"character": "role", "user_role": "role",
               "world": "world", "opening": "open"}
-_GEN_SCALE = {"role": (1, 1), "world": (5, 3), "open": (4, 3)}
 
 def gen_range(field):
-    """AI 补设定的目标字数，三类各一组设置。
+    """AI 补设定的目标字数，三类各有一组设置。
 
-    没设（0）就跟模型档位走：档位决定人设能注入多少字，写超了注入时会被
-    截断，所以默认区间本来就该贴着档位。
+    值由换档位时自动写好（和 context_limit 一样），用户也能自己改。
     """
     group = _GEN_GROUP.get(field, "world")
     w = writing()
-    lo = int(w.get("gen_%s_min" % group) or 0)
-    hi = int(w.get("gen_%s_max" % group) or 0)
-    if lo and hi:
-        return lo, hi
-    rlo, rhi = role_range()
-    num, den = _GEN_SCALE.get(group, (1, 1))
-    if num == den:
-        return rlo, rhi
-    return rlo * num // den, rhi * num // den
+    return int(w["gen_%s_min" % group]), int(w["gen_%s_max" % group])
 
 def active_facts(sess, limit=None):
     """已确立且没被推翻的事实，按档位取最近若干条。"""

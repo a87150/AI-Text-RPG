@@ -1438,7 +1438,7 @@ def main():
     _tl = rp_prompts.build_messages(_ws, "甲")[-1]["content"]
     _tl_hi = rp_prompts.input_density(_ws)[1][1]
     _tl_lo = rp_prompts.input_density(_ws)[1][0]
-    # 设定生成的字数：默认跟着模型档位走，用户设了数字就盖过档位
+    # 设定生成的字数：换档位时和 context_limit 一样被自动重写
     import re as _re
     def _gen_range():
         _p = rp_prompts.build_field_prompt("world", world="海边的灯塔")
@@ -1447,23 +1447,29 @@ def main():
     _GEN_KEYS = ("gen_role_min", "gen_role_max", "gen_world_min",
                  "gen_world_max", "gen_open_min", "gen_open_max")
     _backup_gen = {k: rp_config.writing()[k] for k in _GEN_KEYS}
-    rp_config.save_writing({k: 0 for k in _GEN_KEYS}, persist=False)
-    # 三类各一组，跟随档位时的比例是 1 : 1.67 : 1.33（初级 120~180 / 200~300 / 160~240）
+    # 三类各一组，比例 1 : 1.67 : 1.33（初级 120~180 / 200~300 / 160~240）
     for _t2, _want4 in (("basic", ((120, 180), (200, 300), (160, 240))),
                         ("standard", ((240, 360), (400, 600), (320, 480))),
                         ("advanced", ((320, 520), (533, 866), (426, 693)))):
         rp_config.save_tier(_t2, persist=False)
         _got = (rp_prompts.gen_range("character"), rp_prompts.gen_range("world"),
                 rp_prompts.gen_range("opening"))
-        check("%s档三类设定字数跟着档位" % _t2, _got == _want4, str(_got))
-    # 只设世界观，不该影响角色卡和开场白
-    rp_config.save_tier("basic", persist=False)
+        check("%s档三类设定字数自动填好" % _t2, _got == _want4, str(_got))
+        # 光算出来没用，得真的写进设置，前端才看得到
+        _stored = tuple(rp_config.writing()[k] for k in _GEN_KEYS)
+        check("%s档的数字写进了设置" % _t2,
+              _stored == (_want4[0][0], _want4[0][1], _want4[1][0], _want4[1][1],
+                          _want4[2][0], _want4[2][1]), str(_stored))
+    # 手改之后不切档位就该保留，切了才被重写
     rp_config.save_writing({"gen_world_min": 300, "gen_world_max": 400}, persist=False)
-    check("只覆盖世界观",
+    check("手改的只影响世界观",
           (rp_prompts.gen_range("world"), rp_prompts.gen_range("character"),
            rp_prompts.gen_range("opening"))
-          == ((300, 400), (120, 180), (160, 240)))
-    check("世界观 prompt 用覆盖值", _gen_range() == (300, 400), str(_gen_range()))
+          == ((300, 400), (320, 520), (426, 693)))
+    check("世界观 prompt 用手改值", _gen_range() == (300, 400), str(_gen_range()))
+    rp_config.save_tier("basic", persist=False)
+    check("切档位把手改的值冲掉", rp_prompts.gen_range("world") == (200, 300),
+          str(rp_prompts.gen_range("world")))
     rp_config.save_writing(_backup_gen, persist=False)
     check("尾巴里写了区间两头", ("这一轮写 %d~%d 字" % (_tl_lo, _tl_hi)) in _tl, _tl[-120:])
     _wn = rp_config.writing()

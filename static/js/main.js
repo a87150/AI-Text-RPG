@@ -265,22 +265,8 @@ function fillWritingForm() {
   ['#w-gen-open-min', 'gen_open_min'], ['#w-gen-open-max', 'gen_open_max'],
   ]) {
     const el = $(id);
-    // 设定字数 0 表示「跟随档位」，显示成空让 placeholder 说话
-    if (el) el.value = w[key] == null || w[key] === 0 ? '' : w[key];
+    if (el) el.value = w[key] == null ? '' : w[key];
   }
-  // 留空的设定字数显示跟随档位时的实际值，切档位能看出差别
-  const follow = (state.conf && state.conf.gen_follow) || {};
-  for (const [id, group] of [
-    ['#w-gen-role-min', 'role'], ['#w-gen-role-max', 'role'],
-    ['#w-gen-world-min', 'world'], ['#w-gen-world-max', 'world'],
-    ['#w-gen-open-min', 'open'], ['#w-gen-open-max', 'open'],
-  ]) {
-    const el = $(id);
-    const span = follow[group];
-    if (!el || !span) continue;
-    el.placeholder = '跟随 ' + span[id.endsWith('-min') ? 0 : 1];
-  }
-
   const font = $('#prefs-font');
   if (font) font.value = localStorage.getItem(FONT_KEY) || 'md';
   syncLanguageSeg();
@@ -446,7 +432,6 @@ async function saveWriting(quiet = false) {
         ? res.reasoning_supported : (state.conf && state.conf.reasoning_supported),
       tier: res.tier || currentTier(),
       creativity: res.creativity || currentCreativity(),
-      gen_follow: res.gen_follow || (state.conf && state.conf.gen_follow),
     });
     fillWritingForm();
     syncTierSeg();

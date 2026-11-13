@@ -98,10 +98,10 @@ WRITING_DEFAULTS = {
     "keep_recent": 16,
     "max_characters": 4,
     "auto_roles": 1,        # AI 补设定时自己起几个角色；0 = 不起，用 {主角} 指代
-    # AI 补设定的目标字数，三类各一组；0 = 跟随模型档位（role_range）
-    "gen_role_min": 0, "gen_role_max": 0,     # 角色卡
-    "gen_world_min": 0, "gen_world_max": 0,   # 世界观
-    "gen_open_min": 0, "gen_open_max": 0,     # 开场白
+    # AI 补设定的目标字数，三类各一组。换档位时和 context_limit 一样被重写
+    "gen_role_min": 120, "gen_role_max": 180,    # 角色卡
+    "gen_world_min": 200, "gen_world_max": 300,  # 世界观
+    "gen_open_min": 160, "gen_open_max": 240,    # 开场白
     "summary_chars": 400,
     "language": "zh",       # 正文语言：zh 中文 / en English
 }
@@ -116,9 +116,9 @@ WRITING_BOUNDS = {
     "keep_recent": (4, 60),
     "max_characters": (1, 10),
     "auto_roles": (0, 4),
-    "gen_role_min": (0, 800), "gen_role_max": (0, 1500),
-    "gen_world_min": (0, 800), "gen_world_max": (0, 2000),
-    "gen_open_min": (0, 800), "gen_open_max": (0, 1500),
+    "gen_role_min": (40, 800), "gen_role_max": (60, 1500),
+    "gen_world_min": (40, 800), "gen_world_max": (60, 2000),
+    "gen_open_min": (40, 800), "gen_open_max": (60, 1500),
     "summary_chars": (150, 2000),
 }
 _writing = dict(WRITING_DEFAULTS)
@@ -243,9 +243,11 @@ def save_tier(value, persist=True):
         _tier = value
     # 换档位就换整份预算：上下文上限和压缩后保留的条数一起换，
     # 否则高级档能带更多历史，压缩却还只留 16 条，等于白换
+    gen = gen_defaults(value)
     save_writing({"context_limit": TIER_LIMITS[value]["context"],
                   "keep_recent": tier_keep(value),
-                  "summary_chars": TIER_LIMITS[value]["summary"]}, persist=False)
+                  "summary_chars": TIER_LIMITS[value]["summary"], **gen},
+                 persist=False)
     if persist:
         persist_settings()
     return tier()
@@ -256,6 +258,16 @@ def tier_limits(level=None):
 def tier_keep(level=None):
     """这档压缩后该留几条：跟历史能带的量走，高级档不限条数就用到上限。"""
     return tier_limits(level)["history_msgs"] or KEEP_RECENT_MAX
+
+def gen_defaults(level=None):
+    """这一档 AI 补设定的目标字数。角色卡受 role_chars 限制，写超了注入会被截断；
+    世界观要铺时代地点规则，开场白要留出第一段互动，都比一张卡长，按 5:3 和 4:3 放。
+    """
+    cap = tier_limits(level)["role_chars"]
+    lo, hi = (320, 520) if not cap else (max(60, cap * 6 // 10), max(120, cap * 9 // 10))
+    return {"gen_role_min": lo, "gen_role_max": hi,
+            "gen_world_min": lo * 5 // 3, "gen_world_max": hi * 5 // 3,
+            "gen_open_min": lo * 4 // 3, "gen_open_max": hi * 4 // 3}
 
 def tier_context(level=None):
     return tier_limits(level)["context"]

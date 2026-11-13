@@ -15,12 +15,12 @@
 | `context_limit` | 8000 | 2000 ~ 60000 | 上下文预算（token） | `#w-context` |
 | `keep_recent` | 16 | 4 ~ 60 | 压缩后保留最近多少条 | `#w-keep` |
 | `max_characters` | 4 | 1 ~ 10 | 一局里最多几个角色 | `#w-chars` |
-| `gen_role_min` | 0 | 0 ~ 800 | 角色卡最少字数，0 = 跟随档位 | `#w-gen-role-min` |
-| `gen_role_max` | 0 | 0 ~ 1500 | 角色卡最多字数，0 = 跟随档位 | `#w-gen-role-max` |
-| `gen_world_min` | 0 | 0 ~ 800 | 世界观最少字数，0 = 跟随档位 | `#w-gen-world-min` |
-| `gen_world_max` | 0 | 0 ~ 2000 | 世界观最多字数，0 = 跟随档位 | `#w-gen-world-max` |
-| `gen_open_min` | 0 | 0 ~ 800 | 开场白最少字数，0 = 跟随档位 | `#w-gen-open-min` |
-| `gen_open_max` | 0 | 0 ~ 1500 | 开场白最多字数，0 = 跟随档位 | `#w-gen-open-max` |
+| `gen_role_min` | 120 | 40 ~ 800 | 角色卡最少字数，换档位自动填 | `#w-gen-role-min` |
+| `gen_role_max` | 180 | 60 ~ 1500 | 角色卡最多字数 | `#w-gen-role-max` |
+| `gen_world_min` | 200 | 40 ~ 800 | 世界观最少字数 | `#w-gen-world-min` |
+| `gen_world_max` | 300 | 60 ~ 2000 | 世界观最多字数 | `#w-gen-world-max` |
+| `gen_open_min` | 160 | 40 ~ 800 | 开场白最少字数 | `#w-gen-open-min` |
+| `gen_open_max` | 240 | 60 ~ 1500 | 开场白最多字数 | `#w-gen-open-max` |
 | `summary_chars` | 400 | 150 ~ 2000 | 每段压缩摘要的字数上限 | `#w-summary` |
 
 字数这四个值怎么落到 prompt 上，按模式分两种：
@@ -38,11 +38,12 @@
 （`DENSITY_HINT`），不改数字。
 
 `gen_role_*` / `gen_world_*` / `gen_open_*` 是「AI 补设定」三类各自的目标字数，
-互不影响，填 0 就跟随模型档位。
+互不影响。它们和 `context_limit`、`keep_recent`、`summary_chars` 一样，**换档位时会被
+该档的默认值重写**——手改只在当前档位有效，换个档位就按新档重填。
 
-跟随是有道理的：档位决定人设能注入多少字（`role_chars`），写超了注入时会被截断，
-所以默认区间本来就贴着档位。三类按篇幅比例分：角色卡是基准，世界观 ×1.67、
-开场白 ×1.33——世界观要铺时代地点规则，开场白要留出第一段互动，都比一张卡长。
+档位决定人设能注入多少字（`role_chars`），写超了注入时会被截断，所以角色卡区间
+贴着它算。三类按篇幅比例分：角色卡是基准，世界观 ×1.67、开场白 ×1.33——世界观
+要铺时代地点规则，开场白要留出第一段互动，都比一张卡长。
 
 | 档位 | 角色卡 | 世界观 | 开场白 |
 |---|---|---|---|
