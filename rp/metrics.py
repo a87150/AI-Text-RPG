@@ -19,7 +19,8 @@ from .config import BASE_DIR, DATA_DIR
 
 LOG_DIR = os.environ.get("LT_LOG_DIR") or os.path.join(BASE_DIR, "logs")
 
-_lock = threading.Lock()
+# RLock：_save_totals 自己上锁，record 外面也上，嵌套不能自锁
+_lock = threading.RLock()
 # 按会话分开存。两个会话同时聊天时，一个公共 dict 会让首字耗时
 # 和总耗时互相覆盖，面板上的数字就不是这个会话的了。
 _pending = {}          # sid -> {发出时间, 首字节时间}
@@ -56,8 +57,9 @@ def _load_totals():
 
 def _save_totals():
     try:
-        with open(TOTAL_FILE, "w", encoding="utf-8") as f:
-            json.dump(TOTAL, f, ensure_ascii=False)
+        with _lock:
+            with open(TOTAL_FILE, "w", encoding="utf-8") as f:
+                json.dump(TOTAL, f, ensure_ascii=False)
     except Exception:
         pass        # 统计写不进去不能耽误聊天
 
@@ -135,7 +137,8 @@ def end(session_id, ok=True, **extra):
     total = int((time.perf_counter() - t0) * 1000) if t0 else 0
     LAST["total_ms"] = total
     if t0:
-        TOTAL["ms"] += total
+        with _lock:
+            TOTAL["ms"] += total
     _save_totals()
     note("chat.done", sid=session_id, ok=ok, total_ms=total,
          first_token_ms=LAST["first_token_ms"],
@@ -150,12 +153,14 @@ def record(usage, model=""):
     LAST["cost"] = estimate_cost(LAST["model"], usage)
     hit = int(usage.get("prompt_cache_hit_tokens")
               or (usage.get("prompt_tokens_details") or {}).get("cached_tokens") or 0)
-    TOTAL["calls"] += 1
-    TOTAL["prompt_tokens"] += int(usage.get("prompt_tokens") or 0)
-    TOTAL["completion_tokens"] += int(usage.get("completion_tokens") or 0)
-    TOTAL["cached_tokens"] += hit
-    if LAST["cost"]:
-        TOTAL["cost"] = round(TOTAL["cost"] + LAST["cost"]["total"], 6)
+    # += 是读改写三步，Flask 是多线程，两个请求同时收尾会互相盖掉
+    with _lock:
+        TOTAL["calls"] += 1
+        TOTAL["prompt_tokens"] += int(usage.get("prompt_tokens") or 0)
+        TOTAL["completion_tokens"] += int(usage.get("completion_tokens") or 0)
+        TOTAL["cached_tokens"] += hit
+        if LAST["cost"]:
+            TOTAL["cost"] = round(TOTAL["cost"] + LAST["cost"]["total"], 6)
     _save_totals()
     note("chat.usage", model=LAST["model"], usage=usage, cost=LAST["cost"])
 

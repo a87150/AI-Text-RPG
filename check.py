@@ -576,6 +576,20 @@ def main():
     check("面板给出上轮真实用量", "上轮真实" in _ui)
     # 累计用量必须落盘：只放内存的话，重启后面板全是横杠，
     # 「总共用了多少 token」这个问题就永远答不上来
+    # 并发累加不能丢：Flask 多线程，+= 是读改写三步，两根请求同时收尾会互相盖掉
+    import threading as _threading
+    _cnt0 = rp_metrics.TOTAL["calls"]
+    def _rec():
+        for _ in range(20):
+            rp_metrics.record({"prompt_tokens": 1, "completion_tokens": 1})
+    _ths = [_threading.Thread(target=_rec) for _ in range(8)]
+    for _th in _ths:
+        _th.start()
+    for _th in _ths:
+        _th.join()
+    check("并发记录不丢计数",
+          rp_metrics.TOTAL["calls"] - _cnt0 == 160,
+          str(rp_metrics.TOTAL["calls"] - _cnt0))
     _before = dict(rp_metrics.TOTAL)
     rp_metrics.TOTAL["calls"] = 7
     rp_metrics.TOTAL["prompt_tokens"] = 1234
