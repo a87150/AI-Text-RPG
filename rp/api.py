@@ -42,7 +42,9 @@ from .llm import completion_events, extract_json, sse, strip_thinking
 # 设定里本来就可能写「他需要」；两个以上基本就是在自言自语。
 # strip_thinking 能剥掉带「故事背景：」标题的那种，剥不掉的在这里退回重试。
 _THINK_MARKS = ("让我想想", "我需要", "等等，", "让我再想", "重新读一下",
-                "用户想让我", "从上下文来看", "好吧，我")
+                "用户想让我", "用户要求", "用户想要", "用户希望", "从上下文来看",
+                "好吧，我", "注意格式", "字数要控制", "检查事实", "让我构思",
+                "内容：", "可以。", "不行，", "要求说")
 
 from .prompts import (
     FIELD_TASKS, build_field_prompt, build_messages, build_system_prompt,
@@ -1325,6 +1327,9 @@ def api_enhance():
             extra={"max_tokens": 800},
             validate=validate,
             with_reasoning=True,
+            # 设定生成是「照着用户的话重组」，不需要推演。开着推理时
+            # deepseek 会把分析过程写进 content，整段自言自语被当正文存下来
+            reasoning="none",
         ):
             if ev["type"] == "final":
                 parsed["attempts"] = ev["attempts"]

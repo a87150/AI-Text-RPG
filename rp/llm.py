@@ -118,8 +118,13 @@ def iter_sse_parts(resp, usage=None):
             yield content, reasoning
 
 def completion_events(messages, base_temp, max_attempts, min_chars=0,
-                      extra=None, validate=None, with_reasoning=False):
+                      extra=None, validate=None, with_reasoning=False,
+                      reasoning=None):
     """流式生成，质量不达标自动重试（chat / opening / enhance 共用）。
+
+    reasoning 传 None 用全局设置，传 "none" 强制关掉。设定生成这类「照着
+    用户的话重组」的活儿不需要推理，开着反而会让模型把思考写进正文——
+    不是所有模型都把分析分到 reasoning_content 里，deepseek 就会塞进 content。
 
     事件与 SSE 同构：thinking / delta / retry / final / error。
     最后一个事件必定是 final（成功）或 error（失败）。
@@ -144,6 +149,7 @@ def completion_events(messages, base_temp, max_attempts, min_chars=0,
                 temperature=min(1.5, base_temp + RETRY_TEMP_STEP * (attempt - 1)),
                 stream=True,
                 extra=extra,
+                reasoning=reasoning,
             )
             if resp.status_code != 200:
                 last_error = "接口返回 %s" % resp.status_code
@@ -203,8 +209,9 @@ THINK_RE = re.compile(r"<think(?:ing)?>.*?</think(?:ing)?>", re.S | re.I)
 # 「用户想让我写一个故事背景……让我想想需要什么……等等，重新读一下」。
 # 这类输出以第一人称分析开头，最后才给结果。
 _THINK_HEAD = re.compile(
-    r"^\s*(?:用户想让我|用户想要|用户希望|我需要|让我想想|让我再|我们先|首先我"
-    r"|好的[，,]\s*(?:我|让我|先)|嗯[，,]\s*(?:我|让)|等等[，,]|重新读一下|再读一遍)",
+    r"^\s*(?:用户想让我|用户想要|用户希望|用户要求|我需要|让我想想|让我再"
+    r"|让我构思|我们先|首先我|先把|先看|先确认|好的[，,]\s*(?:我|让我|先)"
+    r"|嗯[，,]\s*(?:我|让)|等等[，,]|重新读一下|再读一遍)",
     re.M)
 
 def strip_thinking(text):
@@ -217,7 +224,9 @@ def strip_thinking(text):
         return t
     # 命中分析口吻：找最后一个「X：」式标题，取它后面那段当正文。
     # 找不到标题就不猜，原样返回，交给 validate 判长度和口吻
-    marks = list(re.finditer(r"(?:故事背景|背景|世界观|设定正文)\s*[:：]", t, re.M))
+    # 标题可能被引号包着：「把"故事背景"补全成…」，也可能直接跟冒号
+    marks = list(re.finditer(
+        r"(?:故事背景|背景|世界观|设定正文)[”\"」』]?\s*[:：]", t, re.M))
     if marks:
         return t[marks[-1].end():].strip()
     return t
