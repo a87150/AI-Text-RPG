@@ -33,8 +33,8 @@ from .config import (
     tier, tier_context, tier_keep, tier_limits, writing, VERSION,
 )
 from .context import (
-    background_compress, build_summary_prompt, compress_session, context_tokens,
-    context_info,
+    COMPRESS_AT, background_compress, build_summary_prompt, compress_session,
+    context_info, context_tokens, total_tokens,
 )
 from .llm import completion_events, extract_json, sse, strip_thinking
 from .prompts import (
@@ -152,6 +152,47 @@ def api_config():
         "creativity_temps": CREATIVITY_TEMP,
     })
 
+def _reclaim_context():
+    """抬高上限之后，把装得下的会话从摘要里放回来。
+
+    压缩不可逆，但原文消息一条没删，只是 compressed_upto 跳过了它们。
+    从 basic(8000) 换到 advanced(32000) 时，当时按 6400 的线压掉的二十几条
+    不会自己回来，用户看到的就是「换了模型数据不见了」。
+    装不下的不动——那种还得靠摘要顶着。
+    """
+    limit = writing()["context_limit"]
+    freed = 0
+    for item in list_sessions():
+        sid = item.get("id")
+        if not sid:
+            continue
+        sess = load_session(sid)
+        if not sess or not int(sess.get("compressed_upto") or 0):
+            continue
+        # 按「游标归零且没有摘要」的全量来量，装得下才放
+        probe = dict(sess)
+        probe["compressed_upto"] = 0
+        probe["summary"] = ""
+        # 量不出来就别动：宁可留着摘要，也不能因为一个异常把游标清了
+        try:
+            tk = total_tokens(probe)
+        except Exception as exc:
+            app.logger.warning("回收量算失败 %s：%s", sid, exc)
+            continue
+        if tk > limit * COMPRESS_AT:
+            continue
+        with get_session_lock(sid):
+            cur = load_session(sid)
+            if not cur or not int(cur.get("compressed_upto") or 0):
+                continue
+            cur["compressed_upto"] = 0
+            cur["summary"] = ""
+            save_session(cur)
+        metrics.note("context.reclaim", sid=sid, limit=limit)
+        freed += 1
+    return freed
+
+
 @app.post("/api/writing")
 def api_writing():
     data = request.get_json(silent=True) or {}
@@ -162,6 +203,7 @@ def api_writing():
         save_reasoning(data["reasoning_effort"])
     if data.get("tier"):
         save_tier(data["tier"])
+        _reclaim_context()
         # 换档会重写 context_limit / keep_recent / summary_chars。同一次请求里
         # 用户明确给过的值要压回去，不然「保存写作参数」里手调的字数白调。
         explicit = {k: data[k] for k in ("context_limit", "keep_recent", "summary_chars")

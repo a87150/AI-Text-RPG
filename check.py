@@ -1306,6 +1306,29 @@ def main():
               _after["messages"][int(_after["compressed_upto"])].get("role"))
         check("压缩后字符变少", rp_context.context_tokens(_after) < _chars)
         check("刚压完不会重复压", rp_context.compress_session(_cs["id"]) is False)
+        # 换到更大档位之后，装得下的会话要被放回来：压缩只推游标，原文还在
+        # 从 basic(8000) 换 advanced(32000) 时游标不回退，用户看到的就是「换模型数据丢了」
+        _rc = rp_api._reclaim_context()
+        _rc_after = rp_storage.load_session(_cs["id"])
+        check("抬高上限后装得下的会话从摘要里放回来",
+              int(_rc_after.get("compressed_upto") or 0) == 0
+              and not (_rc_after.get("summary") or "").strip(),
+              str((_rc, _rc_after.get("compressed_upto"),
+                   len(_rc_after.get("summary") or ""))))
+        # 装不下的必须原样留着，否则超出上限反而更糟
+        _big = rp_storage.new_session("超大会话")
+        _big["messages"] = [{"role": "user" if i % 2 == 0 else "assistant",
+                             "content": "很长的内容" * 400,
+                             "turn": i // 2} for i in range(60)]
+        _big["compressed_upto"] = 20
+        _big["summary"] = "前情提要"
+        _big["turn"] = 30
+        rp_storage.save_session(_big)
+        rp_api._reclaim_context()
+        _big_after = rp_storage.load_session(_big["id"])
+        check("装不下的会话不回收",
+              int(_big_after.get("compressed_upto") or 0) == 20,
+              str(_big_after.get("compressed_upto")))
         check("没有白调第二次模型", len(_calls) == 1, str(len(_calls)))
         # 摘要要进 system 提示，否则等于没留
         _built = rp_prompts.build_messages(_after, None)
