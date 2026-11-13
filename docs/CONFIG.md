@@ -8,16 +8,30 @@
 
 | 键 | 默认 | 范围 | 作用 | 界面 |
 | --- | --- | --- | --- | --- |
-| `narrator_min` | 40 | 10 ~ 300 | 旁白最少字数 | `#w-narrator-min` |
-| `narrator_max` | 100 | 20 ~ 600 | 旁白最多字数 | `#w-narrator-max` |
-| `line_min` | 120 | 40 ~ 1200 | 角色台词最少字数 | `#w-line-min` |
-| `line_max` | 280 | 60 ~ 2000 | 角色台词最多字数 | `#w-line-max` |
-| `context_limit` | 8000 | 2000 ~ 60000 | 上下文预算（字） | `#w-context` |
+| `narrator_min` | 40 | 10 ~ 300 | 旁白段落最少字数 | `#w-narrator-min` |
+| `narrator_max` | 100 | 20 ~ 600 | 旁白段落最多字数 | `#w-narrator-max` |
+| `line_min` | 120 | 10 ~ 1200 | 每个角色一份，最少字数 | `#w-line-min` |
+| `line_max` | 280 | 60 ~ 2000 | 每个角色一份，最多字数 | `#w-line-max` |
+| `context_limit` | 8000 | 2000 ~ 60000 | 上下文预算（token） | `#w-context` |
 | `keep_recent` | 16 | 4 ~ 60 | 压缩后保留最近多少条 | `#w-keep` |
 | `max_characters` | 4 | 1 ~ 10 | 一局里最多几个角色 | `#w-chars` |
-| `summary_chars` | 400 | 150 ~ 1200 | 每段压缩摘要的字数上限 | `#w-summary` |
+| `summary_chars` | 400 | 150 ~ 2000 | 每段压缩摘要的字数上限 | `#w-summary` |
 
-切能力档位时 `context_limit` 会被该档位的默认值覆盖——档位就是靠这个定义预算的。手改之后又切了档位，改的会被冲掉。
+字数这四个值怎么落到 prompt 上，按模式分两种：
+
+| 模式 | 旁白 | 每个角色 | 整轮上限 |
+| --- | --- | --- | --- |
+| 一般 `normal` | —— | —— | `narrator_max + line_max`（合成一段，不拆） |
+| 角色扮演 `rp` | `narrator_min ~ narrator_max` | `line_min ~ line_max` 各一份 | `narrator_max + line_max × 人数` |
+
+人数取角色表里的总数，不是只在场的。同一个区间还会写进最后一条 user 消息的尾巴，
+内容和 rules 文件里的一致，不会出现文件说一套、尾巴说另一套。
+
+这四个数是**区间**，不是目标值：低于下限算没写完，高于上限算替用户往下写。
+程序不会按输入长短替你改这个区间；短输入的抑制靠规则文件里的文字提示
+（`DENSITY_HINT`），不改数字。
+
+切能力档位时 `context_limit` 会被该档位的默认值覆盖——档位就是靠这个定义预算的。手改之后又切了档位，改的会被冲掉。反过来，档位抬高之后，之前被压缩掉的会话如果在新预算里装得下，游标会自动退回 0、摘要是清掉的（`_reclaim_context`），原文重新进上下文。
 
 ## 能力档位（`TIER_LIMITS`）
 
