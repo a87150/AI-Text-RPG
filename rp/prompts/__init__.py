@@ -343,19 +343,17 @@ def build_context_debug(sess, speaker=None):
     every = tier_limits()["anchor_every"]
     anchored = bool(turn and turn % every == 0 and build_anchor_block(sess))
     facts = active_facts(sess)
-    facts_len = sum(len(str(f.get("fact") or "")) for f in facts)
-    summary_len = len(sess.get("summary") or "")
     # summary 和 facts 已经拼进 system 了，再加一遍是虚报；
     # lore 是另外一条 system 消息，不在 system 里，要算
     total = len(system) + lore_len
     return {
         "system": system,
         "lore": hits,
-        "lore_chars": lore_len,
-        "summary_chars": summary_len,
+        "lore_tokens": _tokens("".join(h["content"] for h in hits)) + _tokens("".join(h.get("keys") or "" for h in hits)),
+        "summary_tokens": _tokens(sess.get("summary") or ""),
         "status": sess.get("status") or {},
         "facts": facts,
-        "facts_chars": facts_len,
+        "facts_tokens": _tokens("".join(f.get("fact") or "" for f in facts)),
         "anchored": anchored,
         "anchor_every": every,
         "chars": {"total": total, "system": len(system)},

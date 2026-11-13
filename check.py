@@ -1807,7 +1807,7 @@ def main():
         "facts": [{"fact": "某件事", "state": "active"}], "messages": [],
     })
     check("上下文总量不重复计摘要和事实",
-          _cd["chars"]["total"] == len(_cd["system"]) + _cd["lore_chars"],
+          _cd["chars"]["total"] == len(_cd["system"]) + _cd["lore_tokens"],
           str(_cd["chars"]))
     check("状态提示写明事实上限", "一轮最多三条" in rp_prompts.status_prompt())
     check("写设定时不把占位符当真名",

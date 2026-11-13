@@ -93,11 +93,11 @@ def context_info(sess):
         # 显示压缩真正会留下的条数，别跟实际行为对不上
         "keep_recent": max(writing()["keep_recent"],
                            tier_limits()["history_msgs"] or writing()["keep_recent"]),
-        "summary_chars": len(sess.get("summary") or ""),
+        "summary_tokens": _tokens(sess.get("summary") or ""),
         "compress": {
             "times": int(comp.get("times") or 0),
             "dropped": int(comp.get("dropped") or 0),
-            "dropped_chars": int(comp.get("dropped_chars") or 0),
+            "dropped_tokens": int(comp.get("dropped_tokens") or 0),
             "updated_at": comp.get("updated_at") or 0,
         },
     }
@@ -180,7 +180,7 @@ def compress_session(sid, force=False, max_attempts=2):
         sess["compress"] = {
             "times": int(prev.get("times") or 0) + 1,
             "dropped": int(prev.get("dropped") or 0) + len(old),
-            "dropped_chars": int(prev.get("dropped_chars") or 0) + len(text),
+            "dropped_tokens": int(prev.get("dropped_tokens") or 0) + _tokens(text),
             "updated_at": time.time(),
         }
         sess["summary"] = summary

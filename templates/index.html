@@ -454,7 +454,7 @@ window.addEventListener('unhandledrejection', function (e) {
                 <div class="field"><label for="w-line-max">角色言行最多字数</label><input id="w-line-max" type="number" min="60" max="2000"></div>
               </div>
               <div class="grid2">
-                <div class="field"><label for="w-context">上下文上限（超过就自动压缩，单位字）</label><input id="w-context" type="number" min="2000" max="60000" step="500"></div>
+                <div class="field"><label for="w-context">上下文上限（token；到八成就自动压缩，不是等撞线）</label><input id="w-context" type="number" min="2000" max="60000" step="500"></div>
                 <div class="field"><label for="w-keep">压缩后保留最近消息数（越新的越原样保留，更早的压成摘要）</label><input id="w-keep" type="number" min="4" max="60"></div>
               </div>
               <div class="grid2">

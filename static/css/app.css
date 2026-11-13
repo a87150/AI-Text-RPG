@@ -902,7 +902,7 @@ body.story-view #btn-search { display: none; }
 }
 .ctx-more summary:hover { color: var(--text-dim); }
 /* 口径说明：数字为什么和上面那个不一样 */
-.ctx-note { font-size: .7188rem; color: var(--text-mute); margin: -2px 0 6px; line-height: 1.6; }
+.ctx-note { font-size: .7188rem; color: var(--text-mute); margin: 10px 0 6px; line-height: 1.6; }
 .ctx-meter.warn i { background: var(--warn); }
 .ctx-meter.full i { background: var(--danger); }
 

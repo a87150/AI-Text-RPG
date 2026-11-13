@@ -584,9 +584,9 @@ export function renderContextDetail() {
     const pol = document.createElement('div');
     pol.className = 'ctx-rows';
     pol.appendChild(mkRow('世界书命中', (d.lore || []).length
-      ? (d.lore || []).length + ' 条 / ' + fmtNumber(d.lore_chars) + ' 字' : '无'));
+      ? (d.lore || []).length + ' 条 / ' + fmtNumber(d.lore_tokens) + ' token' : '无'));
     pol.appendChild(mkRow('事实账本', facts.length
-      ? facts.length + ' 条 / ' + fmtNumber(d.facts_chars) + ' 字' : '无'));
+      ? facts.length + ' 条 / ' + fmtNumber(d.facts_tokens) + ' token' : '无'));
     pol.appendChild(mkRow('人设锚定', d.anchored
       ? '本轮已重插角色核心' : '每 ' + (d.anchor_every || 15) + ' 轮重插一次'));
     box.appendChild(pol);
@@ -603,9 +603,9 @@ export function renderContextDetail() {
     low.appendChild(mkRow('保留上限', (c.keep_recent || 0) + ' 条'));
     low.appendChild(mkRow('压缩', comp.times ? comp.times + ' 次' : '未压缩'));
     low.appendChild(mkRow('已折叠', comp.times
-      ? comp.dropped + ' 条 / ' + fmtNumber(comp.dropped_chars) + ' 字' : '—'));
-    low.appendChild(mkRow('前情提要', c.summary_chars
-      ? fmtNumber(c.summary_chars) + ' 字' : '无'));
+      ? comp.dropped + ' 条 / ' + fmtNumber(comp.dropped_tokens) + ' token' : '—'));
+    low.appendChild(mkRow('前情提要', c.summary_tokens
+      ? fmtNumber(c.summary_tokens) + ' token' : '无'));
     low.appendChild(mkRow('写盘 / 读盘', c.io
       ? Math.round(c.io.save_ms || 0) + ' / ' + Math.round(c.io.load_ms || 0) + ' ms' : '—'));
     low.appendChild(mkRow('会话文件', c.io && c.io.bytes
