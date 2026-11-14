@@ -639,6 +639,22 @@ def main():
     check("状态块能声明事实", parsed["facts"] == ["两人约好三天后见"], str(parsed["facts"]))
     check("事实不会混进状态字段", "facts" not in (parsed["status"] or {}))
 
+    # 一字不差的不再抄第二份：以前会留下 resolved + active 两条，看着就是重复
+    repeat = {"turn": 1, "facts": []}
+    for t_no in (1, 2, 3):
+        rp_characters.merge_facts(repeat, ["甲拿走了钥匙"], turn=t_no)
+    check("同一句说三遍只留一条",
+          len(repeat["facts"]) == 1 and repeat["facts"][0]["turn"] == 3,
+          str(repeat["facts"]))
+    # 历史数据里已经攒下的 resolved + active 副本，下一次合并时清掉
+    dirty = {"turn": 3, "facts": [
+        {"turn": 1, "fact": "摄像头录像成为把柄", "state": "resolved"},
+        {"turn": 2, "fact": "摄像头录像成为把柄", "state": "active"},
+        {"turn": 2, "fact": "苏茵爱承认没有男朋友", "state": "resolved"},
+        {"turn": 3, "fact": "苏茵爱承认没有男朋友", "state": "active"}]}
+    rp_characters.merge_facts(dirty, ["新的一件事"], turn=4)
+    check("旧的重复副本被清掉", len(dirty["facts"]) == 3, str(dirty["facts"]))
+
     # 22. 快照：能存能列能回滚
     snap_sess = rp_storage.new_session("快照测试")
     rp_storage.save_session(snap_sess)

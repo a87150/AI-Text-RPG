@@ -587,8 +587,10 @@ export function renderContextDetail() {
 
   // 五、策略与状态：偶尔看一眼，不看也不影响聊天
   if (d) {
-    // 手改过就用会话里的完整账本，否则用本轮实际注入的那份
-    const facts = s.facts || d.facts || [];
+    // 手改过就用会话里的完整账本，否则用本轮实际注入的那份。
+    // 只列 active：resolved 是被取代的旧说法，混进来只会看着像重复
+    const facts = (s.facts || d.facts || [])
+      .filter((f) => (f.state || 'active') === 'active');
     box.appendChild(mkSub('策略'));
     const pol = document.createElement('div');
     pol.className = 'ctx-rows';

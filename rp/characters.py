@@ -587,6 +587,32 @@ def _fact_sim(a, b):
     return len(A & B) / max(1, len(A | B))
 
 
+def _dedupe_book(book):
+    """一字不差的只留一条。
+
+    历史数据里同一条事实常见两份：resolved 是被取代的旧说法，active 是现行的。
+    它们占着 FACTS_MAX 的名额，封顶时会把真正有效的事实挤出去。
+    留最后一条 active；同组里没有 active 才退回留最后一条。
+    """
+    groups = {}
+    for i, f in enumerate(book):
+        if isinstance(f, dict):
+            groups.setdefault(_norm(f.get("fact") or ""), []).append(i)
+    drop = set()
+    for idxs in groups.values():
+        if len(idxs) < 2:
+            continue
+        keep = None
+        for i in idxs:
+            if book[i].get("state") == "active":
+                keep = i
+        if keep is None:
+            keep = idxs[-1]
+        drop.update(i for i in idxs if i != keep)
+    if drop:
+        book[:] = [f for i, f in enumerate(book) if i not in drop]
+
+
 def merge_facts(sess, new_facts, turn=None):
     """把这一轮声明的事实并进账本：相似的旧事实让位，总数封顶。"""
     if not new_facts:
@@ -600,21 +626,36 @@ def merge_facts(sess, new_facts, turn=None):
         if not text:
             continue
         norm = _norm(text)
+        same = None
         superseded = None
         for old in book:
-            if not isinstance(old, dict) or old.get("state") != "active":
+            if not isinstance(old, dict):
+                continue
+            old_norm = _norm(old.get("fact") or "")
+            # 一字不差：这话又说了一遍而已，把它复活，别在账本里再抄一份。
+            # 以前这里照样走下面那条路，于是同一条事实留下「resolved + active」两份
+            if old_norm == norm:
+                same = old
+                break
+            if old.get("state") != "active":
                 continue
             # 见 _fact_sim：顺序比对分不清「换语序」和「换对象」，
             # 集合比对可以。0.7 是实测分界，两边都有余量
-            if _fact_sim(norm, _norm(old.get("fact") or "")) > 0.7:
+            if _fact_sim(norm, old_norm) > 0.7:
                 superseded = old
                 break
+        if same is not None:
+            same["state"] = "active"
+            same["turn"] = int(turn or sess.get("turn") or 0)
+            fresh.append(same)
+            continue
         if superseded is not None:
             superseded["state"] = "resolved"
         entry = {"turn": int(turn or sess.get("turn") or 0), "fact": text,
                  "subject": _fact_subject(text), "state": "active"}
         book.append(entry)
         fresh.append(entry)
+    _dedupe_book(book)
     if len(book) > FACTS_MAX:
         del book[:len(book) - FACTS_MAX]
     _active = sum(1 for x in book if isinstance(x, dict) and x.get("state") == "active")
