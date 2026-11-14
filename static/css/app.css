@@ -281,6 +281,16 @@ body.story-view #btn-search { display: none; }
   border-radius: 16px; padding: 20px 22px 16px; box-shadow: var(--shadow);
 }
 .idea-pop.hidden { display: none; }
+
+/* 单项重写的浮层（点字段旁的 ✦ AI）。它管的是一个字段，得浮在视野正中，
+   而 .idea-pop 那套 bottom: 76px 是给「完善整份设定」贴输入框用的。
+   top/bottom/left/right 四边都设 + margin:auto，是唯一不靠 transform、
+   也不依赖父级 padding 的双轴居中写法 */
+#ask-pop {
+  left: 26px; right: 26px; top: 24px; bottom: 24px;
+  width: auto; max-width: 520px; height: fit-content;
+  margin: auto;
+}
 .idea-pop label {
   margin: 0; font-size: .875rem; font-weight: 600;
   color: var(--text-dim); letter-spacing: .02em;
@@ -1049,6 +1059,7 @@ body.story-view #btn-search { display: none; }
   .field-head { flex-wrap: wrap; }
   .pick-list { grid-template-columns: 1fr; max-height: 40vh; }
   .idea-pop { left: 12px; right: 12px; width: auto; max-width: none; bottom: 12px; max-height: calc(100% - 90px); padding: 16px 16px 12px; }
+  #ask-pop { left: 12px; right: 12px; top: 12px; bottom: 12px; }
   .composer { padding: 8px 12px; }
 
   .messages { padding: 12px; }
