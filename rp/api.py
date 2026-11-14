@@ -1005,6 +1005,46 @@ def _rewind_to(sess, index):
     _restore_snapshot(sess, snap)
     return sess
 
+@app.post("/api/sessions/<sid>/facts")
+def api_edit_facts(sid):
+    """手动增删事实账本。
+
+    模型自己记的和手填的落在同一本账里，只是手填的挂 manual 标记。
+    删除按「轮次 + 原文」定位而不是下标：模型随时会往里记新条目，
+    下标在两次渲染之间会漂。
+    """
+    data = request.get_json(silent=True) or {}
+    action = _str(data, "action")
+    with get_session_lock(sid):
+        sess = load_session(sid)
+        if not sess:
+            return jsonify({"error": "会话不存在"}), 404
+        book = sess.get("facts")
+        if not isinstance(book, list):
+            book = sess["facts"] = []
+        if action == "add":
+            text = _str(data, "fact").strip()[:120]
+            if not text:
+                return jsonify({"error": "写一句要记住的事"}), 400
+            book.append({"turn": int(sess.get("turn") or 0), "fact": text,
+                         "subject": _str(data, "subject").strip()[:12] or "手动",
+                         "state": "active", "manual": True})
+            # 手动添加的上限放宽：40 是给自动记账的，手填不该被那么快挤掉
+            if len(book) > 200:
+                del book[:len(book) - 200]
+        elif action == "delete":
+            turn = data.get("turn")
+            text = _str(data, "fact")
+            for i, f in enumerate(book):
+                if (isinstance(f, dict) and f.get("turn") == turn
+                        and (f.get("fact") or "") == text):
+                    del book[i]
+                    break
+        else:
+            return jsonify({"error": "动作不对"}), 400
+        save_session(sess)
+        return jsonify({"facts": book})
+
 @app.post("/api/sessions/<sid>/lore/promote")
 def api_promote_lore(sid):
     """把这一局攒的词条存进故事模板。

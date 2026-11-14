@@ -457,6 +457,19 @@ const SEG_LABEL = {
 const SEG_COLOR = ['#7aa2f7', '#9ece6a', '#e0af68', '#bb9af7', '#7dcfff',
   '#f7768e', '#2ac3de', '#c0caf5', '#565f89'];
 
+/** 改事实账本：加一条或删一条。成功后用服务端返回的完整账本替换本地视图。 */
+async function editFacts(payload) {
+  const s = state.session;
+  if (!s || !s.id) return;
+  try {
+    const res = await api('/api/sessions/' + s.id + '/facts', { method: 'POST', body: payload });
+    s.facts = res.facts || [];
+    renderContextDetail();
+  } catch (e) {
+    toast('改账本失败：' + e.message, 'error');
+  }
+}
+
 export function renderContextDetail() {
   const box = $('#ctx-detail');
   if (!box) return;
@@ -579,7 +592,8 @@ export function renderContextDetail() {
 
   // 五、策略与状态：偶尔看一眼，不看也不影响聊天
   if (d) {
-    const facts = d.facts || [];
+    // 手改过就用会话里的完整账本，否则用本轮实际注入的那份
+    const facts = s.facts || d.facts || [];
     box.appendChild(mkSub('策略'));
     const pol = document.createElement('div');
     pol.className = 'ctx-rows';
@@ -648,11 +662,36 @@ export function renderContextDetail() {
         key.textContent = (f.subject || '?') + ' · 第 ' + (f.turn || 0) + ' 轮';
         const body = document.createElement('span');
         body.textContent = f.fact || '';
-        row.append(key, body);
+        const del = document.createElement('button');
+        del.className = 'ctx-fact-del';
+        del.type = 'button';
+        del.textContent = '×';
+        del.title = '从账本里删掉这条';
+        del.onclick = () => editFacts({ action: 'delete', turn: f.turn, fact: f.fact });
+        row.append(key, body, del);
         list.appendChild(row);
       }
       box.appendChild(list);
     }
+
+    // 手填一条：模型没记住的、或你想让它记住的，都从这里进账本
+    const add = document.createElement('div');
+    add.className = 'ctx-fact-add';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.maxLength = 120;
+    input.placeholder = '手动记一条，比如「她左手腕有疤」';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = '记下';
+    const submit = () => {
+      const text = input.value.trim();
+      if (text) editFacts({ action: 'add', fact: text });
+    };
+    btn.onclick = submit;
+    input.onkeydown = (e) => { if (e.key === 'Enter') submit(); };
+    add.append(input, btn);
+    box.appendChild(add);
 
     const details = document.createElement('details');
     details.className = 'ctx-system';

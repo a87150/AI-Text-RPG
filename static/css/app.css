@@ -845,6 +845,28 @@ body.story-view #btn-search { display: none; }
   flex: none; font-size: .6875rem; color: var(--accent);
   background: var(--accent-soft); border-radius: 5px; padding: 1px 6px;
 }
+/* 账本条目可删：× 贴右，平时淡一点，指上去才红 */
+.ctx-lore-row span { flex: 1; min-width: 0; }
+.ctx-fact-del {
+  flex: none; background: none; border: 0; cursor: pointer; padding: 0 2px;
+  font-size: .875rem; line-height: 1; color: var(--text-mute); opacity: .55;
+}
+.ctx-lore-row:hover .ctx-fact-del { opacity: 1; }
+.ctx-fact-del:hover { color: var(--danger); }
+/* 手填一条：输入框吃掉剩余宽度，按钮不换行 */
+.ctx-fact-add { display: flex; gap: 6px; margin: 2px 0 10px; }
+.ctx-fact-add input {
+  flex: 1; min-width: 0; font-size: .75rem; padding: 5px 9px;
+  border-radius: 7px; border: 1px solid var(--border);
+  background: var(--bg-input); color: var(--text); outline: none;
+}
+.ctx-fact-add input:focus { border-color: var(--accent); }
+.ctx-fact-add button {
+  flex: none; font-size: .75rem; padding: 5px 12px; cursor: pointer;
+  border-radius: 7px; border: 1px solid var(--border);
+  background: var(--bg-elev); color: var(--text-dim);
+}
+.ctx-fact-add button:hover { background: var(--bg-hover); color: var(--text); }
 .ctx-snaps { display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px; font-size: .75rem; color: var(--text-mute); }
 .ctx-snap { display: flex; align-items: center; gap: 10px; }
 .ctx-snap span { flex: 1; color: var(--text-dim); }
