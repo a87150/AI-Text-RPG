@@ -165,6 +165,7 @@ cover 只存文件名，路径由 DATA_DIR 推，换机器能跑。cover_history
     GET    /api/sessions/<sid>/export.md  导出成 Markdown
     POST   /api/sessions/import           把导出的 JSON 装回来，开一份新会话
     POST   /api/sessions/<sid>/lore/promote   把这一局的词条固化到故事模板
+    POST   /api/sessions/<sid>/facts      手动增删事实账本（action: add / delete）
     GET    /api/backups                   备份列表与定时配置
     POST   /api/backups                    立即备份
     GET    /api/backups/<name>            下载备份
