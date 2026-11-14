@@ -524,11 +524,15 @@ export function renderContextDetail() {
   box.append(head, meter,
     mkNote('会话数据加 system 模板一起算，到八成自动压缩。'));
 
-  // 二、上轮真实用量：模型自己报的数，和上面的估算对得上才说明没算错
+  // 二、用量与耗时一块：模型报的数和落盘的累计放一起，对得上才说明没算错。
+  // 首字等待卡 prefill、生成速度卡 decode，分开看才知道慢在哪一段
   const inTok = (st.usage && st.usage.prompt_tokens) || 0;
   const outTok = (st.usage && st.usage.completion_tokens) || 0;
-  // 上轮是模型自己报的数，累计是落盘的。和上面的估算对得上，才说明没算错
   const tot = st.total || {};
+  const ttft = st.first_token_ms || 0;
+  const totalMs = st.total_ms || 0;
+  const decodeMs = st.decode_ms || (totalMs > ttft ? totalMs - ttft : 0);
+  const speed = (decodeMs > 0 && outTok) ? Math.round(outTok / (decodeMs / 1000)) : 0;
   const core = document.createElement('div');
   core.className = 'ctx-rows';
   core.appendChild(mkRow('上轮真实', inTok
@@ -537,20 +541,11 @@ export function renderContextDetail() {
   core.appendChild(mkRow('累计 token', tot.calls
     ? tot.calls + ' 次 · 入 ' + fmtNumber(tot.prompt_tokens)
       + ' · 出 ' + fmtNumber(tot.completion_tokens) : '—'));
-  box.appendChild(core);
-
-  // 三、耗时拆成两段：卡在 prefill 还是卡在 decode，看这两个数就够了
-  const ttft = st.first_token_ms || 0;
-  const totalMs = st.total_ms || 0;
-  const decodeMs = st.decode_ms || (totalMs > ttft ? totalMs - ttft : 0);
-  const speed = (decodeMs > 0 && outTok) ? Math.round(outTok / (decodeMs / 1000)) : 0;
-  const time = document.createElement('div');
-  time.className = 'ctx-rows';
-  time.appendChild(mkRow('首字等待', ttft ? fmtNumber(ttft) + ' ms' : '—'));
-  time.appendChild(mkRow('生成速度', speed
+  core.appendChild(mkRow('首字等待', ttft ? fmtNumber(ttft) + ' ms' : '—'));
+  core.appendChild(mkRow('生成速度', speed
     ? speed + ' token/s（' + fmtNumber(outTok) + ' 出 / ' + fmtNumber(decodeMs) + ' ms）' : '—'));
-  time.appendChild(mkRow('上轮总耗时', totalMs ? fmtNumber(totalMs) + ' ms' : '—'));
-  box.appendChild(time);
+  core.appendChild(mkRow('上轮总耗时', totalMs ? fmtNumber(totalMs) + ' ms' : '—'));
+  box.appendChild(core);
 
   // 四、system prompt 构成：占比条只回答一个问题——哪一块在膨胀
   const parts = (d && d.system_parts) || {};
@@ -605,34 +600,23 @@ export function renderContextDetail() {
       ? '本轮已重插角色核心' : '每 ' + (d.anchor_every || 15) + ' 轮重插一次'));
     box.appendChild(pol);
 
-    // 六、底层诊断：对聊天体感没影响，收起来
-    const more = document.createElement('details');
-    more.className = 'ctx-more';
-    const sm = document.createElement('summary');
-    sm.textContent = '底层诊断（消息数、压缩、读写盘、费用）';
-    more.appendChild(sm);
-    const low = document.createElement('div');
-    low.className = 'ctx-rows';
-    low.appendChild(mkRow('消息', (c.messages || 0) + ' 条'));
-    low.appendChild(mkRow('保留上限', (c.keep_recent || 0) + ' 条'));
-    low.appendChild(mkRow('压缩', comp.times ? comp.times + ' 次' : '未压缩'));
-    low.appendChild(mkRow('已折叠', comp.times
+    // 六、会话结构与落盘：接着上面那块用量往下排，不再单独折一层。
+    // 「前情提要」不放这——系统提示词构成里的「前情」就是它，说两遍只会让人对不上数
+    core.appendChild(mkRow('消息', (c.messages || 0) + ' 条'));
+    core.appendChild(mkRow('保留上限', (c.keep_recent || 0) + ' 条'));
+    core.appendChild(mkRow('压缩', comp.times ? comp.times + ' 次' : '未压缩'));
+    core.appendChild(mkRow('已折叠', comp.times
       ? comp.dropped + ' 条 / ' + fmtNumber(comp.dropped_tokens) + ' token' : '—'));
-    low.appendChild(mkRow('前情提要', c.summary_tokens
-      ? fmtNumber(c.summary_tokens) + ' token' : '无'));
-    low.appendChild(mkRow('写盘 / 读盘', c.io
+    core.appendChild(mkRow('写盘 / 读盘', c.io
       ? Math.round(c.io.save_ms || 0) + ' / ' + Math.round(c.io.load_ms || 0) + ' ms' : '—'));
-    low.appendChild(mkRow('会话文件', c.io && c.io.bytes
+    core.appendChild(mkRow('会话文件', c.io && c.io.bytes
       ? fmtNumber(Math.round(c.io.bytes / 1024)) + ' KB' : '—'));
     const hit = (st.usage && (st.usage.prompt_cache_hit_tokens
       || (st.usage.prompt_tokens_details || {}).cached_tokens)) || 0;
-    low.appendChild(mkRow('缓存命中', hit
+    core.appendChild(mkRow('缓存命中', hit
       ? fmtNumber(hit) + ' token（' + Math.round(hit / (inTok || 1) * 100) + '%）' : '无'));
-    low.appendChild(mkRow('上轮费用', st.cost
+    core.appendChild(mkRow('上轮费用', st.cost
       ? '$' + st.cost.total.toFixed(6) : '未配单价'));
-    const tot = st.total || {};
-    more.appendChild(low);
-    box.appendChild(more);
 
     if ((d.lore || []).length) {
       box.appendChild(mkSub('命中的世界书'));

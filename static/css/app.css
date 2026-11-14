@@ -931,12 +931,6 @@ body.story-view #btn-search { display: none; }
 .ctx-seg-legend b { font-weight: 600; color: var(--text-dim); }
 .ctx-seg-dot { width: 8px; height: 8px; border-radius: 2px; flex: none; }
 /* 底层诊断：日常不关心，收起来 */
-.ctx-more { margin-top: 8px; }
-.ctx-more summary {
-  cursor: pointer; font-size: .75rem; color: var(--text-mute);
-  padding: 4px 0; outline: none;
-}
-.ctx-more summary:hover { color: var(--text-dim); }
 /* 口径说明：数字为什么和上面那个不一样 */
 .ctx-note { font-size: .7188rem; color: var(--text-mute); margin: 10px 0 6px; line-height: 1.6; }
 .ctx-meter.warn i { background: var(--warn); }
