@@ -75,8 +75,15 @@ def model_call(messages, temperature=0.8, stream=False, extra=None, reasoning=No
             resp = _post(payload)
     return resp
 
-def model_text(messages, temperature=0.8, reasoning=None):
-    resp = model_call(messages, temperature=temperature, stream=False, reasoning=reasoning)
+def model_text(messages, temperature=0.8, reasoning=None, max_tokens=4000):
+    """一次拿全文的调用（状态刷新、摘要压缩走这里）。
+
+    预算必须给足：推理模型先写思考再写正文，两者共用同一个 max_tokens。
+    不给就按服务端默认，思考一长正文就是空的——而调用方多半是
+    except 里静默 return，于是状态悄无声息地不再更新。
+    """
+    resp = model_call(messages, temperature=temperature, stream=False, reasoning=reasoning,
+                      extra={"max_tokens": max_tokens} if max_tokens else None)
     if resp.status_code != 200:
         raise RuntimeError("Ollama 返回 %s：%s" % (resp.status_code, resp.text[:300]))
     data = resp.json()

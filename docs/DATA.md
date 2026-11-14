@@ -38,7 +38,8 @@
         "relations": "戒备", "items": {"甲": "湿伞、铜钥匙"}, "goal": "等他先开口"
       },
       "facts": [
-        {"fact": "钥匙到了甲手里", "state": "active", "turn": 3, "subject": "钥匙"}
+        {"fact": "钥匙到了甲手里", "state": "active", "turn": 3, "subject": "钥匙"},
+        {"fact": "她左手腕有疤", "state": "active", "turn": 5, "subject": "手动", "manual": true}
       ],
       "messages": [
         {"role": "user", "content": "我推门进去。"},
@@ -47,6 +48,10 @@
       ],
       "lore": [{"keys": "某酒馆", "content": "城南的酒馆，老板欠甲一条命。"}]
     }
+
+facts 里 state 为 resolved 的是被取代的旧说法：注入和面板都只用 active，它留着只是备查。
+同一句话重复声明不会再抄第二份，只把原条目复活并刷新 turn。manual 为 true 的是你从面板
+手填的，跟模型自己记的走同一本账，只是上限放宽（手填 200 条，自动记账 40 条封顶）。
 
 character 的 state 和 history 由模型每轮的「【变化】」维护；第 0 个角色决定 ai_name 和 ai_role。
 
