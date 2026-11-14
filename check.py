@@ -655,6 +655,26 @@ def main():
     rp_characters.merge_facts(dirty, ["新的一件事"], turn=4)
     check("旧的重复副本被清掉", len(dirty["facts"]) == 3, str(dirty["facts"]))
 
+    # 包含关系也是重复：第 0 轮记「还有23天」，第 15 轮又记同一件事的简写。
+    # 这类两条的集合相似度只有 0.63，阈值碰不到，只能按子串判
+    sub = {"turn": 0, "facts": []}
+    rp_characters.merge_facts(sub, ["丈夫出差第7天，还有23天"], turn=1)
+    rp_characters.merge_facts(sub, ["丈夫出差第7天"], turn=15)
+    live_sub = rp_characters.active_facts(sub)
+    check("简写并进长的那条",
+          len(live_sub) == 1 and live_sub[0]["fact"] == "丈夫出差第7天，还有23天",
+          str(live_sub))
+    later = {"turn": 0, "facts": []}
+    rp_characters.merge_facts(later, ["丈夫出差第7天"], turn=1)
+    rp_characters.merge_facts(later, ["丈夫出差第7天，还有23天"], turn=15)
+    check("后来的长版本升级掉简写",
+          len(rp_characters.active_facts(later)) == 1, str(later["facts"]))
+    apart = {"turn": 0, "facts": []}
+    rp_characters.merge_facts(apart, ["甲拿到了钥匙"], turn=1)
+    rp_characters.merge_facts(apart, ["甲拿到了地图"], turn=2)
+    check("不同的事不合并", len(rp_characters.active_facts(apart)) == 2,
+          str(apart["facts"]))
+
     # 22. 快照：能存能列能回滚
     snap_sess = rp_storage.new_session("快照测试")
     rp_storage.save_session(snap_sess)

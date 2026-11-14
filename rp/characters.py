@@ -572,7 +572,10 @@ FACTS_MAX = 40
 FACTS_KEEP = 12
 
 def _norm(text):
-    return re.sub(r"\s+", "", (text or "").lower())
+    # 去掉空格和全部标点。中文条目常只差一个句号或引号：
+    # 「报警电话已接通。」和「报警电话已接通」按空白归一算是两条，
+    # 于是同一句话能进账本两次。\W 在 Unicode 下保留汉字和字母数字
+    return re.sub(r"[\W_]+", "", (text or "").lower())
 
 def _fact_sim(a, b):
     """两句话是不是在说同一件事。
@@ -588,30 +591,37 @@ def _fact_sim(a, b):
 
 
 def _dedupe_book(book):
-    """一字不差的只留一条。
+    """把说的是同一件事的条目并成一条。
 
-    历史数据里同一条事实常见两份：resolved 是被取代的旧说法，active 是现行的。
-    它们占着 FACTS_MAX 的名额，封顶时会把真正有效的事实挤出去。
-    留最后一条 active；同组里没有 active 才退回留最后一条。
+    两种重复都要处理。一字不差的是一种；更常见的是包含关系——第 0 轮
+    记「丈夫出差第7天，还有23天」，第 15 轮又记「丈夫出差第7天」，两条
+    归一化之后集合相似度只有 0.63，任何相似度阈值都碰不到，但它们显然
+    是一件事。
+
+    留哪条按优先级排：手填 > 现行 > 信息更全 > 后出现的说法。保留者如果
+    原本是已失效的，要标回现行——它吃掉了另一条，说明这条才是现行的说法。
     """
-    groups = {}
-    for i, f in enumerate(book):
-        if isinstance(f, dict):
-            groups.setdefault(_norm(f.get("fact") or ""), []).append(i)
+    items = [f for f in book if isinstance(f, dict)]
+    norms = [_norm(f.get("fact") or "") for f in items]
     drop = set()
-    for idxs in groups.values():
-        if len(idxs) < 2:
+    for i in range(len(items)):
+        if i in drop or not norms[i]:
             continue
-        keep = None
-        for i in idxs:
-            if book[i].get("state") == "active":
-                keep = i
-        if keep is None:
-            keep = idxs[-1]
-        drop.update(i for i in idxs if i != keep)
-    if drop:
-        book[:] = [f for i, f in enumerate(book) if i not in drop]
-
+        for j in range(i + 1, len(items)):
+            if j in drop or not norms[j]:
+                continue
+            if not (norms[i] == norms[j] or norms[i] in norms[j] or norms[j] in norms[i]):
+                continue
+            a, b = items[i], items[j]
+            sa = (bool(a.get("manual")), a.get("state") == "active", len(norms[i]))
+            sb = (bool(b.get("manual")), b.get("state") == "active", len(norms[j]))
+            win, lose = (i, j) if sa >= sb else (j, i)
+            if items[lose].get("state") == "active":
+                items[win]["state"] = "active"
+            drop.add(lose)
+            if lose == i:
+                break
+    book[:] = [f for k, f in enumerate(items) if k not in drop]
 
 def merge_facts(sess, new_facts, turn=None):
     """把这一轮声明的事实并进账本：相似的旧事实让位，总数封顶。"""
