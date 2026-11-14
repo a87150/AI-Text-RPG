@@ -653,7 +653,22 @@ export function renderContextDetail() {
         del.type = 'button';
         del.textContent = '×';
         del.title = '从账本里删掉这条';
-        del.onclick = () => editFacts({ action: 'delete', turn: f.turn, fact: f.fact });
+        // 两段式：先点成「确定删除」，再点才真删，三秒不点自己收回。
+        // 一行只有一个 ×，手指一滑就删掉一条设定，比点两次麻烦得多
+        del.onclick = () => {
+          if (del.dataset.armed) {
+            editFacts({ action: 'delete', turn: f.turn, fact: f.fact });
+            return;
+          }
+          del.dataset.armed = '1';
+          del.textContent = '确定删除';
+          del.classList.add('armed');
+          del._disarm = setTimeout(() => {
+            delete del.dataset.armed;
+            del.textContent = '×';
+            del.classList.remove('armed');
+          }, 3000);
+        };
         row.append(key, body, del);
         list.appendChild(row);
       }
