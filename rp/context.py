@@ -180,10 +180,16 @@ def compress_session(sid, force=False, max_attempts=2):
             return False
         new_start = start + split
         prev = sess.get("compress") or {}
+        # dropped 记的是「现在有多少条不在上下文里」，不是累计折叠次数。
+        # 撤回和重写会把 compressed_upto 往回退、甚至清零（见 api 的重写逻辑），
+        # 累加出来的数会虚高到实际条数的几倍：383 条的会话能报成折叠了 3393 条。
+        # 直接按游标算，永远不会错。
+        folded = "".join((m.get("content") or "")
+                          for m in (current or [])[:new_start])
         sess["compress"] = {
             "times": int(prev.get("times") or 0) + 1,
-            "dropped": int(prev.get("dropped") or 0) + len(old),
-            "dropped_tokens": int(prev.get("dropped_tokens") or 0) + _tokens(text),
+            "dropped": new_start,
+            "dropped_tokens": _tokens(folded),
             "updated_at": time.time(),
         }
         sess["summary"] = summary
