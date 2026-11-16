@@ -66,6 +66,19 @@ status.items 是 {人名: "东西、东西"}；模型写成没有归属的一串
 compressed_upto 是压缩游标：小于它的消息已经进了 summary。消息本身不删，所以分叉、导出、全文搜索
 都还能读全文。
 
+compress 是统计块 {times, dropped, dropped_tokens, updated_at}。dropped 记的是**现在有多少条不在
+上下文里**，等于游标值，不是累计折叠次数——撤回和重写会把游标往回退甚至清零，累加会一路虚高。
+
+## 用量累计
+
+data/totals.json 记两类数字，同一套键（calls / prompt_tokens / completion_tokens / cached_tokens /
+cost / ms）：
+
+- 顶层是启动以来的全局累计，跨重启保留
+- by_session 按会话分开存，键是会话 id，只留最近 40 局
+
+面板读的是 by_session 里当前这一局的数。混着全局的算，别的会话烧掉的 token 会算到你头上。
+
 pending_character 是角色数满时暂存的新人 {"name", "role"}，等用户在弹窗里决定换谁进来。
 
 ## 分叉

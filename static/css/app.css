@@ -144,7 +144,6 @@ button:disabled { cursor: not-allowed; }
   color: var(--text-dim); font-size: .7813rem;
 }
 .side-btn.ghost:hover { border-color: var(--accent); color: var(--text); }
-button.ghost.wide { width: 100%; }
 .icon-btn {
   border: 1px solid var(--border-strong); background: var(--bg-elev);
   color: var(--text-dim); border-radius: 8px; font-size: .75rem;
@@ -574,17 +573,6 @@ body.story-view #btn-search { display: none; }
 }
 .seg button.active { border-color: var(--accent); color: var(--text); background: var(--accent-soft); }
 .seg button:hover { border-color: var(--accent); }
-
-.status-card {
-  align-self: stretch; background: var(--bg-elev); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 10px 14px; margin-bottom: 8px;
-}
-.status-card .st-head {
-  color: var(--text-mute); font-size: .75rem; letter-spacing: .04em; margin-bottom: 6px;
-}
-.status-card .st-row { display: flex; gap: 8px; font-size: .8125rem; line-height: 1.75; }
-.status-card .st-k { color: var(--text-mute); min-width: 3.4em; flex: none; }
-.status-card .st-v { color: var(--text-dim); }
 
 .summary-card {
   align-self: stretch; background: var(--bg-elev); border: 1px dashed var(--border-strong);
@@ -1159,15 +1147,6 @@ body.story-view #btn-io { display: none; }
 @keyframes searchFlash {
   0% { background: rgba(120, 160, 255, .35); }
   100% { background: transparent; }
-}
-
-/* 会话条数：贴在标题后面，不占第二行 */
-.si-title .si-count {
-  margin-left: 6px;
-  font-size: .6875rem;
-  font-weight: 400;
-  color: var(--text-dim);
-  opacity: .75;
 }
 
 /* 对话标题后面的条数 */
