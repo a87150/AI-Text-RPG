@@ -11,7 +11,7 @@ import requests
 from flask import Flask
 
 # ============================== 版本 ==============================
-VERSION = "1.20"
+VERSION = "1.21"
 
 # ============================== 模型配置 ==============================
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
@@ -170,24 +170,95 @@ CREATIVITY_LABELS = {
 }
 # 每百万 token 的单价（输入, 输出, 命中缓存的输入），美元。
 # 只用来给上下文面板算个量级，不是计费凭证；对不上就显示“未配单价”。
+# 厂商随时调价，所以这里只是出厂默认值：设置界面的「模型单价」能逐条覆盖，
+# 覆盖写进 settings.json，重启也在。数字以官方价目表为准。
 PRICES = {
     "deepseek-chat": (0.27, 1.10, 0.07),
     "deepseek-reasoner": (0.55, 2.19, 0.14),
+    # flash 档官方没公开折扣后的缓存价，先按输入价算，宁可高估也不当成免费
+    "deepseek-flash": (0.40, 1.60, 0.40),
     "gpt-4o-mini": (0.15, 0.60, 0.075),
     "gpt-4o": (2.50, 10.00, 1.25),
+    "gpt-4.1-mini": (0.40, 1.60, 0.10),
+    "gpt-4.1-nano": (0.10, 0.40, 0.025),
+    "gpt-4.1": (2.00, 8.00, 0.50),
+    "gpt-5-mini": (0.25, 2.00, 0.025),
+    "gpt-5-nano": (0.05, 0.40, 0.005),
+    "gpt-5": (1.25, 10.00, 0.125),
+    "o4-mini": (1.10, 4.40, 0.275),
+    "o3-mini": (1.10, 4.40, 0.55),
+    "o3": (2.00, 8.00, 0.50),
     "claude-3-5-sonnet": (3.00, 15.00, 0.30),
     "claude-3-5-haiku": (0.80, 4.00, 0.08),
     "qwen-max": (1.60, 6.40, 0.80),
 }
 
+_prices_override = {}
+
+def prices():
+    """默认价目表叠上用户改过的。用户填的整行生效，不做逐字段合并。"""
+    out = dict(PRICES)
+    out.update(_prices_override)
+    return out
+
+def save_prices(data, persist=True):
+    """接受 {模型名: [输入, 输出, 缓存]} 或 {"模型名 输入 输出 缓存"} 的文本。
+
+    文本形式是设置界面的输入框用的：一行一条，空格或逗号分开，缓存单价可省。
+    """
+    global _prices_override
+    rows = {}
+    if isinstance(data, str):
+        for line in data.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = re.split(r"[\s,]+", line)
+            if len(parts) < 3:
+                continue
+            rows[parts[0].lower()] = parts[1:]
+    elif isinstance(data, dict):
+        for key, value in data.items():
+            if isinstance(value, (list, tuple)):
+                rows[str(key).strip().lower()] = list(value)
+    clean = {}
+    for name, value in rows.items():
+        if not name:
+            continue
+        try:
+            nums = [round(float(x), 6) for x in value[:3]]
+        except (TypeError, ValueError):
+            continue
+        if len(nums) < 2 or any(n < 0 for n in nums):
+            continue
+        # 缓存单价没填就按输入价走，宁可贵一点也别算成 0
+        while len(nums) < 3:
+            nums.append(nums[0])
+        clean[name] = tuple(nums)
+    with _model_lock:
+        _prices_override = clean
+        snapshot = dict(_prices_override)
+    if persist:
+        persist_settings()
+    return snapshot
+
+def prices_text():
+    """把当前价目表拍成一行一条的文本，给设置界面的输入框回显。"""
+    return "\n".join("%s %s" % (name, " ".join("%g" % n for n in nums))
+                     for name, nums in sorted(prices().items()))
+
 def price_of(model):
-    """按模型名前缀匹配单价；对不上返 None。"""
+    """按模型名前缀匹配单价；对不上返 None。
+
+    长名字先匹配：gpt-5-mini 必须排在 gpt-5 前面，否则 mini 的价会被当成旗舰。
+    """
     name = (model or "").strip().lower()
     if not name:
         return None
-    for key in sorted(PRICES, key=len, reverse=True):
+    table = prices()
+    for key in sorted(table, key=len, reverse=True):
         if name.startswith(key):
-            return PRICES[key]
+            return table[key]
     return None
 
 def estimate_cost(model, usage):
@@ -470,6 +541,7 @@ def persist_settings():
         "creativity": prev.get("creativity") or _creativity,
         "tier": prev.get("tier") or _tier,
         "backup": _backup,
+        "prices": _prices_override or (prev.get("prices") or {}),
     }
     tmp = "%s.%s.tmp" % (SETTINGS_PATH, uuid.uuid4().hex[:8])
     try:
@@ -537,6 +609,10 @@ def load_settings():
         save_tier(data["tier"], persist=False)
     if data.get("creativity") in CREATIVITY_LEVELS:
         save_creativity(data["creativity"], persist=False)
+    saved_prices = data.get("prices")
+    if isinstance(saved_prices, (dict, str)):
+        save_prices(saved_prices, persist=False)
+
     backup_saved = data.get("backup")
     if isinstance(backup_saved, dict):
         if "enabled" in backup_saved:

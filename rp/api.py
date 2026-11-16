@@ -23,7 +23,8 @@ from .llm import reasoning_supported
 from .config import (
     DEFAULT_MODEL, DEFAULT_PROVIDER, MAX_CHAT_ATTEMPTS, MAX_ENHANCE_ATTEMPTS,
     MAX_OPENING_ATTEMPTS, MIN_CHAT_CHARS, MODES, PROVIDERS,
-    REASONING_LEVELS, TIERS, TIER_LABELS, app, backup_conf, current_target,
+    PRICES, REASONING_LEVELS, TIERS, TIER_LABELS, app, backup_conf, current_target,
+    prices_text, save_prices,
     list_local_models, load_settings, mode_for, mode_of, provider_public,
     provider_usable, reasoning_effort, save_backup_conf, save_mode,
     save_provider, save_reasoning, save_tier, save_writing, set_current_model,
@@ -165,6 +166,9 @@ def api_config():
         "creativities": CREATIVITY_LEVELS,
         "creativity_labels": CREATIVITY_LABELS,
         "creativity_temps": CREATIVITY_TEMP,
+        # 单价表拍成文本给设置界面的输入框；解析在 config.save_prices
+        "prices": prices_text(),
+        "prices_default": PRICES,
     })
 
 def _reclaim_context():
@@ -227,9 +231,11 @@ def api_writing():
             conf = save_writing(explicit)
     if data.get("creativity"):
         save_creativity(data["creativity"])
+    if isinstance(data.get("prices"), str):
+        save_prices(data["prices"])
     return jsonify({"writing": conf, "mode": mode_of(),
                     "reasoning_effort": reasoning_effort(), "tier": tier(),
-                    "creativity": creativity()})
+                    "creativity": creativity(), "prices": prices_text()})
 
 @app.post("/api/writing/reset")
 def api_writing_reset():

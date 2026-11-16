@@ -267,6 +267,8 @@ function fillWritingForm() {
     const el = $(id);
     if (el) el.value = w[key] == null ? '' : w[key];
   }
+  const priceBox = $('#w-prices');
+  if (priceBox) priceBox.value = (state.conf && state.conf.prices) || '';
   const font = $('#prefs-font');
   if (font) font.value = localStorage.getItem(FONT_KEY) || 'md';
   syncLanguageSeg();
@@ -418,6 +420,8 @@ async function saveWriting(quiet = false) {
     const value = Number(raw);
     if (raw !== '' && Number.isFinite(value)) body[key] = value;
   }
+  const priceBox = $('#w-prices');
+  if (priceBox) body.prices = priceBox.value || '';
   body.language = currentLanguage();
   body.reasoning_effort = currentReasoning();
   body.tier = currentTier();
@@ -432,6 +436,7 @@ async function saveWriting(quiet = false) {
         ? res.reasoning_supported : (state.conf && state.conf.reasoning_supported),
       tier: res.tier || currentTier(),
       creativity: res.creativity || currentCreativity(),
+      prices: res.prices !== undefined ? res.prices : state.conf.prices,
     });
     fillWritingForm();
     syncTierSeg();

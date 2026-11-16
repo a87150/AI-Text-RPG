@@ -123,8 +123,12 @@ cover 只存文件名，路径由 DATA_DIR 推，换机器能跑。cover_history
       "mode": "rp",
       "reasoning": "medium",
       "tier": "basic",
-      "backup": {"enabled": false, "every_hours": 24}
+      "backup": {"enabled": false, "every_hours": 24},
+      "prices": {"deepseek-flash": [0.40, 1.60, 0.40]}
     }
+
+prices 是用户在设置里改过的模型单价，只存覆盖项，没动过的模型仍走 config.py 的 `PRICES` 默认表。
+值是 [输入, 输出, 缓存命中]，每百万 token 的美元。
 
 写文件时先写临时文件再 os.replace，断电不会留下半个 JSON。备份打包时 api_key 会被清空。
 

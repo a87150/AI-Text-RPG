@@ -473,8 +473,9 @@ window.addEventListener('unhandledrejection', function (e) {
                 <div class="field"><label for="w-gen-open-min">开场白最少字数（换档位会自动填）</label><input id="w-gen-open-min" type="number" min="40" max="800" step="10"></div>
                 <div class="field"><label for="w-gen-open-max">开场白最多字数</label><input id="w-gen-open-max" type="number" min="60" max="1500" step="10"></div>
               </div>
-              <div class="grid2">
-                <div class="field"></div>
+              <div class="field">
+                <label for="w-prices">模型单价（每百万 token 的美元价，一行一条：<code>模型名 输入 输出 缓存命中</code>。前缀匹配，长名字优先；缓存那项可以省。厂商调价就改这里，面板的费用立刻跟着变）</label>
+                <textarea id="w-prices" rows="7" spellcheck="false" placeholder="deepseek-chat 0.27 1.10 0.07"></textarea>
               </div>
         <div class="prefs-actions">
           <span class="prefs-note" data-note="writing"></span>

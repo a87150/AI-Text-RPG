@@ -573,7 +573,9 @@ def main():
     check("保留条数写成上限而不是实际条数",
           "保留上限" in _ui and "保留最近" not in _ui)
     check("面板写明占用口径含 system 模板", "会话数据加 system 模板" in _ui)
-    check("面板给出上轮真实用量", "上轮真实" in _ui)
+    # 面板四行成对排：上轮 / 累计，各一对 token 和费用，顺序固定
+    check("面板给出上轮用量", "上轮 tok" in _ui)
+    check("面板给出上轮费用", "上轮费用" in _ui)
     # 累计用量必须落盘：只放内存的话，重启后面板全是横杠，
     # 「总共用了多少 token」这个问题就永远答不上来
     # 并发累加不能丢：Flask 多线程，+= 是读改写三步，两根请求同时收尾会互相盖掉
@@ -602,7 +604,8 @@ def main():
           str(rp_metrics.TOTAL))
     rp_metrics.TOTAL.update(_before)
     rp_metrics._save_totals()
-    check("面板显示累计 token", "累计 token" in _ui)
+    check("面板显示累计 token", "累计 tok" in _ui)
+    check("面板显示累计费用", "累计费用" in _ui)
     # 角色登记的门槛：路人不能占名额。中文人名基本不带「的」，
     # 带上就是「卖面的老头」这类临时描述，建了卡会挤掉真正的主要角色
     check("描述性称呼不算人名", not rp_characters.looks_like_name("卖面的老头"))

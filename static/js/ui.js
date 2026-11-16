@@ -533,14 +533,26 @@ export function renderContextDetail() {
   const totalMs = st.total_ms || 0;
   const decodeMs = st.decode_ms || (totalMs > ttft ? totalMs - ttft : 0);
   const speed = (decodeMs > 0 && outTok) ? Math.round(outTok / (decodeMs / 1000)) : 0;
+  // 费用按美元估，拿不到单价就只在前面标一下，不写 0——0 会被当成免费
+  // 没配单价和"这轮是免费的"是两件事，分开说——之前一律显示横杠，
+  // 于是模型名对不上价目表时会一直挂着 0，谁也不知道是没算还是没花钱
+  const money = (cost) => {
+    if (cost === null || cost === undefined) return '未配单价';
+    const v = cost.total || 0;
+    if (!v) return '$0';
+    return '$' + (v >= 0.01 ? v.toFixed(3) : v.toFixed(5));
+  };
   const core = document.createElement('div');
   core.className = 'ctx-rows';
-  core.appendChild(mkRow('上轮真实', inTok
+  // 四个数成对排：上轮 / 累计，各一对 token 和费用。顺序固定，扫一眼就能上下比
+  core.appendChild(mkRow('上轮 tok', inTok
     ? '入 ' + fmtNumber(inTok) + ' · 出 ' + fmtNumber(outTok)
     : '还没发过'));
-  core.appendChild(mkRow('累计 token', tot.calls
-    ? tot.calls + ' 次 · 入 ' + fmtNumber(tot.prompt_tokens)
-      + ' · 出 ' + fmtNumber(tot.completion_tokens) : '—'));
+  core.appendChild(mkRow('上轮费用', money(st.cost)));
+  core.appendChild(mkRow('累计 tok', tot.calls
+    ? '入 ' + fmtNumber(tot.prompt_tokens) + ' · 出 ' + fmtNumber(tot.completion_tokens)
+      + ' · ' + tot.calls + ' 次' : '—'));
+  core.appendChild(mkRow('累计费用', money({ total: tot.cost })));
   core.appendChild(mkRow('首字等待', ttft ? fmtNumber(ttft) + ' ms' : '—'));
   core.appendChild(mkRow('生成速度', speed
     ? speed + ' token/s（' + fmtNumber(outTok) + ' 出 / ' + fmtNumber(decodeMs) + ' ms）' : '—'));
