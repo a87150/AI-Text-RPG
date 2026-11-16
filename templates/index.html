@@ -366,7 +366,7 @@ window.addEventListener('unhandledrejection', function (e) {
                 </div>
               </div>
               <div class="field">
-                <label>思考强度（本地支持思考的模型）</label>
+                <label>思考强度（支持该字段的模型才生效）</label>
                 <div class="seg" id="reasoning-seg">
                   <button type="button" data-level="none">不思考</button>
                   <button type="button" data-level="low">低</button>
@@ -455,7 +455,7 @@ window.addEventListener('unhandledrejection', function (e) {
             <button type="button" data-smode="stream">边生成边读</button>
             <button type="button" data-smode="manual">点按钮朗读</button>
           </div>
-          <div class="hint">边生成边读：按句切好就念，不等整段写完。点按钮朗读：只在你点气泡上那个手动念时才出声。</div>
+          <div class="hint">边生成边读：按句切好就念，不等整段写完。点按钮朗读：只有你点某条消息右下角那个 🔊 时才出声，旁白和角色按音色表分开念。</div>
         </div>
         <div class="grid2">
           <div class="field">
@@ -523,7 +523,7 @@ window.addEventListener('unhandledrejection', function (e) {
                 <div class="field"><label for="w-gen-open-max">开场白最多字数</label><input id="w-gen-open-max" type="number" min="60" max="1500" step="10"></div>
               </div>
               <div class="field">
-                <label for="w-prices">模型单价（每百万 token 的美元价，一行一条：<code>模型名 输入 输出 缓存命中</code>。前缀匹配，长名字优先；缓存那项可以省。厂商调价就改这里，面板的费用立刻跟着变）</label>
+                <label for="w-prices">模型单价（每百万 token，一行一条：<code>模型名 输入 输出 缓存命中 币种</code>。前缀匹配，长名字优先；缓存那项省了就按输入价走，币种省了就按人民币。厂商调价就改这里，面板的费用立刻跟着变）</label>
                 <textarea id="w-prices" rows="7" spellcheck="false" placeholder="deepseek-chat 0.27 1.10 0.07"></textarea>
               </div>
         <div class="prefs-actions">
