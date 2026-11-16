@@ -385,16 +385,16 @@ async function saveImageConf() {
 }
 
 async function saveSpeechConf() {
-  const on = $('#sp-enabled');
   const plugin = $('#sp-plugin');
   const device = $('#sp-device');
   const options = $('#sp-options');
+  const voices = $('#sp-voices');
   const body = {
-    enabled: !!(on && on.checked),
     mode: state.speechMode || 'stream',
     plugin: plugin ? plugin.value.trim() : '',
     device: device ? device.value.trim() : '',
     options: options ? options.value : '',
+    voices: voices ? voices.value : '',
   };
   try {
     const res = await api('/api/speech-config', { method: 'PUT', body });
@@ -421,6 +421,7 @@ function fillSpeechForm() {
   set('#sp-plugin', c.plugin);
   set('#sp-device', c.device);
   set('#sp-options', c.options);
+  set('#sp-voices', c.voices);
 }
 
 function syncSpeechModeSeg() {

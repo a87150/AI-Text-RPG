@@ -120,17 +120,42 @@ def _wav_bytes(audio):
     return buf.getvalue()
 
 
-def speak(text):
-    """把一段文字念成 wav 字节。配置关着就直接说关着。"""
+def voice_for(conf, role):
+    """角色名 -> 音色。音色表是「角色=Vivian」一行一个，* 是兜底。"""
+    name = (role or "").strip()
+    table = parse_options(conf.get("voices"))
+    if not table:
+        return ""
+    if name and name in table:
+        return table[name]
+    return table.get("*") or ""
+
+
+def speak(text, role=None, **overrides):
+    """把一段文字念成 wav 字节。
+
+    每次调用都是独立的：generate_custom_voice 本身没有跨请求状态。
+    role 先按音色表换成 speaker，overrides 再盖上去（speaker / instruct / language…）。
+    """
     body = (text or "").strip()
     if not body:
         raise SpeechError("没有要念的文字。")
     conf = speech_conf()
     raw = parse_options(conf.get("options"))
     options = {k: v for k, v in raw.items() if k not in LOAD_KEYS}
-    # voco 的缓存 key 只有 alias + text，换权重也照命中。
-    # 塞一个指纹进去，它进不了 generate 的签名，会被 **kwargs 吃掉，不影响合成
-    options["_vo"] = "%s|%s" % (raw.get("variant") or "", raw.get("model_id") or "")
+
+    speaker = voice_for(conf, role)
+    if speaker:
+        options["speaker"] = speaker
+    for key, val in overrides.items():
+        if val is None or val == "":
+            continue
+        options[str(key)] = str(val)
+
+    # voco 的缓存 key 只有 alias + text，换音色/换语气也会命中旧音频。
+    # 把这次真正生效的参数掺进指纹；它进不了 generate 的签名，被 **kwargs 吃掉
+    options["_vo"] = "|".join(str(options.get(k) or "") for k in (
+        "variant", "model_id", "speaker", "instruct", "language"))
     router = _get_router(conf)
     with _speak_lock:
         try:

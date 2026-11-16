@@ -1186,11 +1186,11 @@ function stopSpeak() {
   _sayAudio = null;
 }
 
-async function fetchSpeech(text) {
+async function fetchSpeech(text, role) {
   const res = await fetch('/api/speech', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, role: role || '' }),
   });
   if (!res.ok) {
     const info = await res.json().catch(() => ({}));
@@ -1271,17 +1271,81 @@ export function stopSpeaking() {
 }
 
 /** \u6c14\u6ce1\u4e0a\u90a3\u4e2a \U0001F50A\uff1a\u6574\u6bb5\u4e00\u6b21\u8bf7\u6c42\uff0c\u4e0d\u5206\u6bb5\u3002 */
-export async function speakText(text, btn) {
-  const body = speakable(text);
-  if (!body) { toast('\u8fd9\u6bb5\u6ca1\u4ec0\u4e48\u53ef\u4ee5\u5ff5\u7684\u3002'); return; }
+/**
+ * 旁白里夹的直接引语。结构化数据里没有这一层，只能从文本切。
+ * 中文双引号、日式直角引号、英文双引号都认。
+ */
+const QUOTE_RE = /[\u201c\u300c]([^\u201d\u300d]*)[\u201d\u300d]|"([^"]*)"/g;
+
+/** 一段旁白切成叙述/引述两种，没引号就原样一段。 */
+function splitQuotes(text) {
+  const body = String(text || '');
+  const out = [];
+  let last = 0;
+  QUOTE_RE.lastIndex = 0;
+  let m;
+  while ((m = QUOTE_RE.exec(body)) !== null) {
+    if (m.index > last) out.push({ quote: false, text: body.slice(last, m.index) });
+    const said = m[1] != null ? m[1] : (m[2] || '');
+    if (said.trim()) out.push({ quote: true, text: said });
+    last = m.index + m[0].length;
+  }
+  if (last < body.length) out.push({ quote: false, text: body.slice(last) });
+  return out.length ? out : [{ quote: false, text: body }];
+}
+
+/**
+ * 一条消息拆成配音片段，返回 [{role, text}]，role 拿去查音色表。
+ *
+ * 多角色那条路是白给的：后端已经把 lines 里的 speaker 分好了。
+ * 一般模式只有旁白，旁白里人物说的话靠引号切，角色名给「引述」。
+ */
+export function segmentsOf(msg, userLabel) {
+  const out = [];
+  const push = (role, text) => {
+    const body = speakable(text);
+    if (body) out.push({ role, text: body });
+  };
+  if (!msg) return out;
+  if (msg.role === 'user') {
+    push(userLabel || '\u6211', msg.content);
+    return out;
+  }
+  const lines = (msg.lines || []).filter((x) => x && x.text);
+  if (lines.length) {
+    if (msg.narrator) push('\u65c1\u767d', msg.narrator);
+    for (const it of lines) push(it.speaker || 'AI', it.text);
+    return out;
+  }
+  for (const piece of splitQuotes(msg.narrator || msg.content || '')) {
+    push(piece.quote ? '\u5f15\u8ff0' : '\u65c1\u767d', piece.text);
+  }
+  return out;
+}
+
+/** 逐段念：一段一个请求，串行播，上一段念完才轮下一段。 */
+export async function speakSegments(segments, btn) {
+  const list = (segments || []).filter((s) => s && s.text);
+  if (!list.length) { toast('\u8fd9\u6bb5\u6ca1\u4ec0\u4e48\u53ef\u4ee5\u5ff5\u7684\u3002'); return; }
   if (btn) btn.disabled = true;
   try {
-    await playUrl(await fetchSpeech(body));
+    for (const seg of list) {
+      await playUrl(await fetchSpeech(seg.text, seg.role));
+    }
   } catch (e) {
     toast('\u5ff5\u4e0d\u51fa\u6765\uff1a' + (e && e.message ? e.message : e), 'error');
   } finally {
     if (btn) btn.disabled = false;
   }
+}
+
+/**
+ * 只有一个说话人时的简写。
+ */
+export async function speakText(text, btn, role) {
+  const body = speakable(text);
+  if (!body) { toast('\u8fd9\u6bb5\u6ca1\u4ec0\u4e48\u53ef\u4ee5\u5ff5\u7684\u3002'); return; }
+  await speakSegments([{ role: role || '\u65c1\u767d', text: body }], btn);
 }
 
 export function buildMessage(role, content, name, edited) {

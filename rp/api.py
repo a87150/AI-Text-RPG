@@ -672,8 +672,10 @@ def api_speech_config_save():
 def api_speech():
     """把一段文字念成 wav 直接吐回去，不落盘。"""
     data = request.get_json(silent=True) or {}
+    # 每次请求独立：role 按音色表换成 speaker，其余字段直接盖到这一次调用上
+    overrides = {k: data.get(k) for k in ("speaker", "instruct", "language") if data.get(k)}
     try:
-        audio = speech.speak(data.get("text") or "")
+        audio = speech.speak(data.get("text") or "", role=data.get("role") or "", **overrides)
     except speech.SpeechError as exc:
         return jsonify({"error": str(exc)}), 400
     return Response(audio, mimetype="audio/wav")

@@ -2,7 +2,7 @@
 import { api } from './api.js';
 import { state } from './state.js';
 import { continueLast } from './chat.js';
-import { $, toast, renderMessages, syncAll, autoGrow, speakText } from './ui.js';
+import { $, toast, renderMessages, syncAll, autoGrow, segmentsOf, speakSegments } from './ui.js';
 import { loadSessions, refreshCurrentSession } from './sessions.js';
 import { retryLast } from './chat.js';
 
@@ -181,9 +181,15 @@ export function bindMessageActions() {
       // 一轮里可能是旁白（.narrator）、也可能是一个或好几个角色气泡，
       // 只取 .bubble 的话纯旁白那种回复就拿不到字。整轮取。
       // 操作条里那几个图标要先排掉，不然会读出 emoji 的名字
-      const clone = host.cloneNode(true);
-      for (const junk of clone.querySelectorAll('.msg-tools, .edited-tag, .narr-tag')) junk.remove();
-      speakText(clone.textContent || '', btn);
+      const msg = messagesOf()[index];
+      const segs = segmentsOf(msg, state.session && state.session.user_name);
+      if (segs.length) speakSegments(segs, btn);
+      else {
+        // 拿不到结构化数据（比如刚流到一半）就整轮 DOM 兜底
+        const clone = host.cloneNode(true);
+        for (const junk of clone.querySelectorAll('.msg-tools, .edited-tag, .narr-tag')) junk.remove();
+        speakSegments([{ role: '旁白', text: clone.textContent || '' }], btn);
+      }
     }
     else if (act === 'rewrite') rewrite(index);
     else if (act === 'branch') branch(index);

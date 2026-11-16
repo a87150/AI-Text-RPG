@@ -2641,6 +2641,29 @@ def main():
     check("模式只能是两种之一",
           set(rp_config.SPEECH_READ_MODES) == {"stream", "manual"})
 
+    # 音色表：角色名换 speaker，换不出就是空串（退回 options 里的默认音色）
+    _vt = {"voices": ".".join(["\u51db=Vivian", "\u5f15\u8ff0=Ryan", "*=Ethan"]).replace(".", chr(10))}
+    check("音色表按角色查",
+          rp_speech.voice_for(_vt, "凛") == "Vivian"
+          and rp_speech.voice_for(_vt, "引述") == "Ryan", str(_vt))
+    check("音色表有兜底",
+          rp_speech.voice_for(_vt, "没配过的人") == "Ethan")
+    check("没配音色表就不换",
+          rp_speech.voice_for({"voices": ""}, "凛") == "")
+    check("空角色走兜底",
+          rp_speech.voice_for(_vt, "") == "Ethan")
+
+    # 换音色 / 换语气要命中新音频，所以指纹得把 speaker、instruct 也掺进去
+    _src = open("rp/speech.py", encoding="utf-8").read()
+    check("缓存指纹含音色与语气",
+          '"variant", "model_id", "speaker", "instruct", "language"' in _src)
+    _html_sp = open("templates/index.html", encoding="utf-8").read()
+    check("设置里有音色表", 'id="sp-voices"' in _html_sp)
+    _ui = open("static/js/ui.js", encoding="utf-8").read()
+    check("分段朗读入口在", "export function segmentsOf" in _ui
+          and "export async function speakSegments" in _ui)
+    check("旁白引语能切", "QUOTE_RE" in _ui and "splitQuotes" in _ui)
+
     # 跨币种的累计要分开记，面板才能写成 ¥3.2 + $0.5；混加会得到一个不对的数
     _mix = "zz-mix-currency"
     rp_metrics.TOTAL["by_session"].pop(_mix, None)

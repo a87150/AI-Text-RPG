@@ -471,6 +471,10 @@ window.addEventListener('unhandledrejection', function (e) {
           <label for="sp-options">推理参数，一行一个 <code>key=value</code>，原样透给插件。例如 <code>voice=af_heart</code>，支持音色描述的插件可以用 <code>instruct=用平静的语气念</code></label>
           <textarea id="sp-options" rows="4" spellcheck="false" placeholder="voice=af_heart"></textarea>
         </div>
+        <div class="field">
+          <label for="sp-voices">按角色换音色，一行一个 <code>角色=音色</code>。旁白里带引号的话走 <code>引述</code>，用在 <code>voices</code> 里配的同一个名字</label>
+          <textarea id="sp-voices" rows="3" spellcheck="false" placeholder="旁白=Vivian&#10;引述=Ryan&#10;凛=Ethan&#10;*=Vivian"></textarea>
+        </div>
         <div class="prefs-actions">
           <span class="prefs-note" data-note="speech"></span>
           <button type="button" class="prefs-save" data-save="speech">保存语音设置</button>

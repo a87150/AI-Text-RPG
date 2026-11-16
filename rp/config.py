@@ -164,6 +164,8 @@ SPEECH_DEFAULTS = {
     "alias": "tts",
     "device": "cuda:0",
     "options": "variant=custom\ndtype=bfloat16\nlanguage=Chinese\nspeaker=Vivian",
+    # 角色名 -> 音色，一行一个「角色=Vivian」。* 是兜底，没配的角色走它
+    "voices": "",
 }
 SPEECH_READ_MODES = ("stream", "manual")
 SPEECH_READ_LABELS = {"stream": "边生成边读", "manual": "点按钮朗读"}
@@ -472,7 +474,7 @@ def save_speech_conf(data):
     with _model_lock:
         if data.get("mode") in SPEECH_READ_MODES:
             _speech["mode"] = data["mode"]
-        for field in ("plugin", "alias", "device", "options"):
+        for field in ("plugin", "alias", "device", "options", "voices"):
             if field in data:
                 _speech[field] = str(data.get(field) or "").strip()
         # 插件名没了就回退到 kokoro，否则 router.load 会一直报错
