@@ -2,7 +2,7 @@
 import { api } from './api.js';
 import { state } from './state.js';
 import { continueLast } from './chat.js';
-import { $, toast, renderMessages, syncAll, autoGrow } from './ui.js';
+import { $, toast, renderMessages, syncAll, autoGrow, speakText } from './ui.js';
 import { loadSessions, refreshCurrentSession } from './sessions.js';
 import { retryLast } from './chat.js';
 
@@ -177,7 +177,12 @@ export function bindMessageActions() {
     const index = Number(host.dataset.index);
     if (Number.isNaN(index)) return;
     const act = btn.dataset.act;
-    if (act === 'rewrite') rewrite(index);
+    if (act === 'speak') {
+      // 念气泡里看得到的那份文字；markdown 渲染过的 HTML 取 textContent 就够
+      const bubble = host.querySelector('.bubble');
+      speakText(bubble ? bubble.textContent : '', btn);
+    }
+    else if (act === 'rewrite') rewrite(index);
     else if (act === 'branch') branch(index);
     else if (act === 'edit') startEdit(index, host);
   else if (act === 'continue') continueLast();

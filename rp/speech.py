@@ -9,6 +9,7 @@ voco 把运行时和模型拆开，每个模型是一个插件包：
 换模型只改设置里的插件名，这里一行不用动。插件里往往带着 torch 权重，
 所以全部懒加载——没念过之前不会 import 任何重东西，启动不受影响。
 """
+import importlib
 import io
 import threading
 import wave
@@ -40,9 +41,26 @@ def parse_options(text):
     return out
 
 
+# 构造参数跟推理参数要分开：前者进 router.load()，后者透给 infer()
+LOAD_KEYS = ("variant", "model_id", "dtype")
+
+
+def _import_plugin(name):
+    """voco 0.0.8 的 AudioRouter.load() 只查内存里的注册表，不扫 entry point。
+
+    插件模块在 import 时自己调 register_model，所以这一步不能省。
+    装没装都不报错，真正缺了会在 router.load() 那里报更直白的错。
+    """
+    mod = "voco_" + str(name or "").replace("-", "_")
+    try:
+        importlib.import_module(mod)
+    except ImportError:
+        pass
+
+
 def _get_router(conf):
     global _router, _loaded_key
-    key = (conf.get("plugin"), conf.get("alias"), conf.get("device"))
+    key = (conf.get("plugin"), conf.get("alias"), conf.get("device"), conf.get("options"))
     with _lock:
         if _router is not None and _loaded_key == key:
             return _router
@@ -52,9 +70,11 @@ def _get_router(conf):
             raise SpeechError(
                 "没装 voco。先 pip install voco，再装一个模型插件（例如 pip install voco-kokoro）。"
             ) from exc
+        _import_plugin(conf.get("plugin"))
+        load_kw = {k: v for k, v in parse_options(conf.get("options")).items() if k in LOAD_KEYS}
         try:
             router = AudioRouter(cache=True)
-            router.load(conf["plugin"], alias=conf["alias"], device=conf["device"])
+            router.load(conf["plugin"], alias=conf["alias"], device=conf["device"], **load_kw)
         except Exception as exc:
             raise SpeechError("voco 加载插件「%s」失败：%s" % (conf.get("plugin"), exc)) from exc
         _router, _loaded_key = router, key
@@ -106,9 +126,11 @@ def speak(text):
     if not body:
         raise SpeechError("没有要念的文字。")
     conf = speech_conf()
-    if not conf.get("enabled"):
-        raise SpeechError("语音没开。设置 → 语音 里打开。")
-    options = parse_options(conf.get("options"))
+    raw = parse_options(conf.get("options"))
+    options = {k: v for k, v in raw.items() if k not in LOAD_KEYS}
+    # voco 的缓存 key 只有 alias + text，换权重也照命中。
+    # 塞一个指纹进去，它进不了 generate 的签名，会被 **kwargs 吃掉，不影响合成
+    options["_vo"] = "%s|%s" % (raw.get("variant") or "", raw.get("model_id") or "")
     router = _get_router(conf)
     with _speak_lock:
         try:

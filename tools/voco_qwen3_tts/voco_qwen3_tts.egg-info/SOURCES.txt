@@ -1,0 +1,8 @@
+pyproject.toml
+voco_qwen3_tts/__init__.py
+voco_qwen3_tts/model.py
+voco_qwen3_tts.egg-info/PKG-INFO
+voco_qwen3_tts.egg-info/SOURCES.txt
+voco_qwen3_tts.egg-info/dependency_links.txt
+voco_qwen3_tts.egg-info/entry_points.txt
+voco_qwen3_tts.egg-info/top_level.txt

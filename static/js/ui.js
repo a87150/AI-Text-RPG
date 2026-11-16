@@ -1312,14 +1312,6 @@ export function buildMessage(role, content, name, edited) {
     bubble.appendChild(tag);
   }
 
-  // 每条都能念。按钮挂在 who 那一行右侧，不占气泡宽度
-  const say = document.createElement('button');
-  say.type = 'button';
-  say.className = 'speak-btn';
-  say.title = '念这一段';
-  say.textContent = '\uD83D\uDD0A';
-  say.onclick = () => speakText(content, say);
-  who.appendChild(say);
 
   el.append(who, bubble);
   return { el, who, bubble };
@@ -1328,8 +1320,8 @@ export function buildMessage(role, content, name, edited) {
 /** 每条消息右下角的操作条。只给自己写的话提供编辑，改 AI 的话没有意义。 */
 function toolsNode(role, isLast) {
   const acts = role === 'user'
-    ? [['edit', '✎', '编辑这句话'], ['rewrite', '↻', '重发这句'], ['branch', '⧉', '从这里分叉']]
-    : [['rewrite', '↻', '删掉这条及之后重新生成'], ['branch', '⧉', '从这里分叉']]
+    ? [['speak', '🔊', '念这一段'], ['edit', '✎', '编辑这句话'], ['rewrite', '↻', '重发这句'], ['branch', '⧉', '从这里分叉']]
+    : [['speak', '🔊', '念这一段'], ['rewrite', '↻', '删掉这条及之后重新生成'], ['branch', '⧉', '从这里分叉']]
       .concat(isLast ? [['continue', '▶', '这条没写完，接着往下写']] : []);
   const bar = document.createElement('div');
   bar.className = 'msg-tools';

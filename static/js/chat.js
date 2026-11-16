@@ -288,8 +288,8 @@ async function sendMessage(text, { isRetry, isContinue }) {
 
   try {
     // 这一轮要不要边生成边读，看设置里「边生成边读」开关
-    setStreamSpeech(!!(state.conf && state.conf.speech && state.conf.speech.enabled
-      && state.conf.speech.stream));
+    setStreamSpeech(!!(state.conf && state.conf.speech
+      && state.conf.speech.mode === 'stream'));
 
     await streamSSE(
       '/api/chat',

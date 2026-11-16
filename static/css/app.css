@@ -499,15 +499,6 @@ body.story-view #btn-search { display: none; }
    能到上千像素，比对面那条宽一大截。 */
 .msg.editing { width: 100%; max-width: min(80%, 760px); align-items: stretch; }
 .msg.editing .bubble { width: 100%; }
-/* 气泡上那个念录音的小扭。.who 是 flex，margin-left:auto 把它顶到右边 */
-.speak-btn {
-  margin-left: auto; border: 0; background: none; cursor: pointer;
-  color: var(--text-mute); font-size: .875rem; line-height: 1;
-  padding: 2px 5px; border-radius: 6px; opacity: .55;
-}
-.speak-btn:hover { opacity: 1; color: var(--accent); background: var(--bg-elev); }
-.speak-btn:disabled { opacity: .3; cursor: progress; }
-
 /* 模型设置里分生图 / 语音两小节 */
 .sub-head {
   margin: 18px 0 8px; padding-top: 14px;
@@ -770,7 +761,7 @@ body.story-view #btn-search { display: none; }
 }
 .prefs-save:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
 .prefs-save:disabled { opacity: .55; cursor: default; }
-.backup-actions { display: flex; align-items: center; gap: 10px; margin: 12px 0 10px; }
+/* 备份的按钮行已并入 .prefs-actions */
 #btn-backup-now {
   padding: 7px 16px; border-radius: 9px; cursor: pointer;
   border: 1px solid transparent; background: var(--accent); color: #fff;
@@ -778,23 +769,17 @@ body.story-view #btn-search { display: none; }
 }
 #btn-backup-now:hover:not(:disabled) { filter: brightness(1.08); }
 #btn-backup-now:disabled { opacity: .55; cursor: default; }
-.backup-msg { font-size: .75rem; color: var(--text-mute); }
-.backup-msg.ok { color: var(--ok); }
-.backup-msg.error { color: var(--danger); }
+
 .backup-conf {
   display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
   padding: 10px 12px; margin-bottom: 12px; border-radius: 10px;
   border: 1px solid var(--border); background: var(--bg-input);
   font-size: .7813rem; color: var(--text-dim);
 }
-.backup-toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+/* 设置面板里所有只有一个勾的行都用它 */
+.prefs-check { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: .7813rem; color: var(--text-dim); }
+.prefs-check input { accent-color: var(--accent); }
 /* 备份节奏：每 [N] 分钟一次，最多留 [M] 份，两块各自成组，别再挤成一串 */
-.bk-field {
-  display: inline-flex; align-items: center; gap: 5px;
-  padding: 2px 8px 2px 2px; border-radius: 9px;
-  border: 1px solid var(--border); background: var(--bg-elev);
-}
-.bk-field span { color: var(--text-dim); font-size: .75rem; }
 #backup-minutes, #backup-keep {
   width: 68px; padding: 4px 6px; border-radius: 6px; font-family: inherit;
   text-align: center; font-variant-numeric: tabular-nums;

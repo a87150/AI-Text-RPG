@@ -158,14 +158,15 @@ IMAGE_BOUNDS = {"timeout": (30, 1200)}
 # options 里每行一个 key=value，原样透给 router.infer：
 #   voice=af_heart（kokoro 用）、instruct=用平静的语气念（支持的插件用）
 SPEECH_DEFAULTS = {
-    "enabled": False,
-    # 边生成边读：按句切好就送去念，不等整段写完
-    "stream": True,
-    "plugin": "kokoro",
+    # stream：边生成边读；manual：生成完再点气泡上的按钮念。二选一
+    "mode": "stream",
+    "plugin": "qwen3-tts",
     "alias": "tts",
-    "device": "cpu",
-    "options": "",
+    "device": "cuda:0",
+    "options": "variant=custom\ndtype=bfloat16\nlanguage=Chinese\nspeaker=Vivian",
 }
+SPEECH_READ_MODES = ("stream", "manual")
+SPEECH_READ_LABELS = {"stream": "边生成边读", "manual": "点按钮朗读"}
 _speech = dict(SPEECH_DEFAULTS)
 # 同一句话重复念很常见，开启缓存能省下重跑的时间
 _speech_cache = True
@@ -469,18 +470,16 @@ def save_speech_conf(data):
     if not isinstance(data, dict):
         return speech_conf()
     with _model_lock:
-        if "enabled" in data:
-            _speech["enabled"] = bool(data["enabled"])
-        if "stream" in data:
-            _speech["stream"] = bool(data["stream"])
+        if data.get("mode") in SPEECH_READ_MODES:
+            _speech["mode"] = data["mode"]
         for field in ("plugin", "alias", "device", "options"):
             if field in data:
                 _speech[field] = str(data.get(field) or "").strip()
         # 插件名没了就回退到 kokoro，否则 router.load 会一直报错
         if not _speech["plugin"]:
-            _speech["plugin"] = "kokoro"
+            _speech["plugin"] = SPEECH_DEFAULTS["plugin"]
         if not _speech["alias"]:
-            _speech["alias"] = "tts"
+            _speech["alias"] = SPEECH_DEFAULTS["alias"]
         snapshot = dict(_speech)
     persist_settings()
     return snapshot
@@ -730,6 +729,17 @@ def load_settings():
         for field, default in defaults.items():
             if field in saved:
                 bucket[field] = saved[field]
+
+    # 盘上的旧结构要归一下：不然 persist_settings() 会把它原样写回去，
+    # speech_conf() 里那套迁移就永远只能在读的时候救一下，写回去又是旧的
+    if "mode" not in _speech and "stream" in _speech:
+        _speech["mode"] = "stream" if _speech.pop("stream") else "manual"
+    _speech.pop("stream", None)
+    _speech.pop("enabled", None)
+    if _speech.get("mode") not in SPEECH_READ_MODES:
+        _speech["mode"] = SPEECH_DEFAULTS["mode"]
+    if not _speech.get("plugin"):
+        _speech["plugin"] = SPEECH_DEFAULTS["plugin"]
 
     saved_prices = data.get("prices")
     if isinstance(saved_prices, (dict, str)):

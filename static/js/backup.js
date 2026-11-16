@@ -14,7 +14,9 @@ function setMsg(text, kind = '') {
   const el = $('#backup-msg');
   if (!el) return;
   el.textContent = text || '';
-  el.className = 'backup-msg' + (kind ? ' ' + kind : '');
+  // 统一用 .prefs-note；下面那几处叫的是 error，对应 prefs-note 的 bad
+  const cls = kind === 'error' ? 'bad' : kind;
+  el.className = 'prefs-note' + (cls ? ' ' + cls : '');
 }
 
 export async function refreshBackups() {

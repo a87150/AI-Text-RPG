@@ -389,10 +389,9 @@ async function saveSpeechConf() {
   const plugin = $('#sp-plugin');
   const device = $('#sp-device');
   const options = $('#sp-options');
-  const stream = $('#sp-stream');
   const body = {
     enabled: !!(on && on.checked),
-    stream: !!(stream && stream.checked),
+    mode: state.speechMode || 'stream',
     plugin: plugin ? plugin.value.trim() : '',
     device: device ? device.value.trim() : '',
     options: options ? options.value : '',
@@ -417,13 +416,19 @@ function fillImageForm() {
 function fillSpeechForm() {
   const c = (state.conf && state.conf.speech) || {};
   const set = (sel, v) => { const el = $(sel); if (el) el.value = v == null ? '' : v; };
-  const on = $('#sp-enabled');
-  if (on) on.checked = !!c.enabled;
-  const stream = $('#sp-stream');
-  if (stream) stream.checked = c.stream !== false;
+  state.speechMode = c.mode === 'manual' ? 'manual' : 'stream';
+  syncSpeechModeSeg();
   set('#sp-plugin', c.plugin);
   set('#sp-device', c.device);
   set('#sp-options', c.options);
+}
+
+function syncSpeechModeSeg() {
+  const seg = $('#speech-mode-seg');
+  if (!seg) return;
+  for (const b of seg.querySelectorAll('button[data-smode]')) {
+    b.classList.toggle('active', b.dataset.smode === (state.speechMode || 'stream'));
+  }
 }
 
 const SAVE_LABELS = { mode: '模式', model: '模型设置', writing: '写作参数',
@@ -785,6 +790,12 @@ function bindUI() {
     if (!btn) return;
     state.conf = Object.assign({}, state.conf, { creativity: btn.dataset.creativity });
     syncCreativitySeg();
+  };
+  $('#speech-mode-seg').onclick = (e) => {
+    const btn = e.target.closest('button[data-smode]');
+    if (!btn) return;
+    state.speechMode = btn.dataset.smode;
+    syncSpeechModeSeg();
   };
   $('#prefs-refresh').onclick = () => loadModels(true);
   $('#prefs-font').onchange = (e) => applyFont(e.target.value);

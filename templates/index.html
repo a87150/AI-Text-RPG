@@ -449,12 +449,14 @@ window.addEventListener('unhandledrejection', function (e) {
       
               <div class="sub-head">语音（朗读）</div>
         <div class="hint">念文本走 <a href="https://pypi.org/project/voco/" target="_blank" rel="noopener">voco</a>：运行时和模型是分开的，换声音只要换插件名。先 <code>pip install voco</code>，再装你要的模型插件（例如 <code>pip install voco-kokoro</code>）。</div>
-        <label class="backup-toggle">
-          <input type="checkbox" id="sp-enabled"> 启用朗读
-        </label>
-        <label class="backup-toggle">
-          <input type="checkbox" id="sp-stream"> 边生成边读（按句切好就念，不等整段写完；关了就只能点气泡下面那个手动念）
-        </label>
+        <div class="field">
+          <label>怎么念（二选一）</label>
+          <div class="seg" id="speech-mode-seg">
+            <button type="button" data-smode="stream">边生成边读</button>
+            <button type="button" data-smode="manual">点按钮朗读</button>
+          </div>
+          <div class="hint">边生成边读：按句切好就念，不等整段写完。点按钮朗读：只在你点气泡上那个手动念时才出声。</div>
+        </div>
         <div class="grid2">
           <div class="field">
             <label for="sp-plugin">插件名（voco 里 load 的那个）</label>
@@ -530,24 +532,24 @@ window.addEventListener('unhandledrejection', function (e) {
       <summary>备份</summary>
       <div class="prefs-body">
         <div class="hint">把 data/ 整个打包成 zip 存到 backups/。包里的 API Key 会被抹掉，所以可以放心挪走。</div>
-        <div class="backup-actions">
+        <div class="prefs-actions">
           <button type="button" id="btn-backup-now">立即备份</button>
-          <span class="backup-msg" id="backup-msg"></span>
+          <span class="prefs-note" id="backup-msg"></span>
         </div>
         <div class="backup-conf">
-          <label class="backup-toggle">
+          <label class="prefs-check">
             <input type="checkbox" id="backup-enabled"> 定时自动备份
           </label>
-          <label class="bk-field">
-            <span>每</span>
-            <input type="number" id="backup-minutes" min="5" max="20160" step="5" value="1440">
-            <span>分钟备份一次</span>
-          </label>
-          <label class="bk-field">
-            <span>最多留</span>
-            <input type="number" id="backup-keep" min="1" max="30" value="30">
-            <span>份</span>
-          </label>
+          <div class="grid2">
+            <div class="field">
+              <label for="backup-minutes">隔多少分钟备份一次</label>
+              <input type="number" id="backup-minutes" min="5" max="20160" step="5" value="1440">
+            </div>
+            <div class="field">
+              <label for="backup-keep">最多留几份</label>
+              <input type="number" id="backup-keep" min="1" max="30" value="30">
+            </div>
+          </div>
           <button type="button" class="ghost" id="btn-backup-save">保存</button>
         </div>
         <div class="backup-list" id="backup-list"></div>

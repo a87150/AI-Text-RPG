@@ -26,3 +26,7 @@ htmlcov/
 # 本地跑脚本时重定向出来的日志
 _*.log
 _*.log.*
+
+_*.log
+_*.wav
+tts_probe.py

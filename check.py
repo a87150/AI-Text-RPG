@@ -1054,6 +1054,23 @@ def main():
             if re.search(r"\S\s+export\s+(function|const|let|class|default)\b", _ln) \
                     or _ln.count("export function") > 1:
                 _js_bad.append("%s:%d" % (_f.name, _i))
+    # 设置面板里同一种控件只能有一套样式。备份那几个旧类名一旦回归，说明又拆出了分叉
+    _css = (pathlib.Path(__file__).parent / "static" / "css" / "app.css").read_text(encoding="utf-8")
+    # 只查 class 属性里的类名；backup-msg 是个 id，不算
+    _cls = set(re.findall(r'class="([^"]+)"', _html))
+    _used = set()
+    for c in _cls:
+        _used.update(c.split())
+    _dead = [c for c in ("backup-toggle", "bk-field", "backup-actions", "backup-msg")
+             if c in _used or "." + c + " {" in _css or "." + c + "," in _css]
+    check("设置控件样式已统一", not _dead, ", ".join(_dead))
+    check("勾选行共用 prefs-check", 'class="prefs-check"' in _html and ".prefs-check" in _css)
+
+    # 语音的两种用法是二选一，不是两个独立开关
+    _spmodes = re.findall(r'data-smode="(\w+)"', _html)
+    check("语音模式二选一", _spmodes == ["stream", "manual"], str(_spmodes))
+    check("旧的 stream 开关已撤", 'id="sp-stream"' not in _html)
+
     check("export 都顶格（没被吞进函数体）", not _js_bad, ", ".join(_js_bad[:4]))
 
     check("各节各有保存按钮", _html.count('class="prefs-save"') == 4,
@@ -2599,19 +2616,30 @@ def main():
     rp_config.save_image_conf({"url": "", "timeout": 180})
 
     _sp = rp_config.save_speech_conf({
-        "enabled": True, "plugin": "kokoro", "device": "cpu",
-        "options": "voice=af_heart"})
-    check("语音开关能存", _sp["enabled"] is True, str(_sp))
-    check("语音参数能存", _sp["options"] == "voice=af_heart", str(_sp))
+        "mode": "stream", "plugin": "qwen3-tts", "device": "cuda:0",
+        "options": "variant=custom\nspeaker=Vivian"})
+    check("语音模式能存", _sp["mode"] == "stream", str(_sp))
+    check("语音参数能存", "speaker=Vivian" in _sp["options"], str(_sp))
     check("语音插件不能是空",
-          rp_config.save_speech_conf({"plugin": ""})["plugin"] == "kokoro")
-    rp_config.save_speech_conf({"enabled": False})
+          rp_config.save_speech_conf({"plugin": ""})["plugin"] == rp_config.SPEECH_DEFAULTS["plugin"])
+    check("启用朗读开关已撤", "enabled" not in rp_config.speech_conf(),
+          str(rp_config.speech_conf()))
+    rp_config.save_speech_conf({"mode": "stream"})
 
     # 透传参数是一行一个 key=value，这是语音与模型插件之间的唯一契约
     _opts = rp_speech.parse_options("voice=af_heart\ninstruct=用平静的语气念\n\n# 注释\nbad")
+    check("默认插件是 qwen3-tts", rp_config.SPEECH_DEFAULTS["plugin"] == "qwen3-tts",
+          rp_config.SPEECH_DEFAULTS["plugin"])
+    # variant/model_id/dtype 是构造参数，不能混进 infer 的 kwargs
+    _sp_opts = rp_speech.parse_options("variant=custom\nspeaker=Vivian\ndtype=float16")
+    _to_infer = {k: v for k, v in _sp_opts.items() if k not in rp_speech.LOAD_KEYS}
+    check("构造参数不漏进推理",
+          _to_infer == {"speaker": "Vivian"}, str(_to_infer))
+
     check("语音参数按行解析",
           _opts.get("voice") == "af_heart" and len(_opts) == 2, str(_opts))
-    check("没开就不读", rp_speech.speech_conf().get("enabled") is False)
+    check("模式只能是两种之一",
+          set(rp_config.SPEECH_READ_MODES) == {"stream", "manual"})
 
     # 跨币种的累计要分开记，面板才能写成 ¥3.2 + $0.5；混加会得到一个不对的数
     _mix = "zz-mix-currency"
