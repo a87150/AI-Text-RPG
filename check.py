@@ -1045,6 +1045,17 @@ def main():
     _html = (pathlib.Path(__file__).parent / "templates" / "index.html").read_text(encoding="utf-8")
     check("底部统一保存按钮已删除", 'id="prefs-save"' not in _html)
     check("底部换成还原默认", 'id="prefs-reset"' in _html)
+    # 前端是裸 ES module，这一条挡的是“整行被拼了两次”那种修改手误：
+    # 重复后 export 掉进了函数体，浏览器按 module 解析直接报
+    # Unexpected token 'export'，而 node --check 把它当嵌套函数放行。所以只能自己查。
+    _js_bad = []
+    for _f in sorted((pathlib.Path(__file__).parent / "static" / "js").glob("*.js")):
+        for _i, _ln in enumerate(_f.read_text(encoding="utf-8").splitlines(), 1):
+            if re.search(r"\S\s+export\s+(function|const|let|class|default)\b", _ln) \
+                    or _ln.count("export function") > 1:
+                _js_bad.append("%s:%d" % (_f.name, _i))
+    check("export 都顶格（没被吞进函数体）", not _js_bad, ", ".join(_js_bad[:4]))
+
     check("各节各有保存按钮", _html.count('class="prefs-save"') == 4,
       str(_html.count('class="prefs-save"')))  # 生图、语音并进模型段，保存按钮各管各的
     check("保存按钮分别标注",

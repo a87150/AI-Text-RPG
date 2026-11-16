@@ -1284,7 +1284,7 @@ export async function speakText(text, btn) {
   }
 }
 
-export function buildMessage(role, content, name, edited) {export function buildMessage(role, content, name, edited) {
+export function buildMessage(role, content, name, edited) {
   const el = document.createElement('div');
   el.className = 'msg ' + role;
   el.style.setProperty('--char-hue', hueOf(name));
