@@ -416,40 +416,6 @@ async function loadSnapshots(sid, box) {
   }
 }
 
-/* 用量那几行。服务端报不出来就是—，不拿字数估算冒充真实值 */
-function tokenRows(st) {
-  const u = st.usage || {};
-  const inTok = u.prompt_tokens || 0;
-  const outTok = u.completion_tokens || 0;
-  const hit = u.prompt_cache_hit_tokens
-    || ((u.prompt_tokens_details || {}).cached_tokens) || 0;
-  const tot = st.total || {};
-  const has = inTok || outTok;
-  const hitPct = inTok ? Math.round((hit / inTok) * 100) : 0;
-  const decodeMs = st.decode_ms || 0;
-  const speed = (decodeMs > 0 && outTok) ? (outTok / (decodeMs / 1000)) : 0;
-  const cost = st.cost;
-  const rows = [
-    ['上轮 tokens', has
-      ? fmtNumber(inTok) + ' 入 / ' + fmtNumber(outTok) + ' 出'
-        + (st.usage && st.usage.total_tokens ? ' · 共 ' + fmtNumber(st.usage.total_tokens) : '')
-      : '服务端没报'],
-    ['缓存命中', hit
-      ? fmtNumber(hit) + ' token（' + hitPct + '%）' : '无'],
-    ['生成速度', speed
-      ? Math.round(speed) + ' token/s（首字之后）' : '—'],
-    ['上轮费用', cost
-      ? '$' + cost.total.toFixed(6) + '（入 ' + cost.in.toFixed(6)
-        + ' / 出 ' + cost.out.toFixed(6) + '）'
-      : '未配单价'],
-    ['累计', tot.calls
-      ? tot.calls + ' 次 · ' + fmtNumber(tot.prompt_tokens) + ' 入 / '
-        + fmtNumber(tot.completion_tokens) + ' 出 · $' + (tot.cost || 0).toFixed(6)
-      : '—'],
-  ];
-  return rows;
-}
-
 const SEG_LABEL = {
   rules: '写法', characters: '角色', user_role: '主角', summary: '前情',
   status: '处境', world: '世界观', language: '语言', identity: '身份', facts: '账本',
@@ -533,22 +499,25 @@ export function renderContextDetail() {
   const totalMs = st.total_ms || 0;
   const decodeMs = st.decode_ms || (totalMs > ttft ? totalMs - ttft : 0);
   const speed = (decodeMs > 0 && outTok) ? Math.round(outTok / (decodeMs / 1000)) : 0;
-  // 费用按美元估，拿不到单价就只在前面标一下，不写 0——0 会被当成免费
+  // 费用按人民币估，拿不到单价就只在前面标一下，不写 0——0 会被当成免费
   // 没配单价和"这轮是免费的"是两件事，分开说——之前一律显示横杠，
   // 于是模型名对不上价目表时会一直挂着 0，谁也不知道是没算还是没花钱
   const money = (cost) => {
     if (cost === null || cost === undefined) return '未配单价';
     const v = cost.total || 0;
-    if (!v) return '$0';
-    return '$' + (v >= 0.01 ? v.toFixed(3) : v.toFixed(5));
+    if (!v) return '¥0';
+    // 不到一角时多给一位小数，否则便宜的轮次全是 ¥0.00
+    return '¥' + (v >= 0.1 ? v.toFixed(2) : v.toFixed(4));
   };
+  // 累计费用是按轮加出来的，高峰时段那一轮本身就贵，所以在标签上标一下现在的档
+  const peakNow = st.cost && st.cost.peak;
   const core = document.createElement('div');
   core.className = 'ctx-rows';
   // 四个数成对排：上轮 / 累计，各一对 token 和费用。顺序固定，扫一眼就能上下比
   core.appendChild(mkRow('上轮 tok', inTok
     ? '入 ' + fmtNumber(inTok) + ' · 出 ' + fmtNumber(outTok)
     : '还没发过'));
-  core.appendChild(mkRow('上轮费用', money(st.cost)));
+  core.appendChild(mkRow('上轮费用' + (st.cost && st.cost.peak ? '（高峰）' : ''), money(st.cost)));
   core.appendChild(mkRow('累计 tok', tot.calls
     ? '入 ' + fmtNumber(tot.prompt_tokens) + ' · 出 ' + fmtNumber(tot.completion_tokens)
       + ' · ' + tot.calls + ' 次' : '—'));
@@ -629,8 +598,6 @@ export function renderContextDetail() {
       || (st.usage.prompt_tokens_details || {}).cached_tokens)) || 0;
     core.appendChild(mkRow('缓存命中', hit
       ? fmtNumber(hit) + ' token（' + Math.round(hit / (inTok || 1) * 100) + '%）' : '无'));
-    core.appendChild(mkRow('上轮费用', st.cost
-      ? '$' + st.cost.total.toFixed(6) : '未配单价'));
 
     if ((d.lore || []).length) {
       box.appendChild(mkSub('命中的世界书'));

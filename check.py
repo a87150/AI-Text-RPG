@@ -2551,10 +2551,19 @@ def main():
     check("流里能拿到用量", _u.get("prompt_tokens") == 1200, str(_u))
     check("正文结果不受影响", _parts == [("你好", "")], str(_parts))
 
+    # 钉死在一个周末午夜的时刻上，否则跑到高峰时段这条断言会翻倍
+    _at = __import__("time").mktime((2026, 11, 15, 3, 0, 0, 0, 0, -1))
     _cost = rp_config.estimate_cost("deepseek-chat", {
-        "prompt_tokens": 1000, "completion_tokens": 500, "prompt_cache_hit_tokens": 600})
-    check("费用按命中折算", _cost and abs(_cost["in"] - 0.000108) < 1e-9,
+        "prompt_tokens": 1000, "completion_tokens": 500, "prompt_cache_hit_tokens": 600}, at=_at)
+    check("费用按命中折算", _cost and abs(_cost["in"] - 0.0008) < 1e-9,
           str(_cost))
+    check("费用按人民币计", _cost and _cost["currency"] == "CNY", str(_cost))
+    check("空闲时段不打折也不加价", _cost and _cost["peak"] is False, str(_cost))
+    _same = {"prompt_tokens": 1000, "completion_tokens": 500, "prompt_cache_hit_tokens": 600}
+    _idle = rp_config.estimate_cost("deepseek-chat", _same, at=_at)
+    _peak = rp_config.estimate_cost("deepseek-chat", _same, at=_at + 32 * 3600)  # 周一 11 点
+    check("高峰时段翻倍", _peak and _peak["peak"] and abs(_peak["total"] - 2 * _idle["total"]) < 1e-9,
+          str(_peak) + " vs " + str(_idle))
     check("未知模型不乱报价", rp_config.estimate_cost("mystery-model", {}) is None)
 
     rp_metrics.record({"prompt_tokens": 100, "completion_tokens": 50}, "deepseek-chat")

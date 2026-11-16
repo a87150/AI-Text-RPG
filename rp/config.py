@@ -5,13 +5,14 @@ import os
 import socket
 import re
 import threading
+import time
 import uuid
 
 import requests
 from flask import Flask
 
 # ============================== 版本 ==============================
-VERSION = "1.21"
+VERSION = "1.22"
 
 # ============================== 模型配置 ==============================
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
@@ -168,30 +169,45 @@ CREATIVITY_LABELS = {
     "creative": "创意 — 换一个角度接，愿意出点意外",
     "wild": "发散 — 允许节外生枝，可能跑偏",
 }
-# 每百万 token 的单价（输入, 输出, 命中缓存的输入），美元。
+# 每百万 token 的单价（输入, 输出, 命中缓存的输入），人民币元。
 # 只用来给上下文面板算个量级，不是计费凭证；对不上就显示“未配单价”。
 # 厂商随时调价，所以这里只是出厂默认值：设置界面的「模型单价」能逐条覆盖，
 # 覆盖写进 settings.json，重启也在。数字以官方价目表为准。
+# 单位一律人民币（元），每百万 token，且填的是**空闲时段**价。
+# DeepSeek 官方按调用时刻分档：工作日 9:00-12:00、14:00-18:00 是高峰，价格翻倍，其余算空闲。
+# 面板按当前时刻判档，所以同一局跨到高峰，后面的轮次会贵一倍。
+# DeepSeek 两行数字抄自官网「模型细节」页；其余厂商按 7.2 折算，只为量级可比，不是账单。
 PRICES = {
-    "deepseek-chat": (0.27, 1.10, 0.07),
-    "deepseek-reasoner": (0.55, 2.19, 0.14),
-    # flash 档官方没公开折扣后的缓存价，先按输入价算，宁可高估也不当成免费
-    "deepseek-flash": (0.40, 1.60, 0.40),
-    "gpt-4o-mini": (0.15, 0.60, 0.075),
-    "gpt-4o": (2.50, 10.00, 1.25),
-    "gpt-4.1-mini": (0.40, 1.60, 0.10),
-    "gpt-4.1-nano": (0.10, 0.40, 0.025),
-    "gpt-4.1": (2.00, 8.00, 0.50),
-    "gpt-5-mini": (0.25, 2.00, 0.025),
-    "gpt-5-nano": (0.05, 0.40, 0.005),
-    "gpt-5": (1.25, 10.00, 0.125),
-    "o4-mini": (1.10, 4.40, 0.275),
-    "o3-mini": (1.10, 4.40, 0.55),
-    "o3": (2.00, 8.00, 0.50),
-    "claude-3-5-sonnet": (3.00, 15.00, 0.30),
-    "claude-3-5-haiku": (0.80, 4.00, 0.08),
-    "qwen-max": (1.60, 6.40, 0.80),
+    "deepseek-flash": (1.00, 4.00, 0.02),
+    "deepseek-v4-pro": (4.50, 13.50, 0.15),
+    # 官网现表已不列这两个，按 V3 当时的人民币价留着，给还在用的会话兜底
+    "deepseek-chat": (2.00, 8.00, 0.50),
+    "deepseek-reasoner": (4.00, 16.00, 1.00),
+    "gpt-4o-mini": (1.08, 4.32, 0.54),
+    "gpt-4o": (18.00, 72.00, 9.00),
+    "gpt-4.1-mini": (2.88, 11.52, 0.72),
+    "gpt-4.1-nano": (0.72, 2.88, 0.18),
+    "gpt-4.1": (14.40, 57.60, 3.60),
+    "gpt-5-mini": (1.80, 14.40, 0.18),
+    "gpt-5-nano": (0.36, 2.88, 0.036),
+    "gpt-5": (9.00, 72.00, 0.90),
+    "o4-mini": (7.92, 31.68, 1.98),
+    "o3-mini": (7.92, 31.68, 3.96),
+    "o3": (14.40, 57.60, 3.60),
+    "claude-3-5-sonnet": (21.60, 108.00, 2.16),
+    "claude-3-5-haiku": (5.76, 28.80, 0.58),
+    "qwen-max": (11.52, 46.08, 5.76),
 }
+
+# 高峰时段：左闭右开。周末全天空闲。
+PEAK_HOURS = ((9, 12), (14, 18))
+
+def is_peak(at=None):
+    """这一刻算不算高峰价。at 传时间戳可回放历史，不传就看现在。"""
+    t = time.localtime(at) if at else time.localtime()
+    if t.tm_wday >= 5:
+        return False
+    return any(lo <= t.tm_hour < hi for lo, hi in PEAK_HOURS)
 
 _prices_override = {}
 
@@ -261,12 +277,17 @@ def price_of(model):
             return table[key]
     return None
 
-def estimate_cost(model, usage):
-    """把 usage 换成一个每百万 token 单价的估算。拿不到单价就返 None。"""
+def estimate_cost(model, usage, at=None):
+    """把 usage 换成一个每百万 token 单价的估算。拿不到单价就返 None。
+
+    at 是这轮请求发出的时间戳；不传按现在判档。费用跟着时段走，所以同一局
+    从空闲跑到高峰，后面的轮次会按高峰价算。
+    """
     p = price_of(model)
     if not p or not isinstance(usage, dict):
         return None
-    pin, pout, pcache = p
+    rate = 2 if is_peak(at) else 1
+    pin, pout, pcache = (x * rate for x in p)
     hit = int(usage.get("prompt_cache_hit_tokens")
               or (usage.get("prompt_tokens_details") or {}).get("cached_tokens") or 0)
     in_tok = int(usage.get("prompt_tokens") or 0)
@@ -278,7 +299,8 @@ def estimate_cost(model, usage):
         "out": round(out_tok / 1e6 * pout, 6),
         "cached": round(hit / 1e6 * pcache, 6),
         "total": round(total, 6),
-        "currency": "USD",
+        "currency": "CNY",
+        "peak": rate > 1,
     }
 
 
