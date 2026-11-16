@@ -124,11 +124,14 @@ cover 只存文件名，路径由 DATA_DIR 推，换机器能跑。cover_history
       "reasoning": "medium",
       "tier": "basic",
       "backup": {"enabled": false, "every_hours": 24},
-      "prices": {"deepseek-flash": [0.40, 1.60, 0.40]}
+      "prices": {"deepseek-flash": [1.00, 4.00, 0.02, "CNY"]}
     }
 
 prices 是用户在设置里改过的模型单价，只存覆盖项，没动过的模型仍走 config.py 的 `PRICES` 默认表。
-值是 [输入, 输出, 缓存命中]，每百万 token 的人民币元，填的是空闲时段价；高峰时段代码里翻倍。
+值是 [输入, 输出, 缓存命中, 币种]，每百万 token，币种是 CNY 或 USD。每个模型自带币种不折算，
+面板按当前模型挑符号。DeepSeek 填的是空闲时段价，高峰代码里翻倍；其它厂商不分时段。
+
+totals.json 的成绩按币种分开记（`cost_by_cur`），混着加会把 $ 和 ¥ 加成一个数。
 
 写文件时先写临时文件再 os.replace，断电不会留下半个 JSON。备份打包时 api_key 会被清空。
 

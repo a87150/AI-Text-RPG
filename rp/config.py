@@ -12,7 +12,7 @@ import requests
 from flask import Flask
 
 # ============================== 版本 ==============================
-VERSION = "1.22"
+VERSION = "1.23"
 
 # ============================== 模型配置 ==============================
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
@@ -177,27 +177,35 @@ CREATIVITY_LABELS = {
 # DeepSeek 官方按调用时刻分档：工作日 9:00-12:00、14:00-18:00 是高峰，价格翻倍，其余算空闲。
 # 面板按当前时刻判档，所以同一局跨到高峰，后面的轮次会贵一倍。
 # DeepSeek 两行数字抄自官网「模型细节」页；其余厂商按 7.2 折算，只为量级可比，不是账单。
+# 每个模型自带币种，不做汇率折算：国内厂商标人民币，国外厂商标美元原价。
+# DeepSeek 还按调用时刻分空闲/高峰两档，见 PEAK_HOURS。
 PRICES = {
-    "deepseek-flash": (1.00, 4.00, 0.02),
-    "deepseek-v4-pro": (4.50, 13.50, 0.15),
+    "deepseek-flash": (1.00, 4.00, 0.02, "CNY"),
+    "deepseek-v4-pro": (4.50, 13.50, 0.15, "CNY"),
     # 官网现表已不列这两个，按 V3 当时的人民币价留着，给还在用的会话兜底
-    "deepseek-chat": (2.00, 8.00, 0.50),
-    "deepseek-reasoner": (4.00, 16.00, 1.00),
-    "gpt-4o-mini": (1.08, 4.32, 0.54),
-    "gpt-4o": (18.00, 72.00, 9.00),
-    "gpt-4.1-mini": (2.88, 11.52, 0.72),
-    "gpt-4.1-nano": (0.72, 2.88, 0.18),
-    "gpt-4.1": (14.40, 57.60, 3.60),
-    "gpt-5-mini": (1.80, 14.40, 0.18),
-    "gpt-5-nano": (0.36, 2.88, 0.036),
-    "gpt-5": (9.00, 72.00, 0.90),
-    "o4-mini": (7.92, 31.68, 1.98),
-    "o3-mini": (7.92, 31.68, 3.96),
-    "o3": (14.40, 57.60, 3.60),
-    "claude-3-5-sonnet": (21.60, 108.00, 2.16),
-    "claude-3-5-haiku": (5.76, 28.80, 0.58),
-    "qwen-max": (11.52, 46.08, 5.76),
+    "deepseek-chat": (2.00, 8.00, 0.50, "CNY"),
+    "deepseek-reasoner": (4.00, 16.00, 1.00, "CNY"),
+    "gpt-4o-mini": (0.15, 0.60, 0.075, "USD"),
+    "gpt-4o": (2.50, 10.00, 1.25, "USD"),
+    "gpt-4.1-mini": (0.40, 1.60, 0.10, "USD"),
+    "gpt-4.1-nano": (0.10, 0.40, 0.025, "USD"),
+    "gpt-4.1": (2.00, 8.00, 0.50, "USD"),
+    "gpt-5-mini": (0.25, 2.00, 0.025, "USD"),
+    "gpt-5-nano": (0.05, 0.40, 0.005, "USD"),
+    "gpt-5": (1.25, 10.00, 0.125, "USD"),
+    "o4-mini": (1.10, 4.40, 0.275, "USD"),
+    "o3-mini": (1.10, 4.40, 0.55, "USD"),
+    "o3": (2.00, 8.00, 0.50, "USD"),
+    "claude-3-5-sonnet": (3.00, 15.00, 0.30, "USD"),
+    "claude-3-5-haiku": (0.80, 4.00, 0.08, "USD"),
+    "qwen-max": (1.60, 6.40, 0.80, "USD"),
 }
+
+CURRENCIES = ("CNY", "USD")
+CURRENCY_SIGN = {"CNY": "¥", "USD": "$"}
+
+# 只有国内厂商按时段浮动，OpenAI 这类一个价走到底
+PEAK_PREFIXES = ("deepseek",)
 
 # 高峰时段：左闭右开。周末全天空闲。
 PEAK_HOURS = ((9, 12), (14, 18))
@@ -241,8 +249,14 @@ def save_prices(data, persist=True):
     for name, value in rows.items():
         if not name:
             continue
+        vals = list(value)
+        # 末尾要是 CNY / USD 就摘出来，不带就按人民币
+        cur = "CNY"
+        if vals and isinstance(vals[-1], str) and vals[-1].strip().upper() in CURRENCIES:
+            cur = vals[-1].strip().upper()
+            vals = vals[:-1]
         try:
-            nums = [round(float(x), 6) for x in value[:3]]
+            nums = [round(float(x), 6) for x in vals[:3]]
         except (TypeError, ValueError):
             continue
         if len(nums) < 2 or any(n < 0 for n in nums):
@@ -250,7 +264,7 @@ def save_prices(data, persist=True):
         # 缓存单价没填就按输入价走，宁可贵一点也别算成 0
         while len(nums) < 3:
             nums.append(nums[0])
-        clean[name] = tuple(nums)
+        clean[name] = (nums[0], nums[1], nums[2], cur)
     with _model_lock:
         _prices_override = clean
         snapshot = dict(_prices_override)
@@ -260,7 +274,7 @@ def save_prices(data, persist=True):
 
 def prices_text():
     """把当前价目表拍成一行一条的文本，给设置界面的输入框回显。"""
-    return "\n".join("%s %s" % (name, " ".join("%g" % n for n in nums))
+    return "\n".join("%s %g %g %g %s" % (name, nums[0], nums[1], nums[2], nums[3])
                      for name, nums in sorted(prices().items()))
 
 def price_of(model):
@@ -286,8 +300,11 @@ def estimate_cost(model, usage, at=None):
     p = price_of(model)
     if not p or not isinstance(usage, dict):
         return None
-    rate = 2 if is_peak(at) else 1
-    pin, pout, pcache = (x * rate for x in p)
+    pin, pout, pcache, currency = p
+    # 只有按时段浮动的厂商才乘倍率，OpenAI 这类一天一个价
+    peakable = any((model or "").strip().lower().startswith(k) for k in PEAK_PREFIXES)
+    rate = 2 if (peakable and is_peak(at)) else 1
+    pin, pout, pcache = pin * rate, pout * rate, pcache * rate
     hit = int(usage.get("prompt_cache_hit_tokens")
               or (usage.get("prompt_tokens_details") or {}).get("cached_tokens") or 0)
     in_tok = int(usage.get("prompt_tokens") or 0)
@@ -299,7 +316,7 @@ def estimate_cost(model, usage, at=None):
         "out": round(out_tok / 1e6 * pout, 6),
         "cached": round(hit / 1e6 * pcache, 6),
         "total": round(total, 6),
-        "currency": "CNY",
+        "currency": currency,
         "peak": rate > 1,
     }
 

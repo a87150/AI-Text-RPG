@@ -2564,6 +2564,18 @@ def main():
     _peak = rp_config.estimate_cost("deepseek-chat", _same, at=_at + 32 * 3600)  # 周一 11 点
     check("高峰时段翻倍", _peak and _peak["peak"] and abs(_peak["total"] - 2 * _idle["total"]) < 1e-9,
           str(_peak) + " vs " + str(_idle))
+    # 国外厂商按美元原价，不折算汇率，也不参与时段翻倍
+    _usd = rp_config.estimate_cost("gpt-4o", _same, at=_at)
+    check("国外模型报美元", _usd and _usd["currency"] == "USD", str(_usd))
+    check("gpt 不按时段浮动", _usd and _usd["peak"] is False, str(_usd))
+    _usd_peak = rp_config.estimate_cost("gpt-4o", _same, at=_at + 32 * 3600)
+    check("gpt 高峰价不变", _usd_peak and abs(_usd_peak["total"] - _usd["total"]) < 1e-9,
+          str(_usd_peak) + " vs " + str(_usd))
+    check("手填币种生效",
+          rp_config.save_prices("zz-usd-test 3 6 1.5 USD", persist=False)["zz-usd-test"][3] == "USD")
+    check("不填币种默认人民币",
+          rp_config.save_prices("zz-cny-test 3 6", persist=False)["zz-cny-test"][3] == "CNY")
+    rp_config.save_prices({}, persist=False)
     check("未知模型不乱报价", rp_config.estimate_cost("mystery-model", {}) is None)
 
     rp_metrics.record({"prompt_tokens": 100, "completion_tokens": 50}, "deepseek-chat")

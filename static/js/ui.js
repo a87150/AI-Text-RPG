@@ -502,12 +502,15 @@ export function renderContextDetail() {
   // 费用按人民币估，拿不到单价就只在前面标一下，不写 0——0 会被当成免费
   // 没配单价和"这轮是免费的"是两件事，分开说——之前一律显示横杠，
   // 于是模型名对不上价目表时会一直挂着 0，谁也不知道是没算还是没花钱
-  const money = (cost) => {
+  // 每个模型自带币种：国内厂商人民币，OpenAI 这类美元原价，不做汇率折算
+  const signOf = (cur) => (cur === 'USD' ? '$' : '¥');
+  const money = (cost, cur) => {
     if (cost === null || cost === undefined) return '未配单价';
     const v = cost.total || 0;
-    if (!v) return '¥0';
-    // 不到一角时多给一位小数，否则便宜的轮次全是 ¥0.00
-    return '¥' + (v >= 0.1 ? v.toFixed(2) : v.toFixed(4));
+    const sign = signOf(cur);
+    if (!v) return sign + '0';
+    // 不到一角时多给几位小数，否则便宜的轮次全是 0.00
+    return sign + (v >= 0.1 ? v.toFixed(2) : v.toFixed(4));
   };
   // 累计费用是按轮加出来的，高峰时段那一轮本身就贵，所以在标签上标一下现在的档
   const peakNow = st.cost && st.cost.peak;
@@ -517,11 +520,12 @@ export function renderContextDetail() {
   core.appendChild(mkRow('上轮 tok', inTok
     ? '入 ' + fmtNumber(inTok) + ' · 出 ' + fmtNumber(outTok)
     : '还没发过'));
-  core.appendChild(mkRow('上轮费用' + (st.cost && st.cost.peak ? '（高峰）' : ''), money(st.cost)));
+  core.appendChild(mkRow('上轮费用' + (st.cost && st.cost.peak ? '（高峰）' : ''),
+    money(st.cost, st.cost && st.cost.currency)));
   core.appendChild(mkRow('累计 tok', tot.calls
     ? '入 ' + fmtNumber(tot.prompt_tokens) + ' · 出 ' + fmtNumber(tot.completion_tokens)
       + ' · ' + tot.calls + ' 次' : '—'));
-  core.appendChild(mkRow('累计费用', money({ total: tot.cost })));
+  core.appendChild(mkRow('累计费用', money({ total: tot.cost_cur }, tot.currency)));
   core.appendChild(mkRow('首字等待', ttft ? fmtNumber(ttft) + ' ms' : '—'));
   core.appendChild(mkRow('生成速度', speed
     ? speed + ' token/s（' + fmtNumber(outTok) + ' 出 / ' + fmtNumber(decodeMs) + ' ms）' : '—'));

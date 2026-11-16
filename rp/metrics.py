@@ -163,7 +163,7 @@ def _bump(sid):
             book.pop(next(iter(book)), None)
         one = book[str(sid)] = {
             "calls": 0, "prompt_tokens": 0, "completion_tokens": 0,
-            "cached_tokens": 0, "cost": 0.0, "ms": 0}
+            "cached_tokens": 0, "cost": 0.0, "ms": 0, "cost_by_cur": {}}
     return one
 
 def record(usage, model="", sid=None):
@@ -191,6 +191,10 @@ def record(usage, model="", sid=None):
             one["cached_tokens"] += hit
             if LAST["cost"]:
                 one["cost"] = round(one["cost"] + LAST["cost"]["total"], 6)
+                # 换过币种的话不能混加，分开记，面板按当前模型的币种取
+                by_cur = one.setdefault("cost_by_cur", {})
+                cur = LAST["cost"].get("currency") or "CNY"
+                by_cur[cur] = round(by_cur.get(cur, 0.0) + LAST["cost"]["total"], 6)
     _save_totals()
     note("chat.usage", model=LAST["model"], usage=usage, cost=LAST["cost"])
 
@@ -207,7 +211,11 @@ def snapshot(sid=None):
         one = TOTAL["by_session"].get(str(sid))
         out["total"] = dict(one) if one else {
             "calls": 0, "prompt_tokens": 0, "completion_tokens": 0,
-            "cached_tokens": 0, "cost": 0.0, "ms": 0}
+            "cached_tokens": 0, "cost": 0.0, "ms": 0, "cost_by_cur": {}}
+        # 面板只关心当前这一局花的钱，按当前模型币种取；换过币种时另一个桶不出现在这一行
+        cur = (out.get("cost") or {}).get("currency") or "CNY"
+        out["total"]["cost_cur"] = out["total"].get("cost_by_cur", {}).get(cur)
+        out["total"]["currency"] = cur
     else:
         out["total"] = {k: v for k, v in TOTAL.items() if k != "by_session"}
     return out
