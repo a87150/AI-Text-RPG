@@ -124,8 +124,14 @@ cover 只存文件名，路径由 DATA_DIR 推，换机器能跑。cover_history
       "reasoning": "medium",
       "tier": "basic",
       "backup": {"enabled": false, "every_hours": 24},
-      "prices": {"deepseek-flash": [1.00, 4.00, 0.02, "CNY"]}
+      "prices": {"deepseek-flash": [1.00, 4.00, 0.02, "CNY"]},
+      "image": {"url": "", "timeout": 180},
+      "speech": {"enabled": false, "stream": true, "plugin": "kokoro",
+                 "alias": "tts", "device": "cpu", "options": "voice=af_heart"}
     }
+
+image 是生图的 ComfyUI 配置，url 留空会回退到 LT_COMFY 环境变量。
+speech 是朗读配置，plugin / options 原样交给 voco，见 CONFIG.md。
 
 prices 是用户在设置里改过的模型单价，只存覆盖项，没动过的模型仍走 config.py 的 `PRICES` 默认表。
 值是 [输入, 输出, 缓存命中, 币种]，每百万 token，币种是 CNY 或 USD。每个模型自带币种不折算，
@@ -200,6 +206,11 @@ totals.json 的累计费用按币种分开记（`cost_by_cur`），混着加会�
     POST   /api/backups/<name>/restore    还原这份备份
     DELETE /api/backups/<name>            删除备份
     PUT    /api/backup-config              定时备份：enabled / every_minutes / keep
+    GET    /api/image-config              生图用的 ComfyUI 地址与超时
+    PUT    /api/image-config              保存生图配置
+    GET    /api/speech-config             语音配置，同时报 voco 装没装
+    PUT    /api/speech-config             保存语音配置（换插件后立刻重新加载）
+    POST   /api/speech                    把一段文字念成 wav 直接返回，不落盘
 
 还原的三个要点：
 

@@ -27,8 +27,13 @@ THUMB_SIZE = 160
 SAVE_PREFIX = "gen"
 WORKFLOW_PATH = os.path.join(BASE_DIR, "moss_workflow_api.json")
 
-# 同机的 ComfyUI 默认在 8188；换机器用环境变量 LT_COMFY 指过去
-COMFY_URL = (os.environ.get("LT_COMFY") or "http://127.0.0.1:8188").rstrip("/")
+DEFAULT_COMFY = "http://127.0.0.1:8188"
+
+def comfy_url():
+    """设置里填的优先，其次 LT_COMFY 环境变量，都没有才用本机 8188。"""
+    from .config import image_conf
+    return (image_conf().get("url") or os.environ.get("LT_COMFY")
+            or DEFAULT_COMFY).rstrip("/")
 
 NODE_PROMPT = "4"
 NODE_NEG = "5"
@@ -38,12 +43,14 @@ NODE_SAVE = "30"
 
 # 封面是竖图：832x1216 在 SDXL 系的常见比例里不会糊
 COVER_W, COVER_H = 832, 1216
-# 生一张要多久取决于显卡。默认 180 秒，快卡三十几秒就出，慢卡也能撑到。
-# 要改用 LT_COVER_TIMEOUT 环境变量，不要改这个默认值。
-try:
-    GEN_TIMEOUT = max(30, int(os.environ.get("LT_COVER_TIMEOUT") or 180))
-except (TypeError, ValueError):
-    GEN_TIMEOUT = 180
+def gen_timeout():
+    """生一张要多久取决于显卡。设置里填的优先，其次 LT_COVER_TIMEOUT，默认 180 秒。"""
+    from .config import image_conf
+    raw = image_conf().get("timeout") or os.environ.get("LT_COVER_TIMEOUT") or 180
+    try:
+        return max(30, int(raw))
+    except (TypeError, ValueError):
+        return 180
 ALLOWED_EXT = (".png", ".jpg", ".jpeg", ".webp")
 
 os.makedirs(COVERS_DIR, exist_ok=True)
@@ -55,7 +62,7 @@ def _load_workflow():
         return json.load(f)
 
 def _submit(workflow):
-    res = requests.post(COMFY_URL + "/prompt",
+    res = requests.post(comfy_url() + "/prompt",
                         json={"prompt": workflow, "client_id": uuid.uuid4().hex},
                         timeout=30)
     if res.status_code != 200:
@@ -66,11 +73,11 @@ def _submit(workflow):
         raise RuntimeError("ComfyUI 没有返回任务号：%s" % str(data)[:200])
     return data["prompt_id"]
 
-def _wait(prompt_id, timeout=GEN_TIMEOUT):
+def _wait(prompt_id, timeout=None):
     start = time.time()
     while time.time() - start < timeout:
         try:
-            res = requests.get("%s/history/%s" % (COMFY_URL, prompt_id), timeout=15)
+            res = requests.get("%s/history/%s" % (comfy_url(), prompt_id), timeout=15)
         except requests.RequestException:
             time.sleep(1.5)
             continue
@@ -113,12 +120,12 @@ def _fetch(img):
     params = {"filename": img["filename"],
               "subfolder": img.get("subfolder") or "",
               "type": img.get("type") or "output"}
-    res = requests.get(COMFY_URL + "/view", params=params, timeout=60)
+    res = requests.get(comfy_url() + "/view", params=params, timeout=60)
     if res.status_code != 200 or not res.content:
         raise RuntimeError("取图失败：HTTP %d" % res.status_code)
     return res.content
 
-def generate(prompt, negative="", width=COVER_W, height=COVER_H, timeout=GEN_TIMEOUT):
+def generate(prompt, negative="", width=COVER_W, height=COVER_H, timeout=None):
     """跑一次生成，返回落在 covers 目录里的文件名（不含目录）。"""
     prompt = (prompt or "").strip()
     if not prompt:
@@ -222,7 +229,7 @@ def start_job(story_id, prompt, negative="", timeout=None):
         _JOBS[story_id] = {"state": "running", "started": time.time(),
                            "prompt": prompt, "error": "", "cover": ""}
     t = threading.Thread(target=_run_job,
-                         args=(story_id, prompt, negative, timeout or GEN_TIMEOUT),
+                         args=(story_id, prompt, negative, timeout or gen_timeout()),
                          daemon=True)
     t.start()
     return job_of(story_id)

@@ -21,7 +21,8 @@ import lt  # noqa: E402  必须在设置数据目录之后导入
 import threading  # noqa: E402
 import rp.api as rp_api  # noqa: E402
 import rp.characters as rp_characters  # noqa: E402
-import rp.config as rp_config  # noqa: E402
+import rp.config as rp_config
+import rp.speech as rp_speech  # noqa: E402
 import rp.context as rp_context  # noqa: E402
 import rp.llm as rp_llm  # noqa: E402
 import rp.metrics as rp_metrics  # noqa: E402
@@ -1044,9 +1045,11 @@ def main():
     _html = (pathlib.Path(__file__).parent / "templates" / "index.html").read_text(encoding="utf-8")
     check("底部统一保存按钮已删除", 'id="prefs-save"' not in _html)
     check("底部换成还原默认", 'id="prefs-reset"' in _html)
-    check("两节各有保存按钮", _html.count('class="prefs-save"') == 2,
-          str(_html.count('class="prefs-save"')))
-    check("保存按钮分别标注", all('data-save="%s"' % k in _html for k in ("model", "writing")))
+    check("各节各有保存按钮", _html.count('class="prefs-save"') == 4,
+      str(_html.count('class="prefs-save"')))  # 生图、语音并进模型段，保存按钮各管各的
+    check("保存按钮分别标注",
+      all('data-save="%s"' % k in _html
+          for k in ("model", "writing", "image", "speech")))
     check("外观节没有多余保存按钮", 'data-save="look"' not in _html)
 
     # 遮罩关闭必须同时看按下点，否则从弹窗里拖到遮罩上松手会整窗消失
@@ -2576,6 +2579,29 @@ def main():
     check("不填币种默认人民币",
           rp_config.save_prices("zz-cny-test 3 6", persist=False)["zz-cny-test"][3] == "CNY")
     rp_config.save_prices({}, persist=False)
+    # 生图和语音的配置要能存能读，存的不是一堆空字符串
+    _img = rp_config.save_image_conf({"url": "http://127.0.0.1:9999", "timeout": 300})
+    check("生图地址能存", _img["url"] == "http://127.0.0.1:9999", str(_img))
+    check("生图超时能存", _img["timeout"] == 300, str(_img))
+    check("生图超时有上限",
+          rp_config.save_image_conf({"timeout": 999999})["timeout"] <= 1200)
+    rp_config.save_image_conf({"url": "", "timeout": 180})
+
+    _sp = rp_config.save_speech_conf({
+        "enabled": True, "plugin": "kokoro", "device": "cpu",
+        "options": "voice=af_heart"})
+    check("语音开关能存", _sp["enabled"] is True, str(_sp))
+    check("语音参数能存", _sp["options"] == "voice=af_heart", str(_sp))
+    check("语音插件不能是空",
+          rp_config.save_speech_conf({"plugin": ""})["plugin"] == "kokoro")
+    rp_config.save_speech_conf({"enabled": False})
+
+    # 透传参数是一行一个 key=value，这是语音与模型插件之间的唯一契约
+    _opts = rp_speech.parse_options("voice=af_heart\ninstruct=用平静的语气念\n\n# 注释\nbad")
+    check("语音参数按行解析",
+          _opts.get("voice") == "af_heart" and len(_opts) == 2, str(_opts))
+    check("没开就不读", rp_speech.speech_conf().get("enabled") is False)
+
     # 跨币种的累计要分开记，面板才能写成 ¥3.2 + $0.5；混加会得到一个不对的数
     _mix = "zz-mix-currency"
     rp_metrics.TOTAL["by_session"].pop(_mix, None)
@@ -2806,7 +2832,7 @@ def main():
     check("封面生图有后台任务入口", hasattr(rp_covers, "start_job"))
     check("封面进度可查", hasattr(rp_covers, "job_of"))
     check("未知任务返回 None", rp_covers.job_of("no-such-story") is None)
-    check("生图超时默认不低于 120 秒", rp_covers.GEN_TIMEOUT >= 120, str(rp_covers.GEN_TIMEOUT))
+    check("生图超时默认不低于 120 秒", rp_covers.gen_timeout() >= 120, str(rp_covers.gen_timeout()))
     check("生图超时可配置",
           "LT_COVER_TIMEOUT" in (pathlib.Path(__file__).parent / "rp" / "covers.py").read_text(encoding="utf-8"))
     check("进度接口已公开", "/cover/job" in _api)

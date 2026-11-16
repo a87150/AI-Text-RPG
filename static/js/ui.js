@@ -1161,7 +1161,130 @@ export function hueOf(name) {
   return h;
 }
 
-export function buildMessage(role, content, name, edited) {
+let _sayAudio = null;
+// \u8fb9\u751f\u6210\u8fb9\u8bfb\uff1a\u6a21\u578b\u4e00\u4e2a\u5b57\u4e00\u4e2a\u5b57\u5410\uff0c\u6309\u53e5\u5207\u597d\u4e22\u8fdb\u961f\u5217\uff0c\u5ff5\u5b8c\u4e00\u53e5\u63a5\u4e0b\u4e00\u53e5\u3002
+// \u961f\u5217\u4e32\u884c\u662f\u523b\u610f\u7684\uff1a\u51e0\u6bb5\u58f0\u97f3\u53e0\u5728\u4e00\u8d77\u6ca1\u6cd5\u542c\u3002
+const TTS_QUEUE = [];
+let ttsBusy = false;
+let ttsOn = false;
+let ttsBuf = '';
+
+/** \u628a markdown \u53d8\u6210\u80fd\u5ff5\u7684\u5e72\u51c0\u6587\u5b57\uff1a\u4ee3\u7801\u5757\u548c\u72b6\u6001\u6807\u8bb0\u8df3\u8fc7\uff0c\u5426\u5219\u4f1a\u5ff5\u51fa\u4e00\u4e32\u661f\u53f7\u3002 */
+function speakable(text) {
+  return String(text || '')
+    .replace(/\x60\x60\x60[\s\S]*?\x60\x60\x60/g, ' ')
+    .replace(/\[\[[\s\S]*?\]\]/g, ' ')
+    .replace(/[*_\x60#>|~]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function stopSpeak() {
+  if (!_sayAudio) return;
+  try { _sayAudio.pause(); } catch (e) { /* \u5df2\u7ecf\u505c\u4e86 */ }
+  URL.revokeObjectURL(_sayAudio.src);
+  _sayAudio = null;
+}
+
+async function fetchSpeech(text) {
+  const res = await fetch('/api/speech', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  });
+  if (!res.ok) {
+    const info = await res.json().catch(() => ({}));
+    throw new Error(info.error || ('HTTP ' + res.status));
+  }
+  return URL.createObjectURL(await res.blob());
+}
+
+function playUrl(url) {
+  return new Promise((resolve, reject) => {
+    stopSpeak();
+    const audio = new Audio(url);
+    _sayAudio = audio;
+    audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
+    audio.onerror = () => { URL.revokeObjectURL(url); reject(new Error('\u64ad\u653e\u5668\u62a5\u9519')); };
+    audio.play().catch(reject);
+  });
+}
+
+async function pumpSpeech() {
+  if (ttsBusy) return;
+  ttsBusy = true;
+  try {
+    while (TTS_QUEUE.length) {
+      const body = TTS_QUEUE.shift();
+      try {
+        await playUrl(await fetchSpeech(body));
+      } catch (e) {
+        // \u4e00\u53e5\u5ff5\u4e0d\u51fa\u6765\u4e0d\u8be5\u628a\u6574\u6761\u6d41\u505c\u6389
+        console.error('\u6717\u8bfb\u5931\u8d25', e);
+      }
+    }
+  } finally {
+    ttsBusy = false;
+  }
+}
+
+function enqueueSpeech(text) {
+  const body = speakable(text);
+  if (!body) return;
+  TTS_QUEUE.push(body);
+  pumpSpeech();
+}
+
+const SENT_END = /[\u3002\uff01\uff1f!?\u2026\n]/;
+// \u592a\u77ed\u4e00\u53e5\u4f1a\u5ff5\u6210\u4e00\u4e2a\u4e2a\u8bcd\uff0c\u542c\u7740\u65ad\uff1b\u6512\u591f\u8fd9\u4e48\u591a\u5b57\u518d\u9001
+const MIN_CHUNK = 6;
+
+export function setStreamSpeech(on) {
+  ttsOn = !!on;
+  if (!ttsOn) { ttsBuf = ''; TTS_QUEUE.length = 0; }
+}
+
+/** \u6bcf\u6536\u5230\u4e00\u6bb5 delta \u5c31\u5582\u8fdb\u6765\uff0c\u5b83\u81ea\u5df1\u6309\u53e5\u5207\u3002 */
+export function feedStream(text) {
+  if (!ttsOn) return;
+  ttsBuf += text || '';
+  let last = -1;
+  for (let i = 0; i < ttsBuf.length; i++) {
+    if (SENT_END.test(ttsBuf[i])) last = i;
+  }
+  if (last < MIN_CHUNK) return;
+  enqueueSpeech(ttsBuf.slice(0, last + 1));
+  ttsBuf = ttsBuf.slice(last + 1);
+}
+
+/** \u8fd9\u4e00\u8f6e\u751f\u6210\u7ed3\u675f\uff1a\u5269\u4e0b\u7684\u5c3e\u5df4\u4e0d\u7ba1\u6709\u6ca1\u6709\u53e5\u53f7\u90fd\u5ff5\u5b8c\u3002 */
+export function flushStream() {
+  const rest = ttsBuf;
+  ttsBuf = '';
+  if (ttsOn && rest.trim()) enqueueSpeech(rest);
+}
+
+export function stopSpeaking() {
+  TTS_QUEUE.length = 0;
+  ttsBuf = '';
+  stopSpeak();
+}
+
+/** \u6c14\u6ce1\u4e0a\u90a3\u4e2a \U0001F50A\uff1a\u6574\u6bb5\u4e00\u6b21\u8bf7\u6c42\uff0c\u4e0d\u5206\u6bb5\u3002 */
+export async function speakText(text, btn) {
+  const body = speakable(text);
+  if (!body) { toast('\u8fd9\u6bb5\u6ca1\u4ec0\u4e48\u53ef\u4ee5\u5ff5\u7684\u3002'); return; }
+  if (btn) btn.disabled = true;
+  try {
+    await playUrl(await fetchSpeech(body));
+  } catch (e) {
+    toast('\u5ff5\u4e0d\u51fa\u6765\uff1a' + (e && e.message ? e.message : e), 'error');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+export function buildMessage(role, content, name, edited) {export function buildMessage(role, content, name, edited) {
   const el = document.createElement('div');
   el.className = 'msg ' + role;
   el.style.setProperty('--char-hue', hueOf(name));
@@ -1188,6 +1311,15 @@ export function buildMessage(role, content, name, edited) {
     tag.title = '这条改过，之后的回复仍是按原话写的';
     bubble.appendChild(tag);
   }
+
+  // 每条都能念。按钮挂在 who 那一行右侧，不占气泡宽度
+  const say = document.createElement('button');
+  say.type = 'button';
+  say.className = 'speak-btn';
+  say.title = '念这一段';
+  say.textContent = '\uD83D\uDD0A';
+  say.onclick = () => speakText(content, say);
+  who.appendChild(say);
 
   el.append(who, bubble);
   return { el, who, bubble };

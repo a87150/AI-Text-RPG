@@ -5,7 +5,7 @@ import {
   $, toast, buildMessage, buildTurn, renderTurn, renderStreaming,
   setAiStatus, appendRetryHint, renderMessages, askCharacterPick,
   scrollToBottom, syncAll, syncComposer, focusComposer, mdToHtml, escapeHtml, updateSub,
-  clearDraft,
+  clearDraft, feedStream, flushStream, setStreamSpeech,
 } from './ui.js';
 import { loadSessions, refreshCurrentSession } from './sessions.js';
 import { api } from './api.js';
@@ -287,6 +287,10 @@ async function sendMessage(text, { isRetry, isContinue }) {
   });
 
   try {
+    // 这一轮要不要边生成边读，看设置里「边生成边读」开关
+    setStreamSpeech(!!(state.conf && state.conf.speech && state.conf.speech.enabled
+      && state.conf.speech.stream));
+
     await streamSSE(
       '/api/chat',
       { session_id: s.id, message: text || '', retry: !!isRetry, continue: !!isContinue },
@@ -297,6 +301,7 @@ async function sendMessage(text, { isRetry, isContinue }) {
 
         } else if (ev.type === 'delta') {
           acc += ev.content || '';
+          feedStream(ev.content || '');
           repaint();
           scrollToBottom(true);
 
@@ -377,6 +382,8 @@ async function sendMessage(text, { isRetry, isContinue }) {
           // 只在还停在这一局时才画：renderMessages 读的是 state.session，
           // 中途切走了的话画出来的是你正看着的那一局，不是刚写完的这一局。
           if (state.session === s) renderMessages();
+          // 剩下的尾巴不管有没有句号都念完
+          flushStream();
         }
       },
       { idleTimeout: WAIT_MS, signal: stopper.signal }
@@ -386,6 +393,8 @@ async function sendMessage(text, { isRetry, isContinue }) {
     success = true;
 
   } catch (e) {
+    // 没收到 done 也把已生成的那几句念完，否则听到一半戛然而止
+    flushStream();
     const stopped = state.stopped;
     const shown = longestAcc || acc;
     current = renderStreaming(turnBox, shown, speaker || aiLabel, 0, isPlain) || current;

@@ -12,7 +12,7 @@ import requests
 from flask import Flask
 
 # ============================== 版本 ==============================
-VERSION = "1.25"
+VERSION = "1.26"
 
 # ============================== 模型配置 ==============================
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
@@ -143,6 +143,32 @@ TIER_CONTEXT = {k: v["context"] for k, v in TIER_LIMITS.items()}
 
 BACKUP_DEFAULTS = {"enabled": False, "every_minutes": 1440, "keep": 30}
 BACKUP_BOUNDS = {"every_minutes": (5, 20160), "keep": (1, 30)}   # 5 分钟 ~ 14 天
+
+# 生图：本机 ComfyUI。url 留空就回退到 LT_COMFY 环境变量，再不行才用 127.0.0.1:8188。
+IMAGE_DEFAULTS = {"url": "", "timeout": 180}
+_image = dict(IMAGE_DEFAULTS)
+IMAGE_BOUNDS = {"timeout": (30, 1200)}
+
+# 语音：任何开了 OpenAI 兼容 /v1/audio/speech 的本地服务都能接
+# （GPT-SoVITS、Fish-Speech、CosyVoice、Kokoro-FastAPI 都有这个口）。url 填到根就行，脚本自己补路径。
+# 本地语音走 voco（pip install voco）。它把运行时和模型拆开，每个模型是一个插件：
+#   pip install voco            # 核心，零依赖
+#   pip install voco-kokoro     # 装你要的那个模型
+# 想换模型就把 plugin 改成对应的插件名，不用动代码。
+# options 里每行一个 key=value，原样透给 router.infer：
+#   voice=af_heart（kokoro 用）、instruct=用平静的语气念（支持的插件用）
+SPEECH_DEFAULTS = {
+    "enabled": False,
+    # 边生成边读：按句切好就送去念，不等整段写完
+    "stream": True,
+    "plugin": "kokoro",
+    "alias": "tts",
+    "device": "cpu",
+    "options": "",
+}
+_speech = dict(SPEECH_DEFAULTS)
+# 同一句话重复念很常见，开启缓存能省下重跑的时间
+_speech_cache = True
 _backup = dict(BACKUP_DEFAULTS)
 _loaded = False        # load_settings 跑过没有：没跑过就不敢覆盖磁盘配置
 
@@ -414,6 +440,51 @@ def save_backup_conf(data):
     persist_settings()
     return backup_conf()
 
+def image_conf():
+    with _model_lock:
+        return dict(_image)
+
+def save_image_conf(data):
+    if not isinstance(data, dict):
+        return image_conf()
+    with _model_lock:
+        if "url" in data:
+            _image["url"] = str(data.get("url") or "").strip()
+        if "timeout" in data:
+            try:
+                n = int(data["timeout"])
+            except (TypeError, ValueError):
+                n = _image["timeout"]
+            lo, hi = IMAGE_BOUNDS["timeout"]
+            _image["timeout"] = max(lo, min(hi, n))
+        snapshot = dict(_image)
+    persist_settings()
+    return snapshot
+
+def speech_conf():
+    with _model_lock:
+        return dict(_speech)
+
+def save_speech_conf(data):
+    if not isinstance(data, dict):
+        return speech_conf()
+    with _model_lock:
+        if "enabled" in data:
+            _speech["enabled"] = bool(data["enabled"])
+        if "stream" in data:
+            _speech["stream"] = bool(data["stream"])
+        for field in ("plugin", "alias", "device", "options"):
+            if field in data:
+                _speech[field] = str(data.get(field) or "").strip()
+        # 插件名没了就回退到 kokoro，否则 router.load 会一直报错
+        if not _speech["plugin"]:
+            _speech["plugin"] = "kokoro"
+        if not _speech["alias"]:
+            _speech["alias"] = "tts"
+        snapshot = dict(_speech)
+    persist_settings()
+    return snapshot
+
 def save_reasoning(value, persist=True):
     global _reasoning
     if value not in REASONING_LEVELS:
@@ -581,6 +652,8 @@ def persist_settings():
         "tier": prev.get("tier") or _tier,
         "backup": _backup,
         "prices": _prices_override or (prev.get("prices") or {}),
+        "image": _image if _loaded else (prev.get("image") or dict(IMAGE_DEFAULTS)),
+        "speech": _speech if _loaded else (prev.get("speech") or dict(SPEECH_DEFAULTS)),
     }
     tmp = "%s.%s.tmp" % (SETTINGS_PATH, uuid.uuid4().hex[:8])
     try:
@@ -648,6 +721,16 @@ def load_settings():
         save_tier(data["tier"], persist=False)
     if data.get("creativity") in CREATIVITY_LEVELS:
         save_creativity(data["creativity"], persist=False)
+    for key, store, defaults in (("image", "_image", IMAGE_DEFAULTS),
+                                ("speech", "_speech", SPEECH_DEFAULTS)):
+        saved = data.get(key)
+        if not isinstance(saved, dict):
+            continue
+        bucket = globals()[store]
+        for field, default in defaults.items():
+            if field in saved:
+                bucket[field] = saved[field]
+
     saved_prices = data.get("prices")
     if isinstance(saved_prices, (dict, str)):
         save_prices(saved_prices, persist=False)

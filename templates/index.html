@@ -431,6 +431,49 @@ window.addEventListener('unhandledrejection', function (e) {
                   <button id="p-save" type="button">保存云端设置</button>
                 </div>
               <div id="p-status"></div>
+
+              <div class="sub-head">生图（封面）</div>
+        <div class="hint">封面图走本机 ComfyUI。地址留空就用 <code>LT_COMFY</code> 环境变量，再不行才落到 <code>127.0.0.1:8188</code>。工作流读项目根目录的 <code>moss_workflow_api.json</code>。</div>
+        <div class="field">
+          <label for="img-url">ComfyUI 地址</label>
+          <input id="img-url" type="text" placeholder="http://127.0.0.1:8188" spellcheck="false">
+        </div>
+        <div class="field">
+          <label for="img-timeout">单张超时（秒，30～1200；慢卡就往上加，快卡三十几秒就出）</label>
+          <input id="img-timeout" type="number" min="30" max="1200" step="10">
+        </div>
+        <div class="prefs-actions">
+          <span class="prefs-note" data-note="image"></span>
+          <button type="button" class="prefs-save" data-save="image">保存生图设置</button>
+        </div>
+      
+              <div class="sub-head">语音（朗读）</div>
+        <div class="hint">念文本走 <a href="https://pypi.org/project/voco/" target="_blank" rel="noopener">voco</a>：运行时和模型是分开的，换声音只要换插件名。先 <code>pip install voco</code>，再装你要的模型插件（例如 <code>pip install voco-kokoro</code>）。</div>
+        <label class="backup-toggle">
+          <input type="checkbox" id="sp-enabled"> 启用朗读
+        </label>
+        <label class="backup-toggle">
+          <input type="checkbox" id="sp-stream"> 边生成边读（按句切好就念，不等整段写完；关了就只能点气泡下面那个手动念）
+        </label>
+        <div class="grid2">
+          <div class="field">
+            <label for="sp-plugin">插件名（voco 里 load 的那个）</label>
+            <input id="sp-plugin" type="text" placeholder="kokoro" spellcheck="false">
+          </div>
+          <div class="field">
+            <label for="sp-device">设备</label>
+            <input id="sp-device" type="text" placeholder="cpu / cuda:0" spellcheck="false">
+          </div>
+        </div>
+        <div class="field">
+          <label for="sp-options">推理参数，一行一个 <code>key=value</code>，原样透给插件。例如 <code>voice=af_heart</code>，支持音色描述的插件可以用 <code>instruct=用平静的语气念</code></label>
+          <textarea id="sp-options" rows="4" spellcheck="false" placeholder="voice=af_heart"></textarea>
+        </div>
+        <div class="prefs-actions">
+          <span class="prefs-note" data-note="speech"></span>
+          <button type="button" class="prefs-save" data-save="speech">保存语音设置</button>
+        </div>
+      
       </div>
     </details>
 
@@ -510,6 +553,7 @@ window.addEventListener('unhandledrejection', function (e) {
         <div class="backup-list" id="backup-list"></div>
       </div>
     </details>
+
 
     </div>
     <div class="modal-actions">

@@ -499,6 +499,22 @@ body.story-view #btn-search { display: none; }
    能到上千像素，比对面那条宽一大截。 */
 .msg.editing { width: 100%; max-width: min(80%, 760px); align-items: stretch; }
 .msg.editing .bubble { width: 100%; }
+/* 气泡上那个念录音的小扭。.who 是 flex，margin-left:auto 把它顶到右边 */
+.speak-btn {
+  margin-left: auto; border: 0; background: none; cursor: pointer;
+  color: var(--text-mute); font-size: .875rem; line-height: 1;
+  padding: 2px 5px; border-radius: 6px; opacity: .55;
+}
+.speak-btn:hover { opacity: 1; color: var(--accent); background: var(--bg-elev); }
+.speak-btn:disabled { opacity: .3; cursor: progress; }
+
+/* 模型设置里分生图 / 语音两小节 */
+.sub-head {
+  margin: 18px 0 8px; padding-top: 14px;
+  border-top: 1px solid var(--border);
+  font-size: .8125rem; font-weight: 600; color: var(--text-dim);
+}
+
 .who {
   font-size: calc(var(--ui-fs) - 1.5px); color: var(--text-mute);
   margin-bottom: 5px; padding: 0 4px;

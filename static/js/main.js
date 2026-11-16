@@ -369,7 +369,65 @@ function syncTierSeg() {
   }
 }
 
-const SAVE_LABELS = { mode: '模式', model: '模型设置', writing: '写作参数' };
+async function saveImageConf() {
+  const url = $('#img-url');
+  const to = $('#img-timeout');
+  const body = { url: url ? url.value.trim() : '' };
+  const n = Number(to && to.value);
+  if (Number.isFinite(n) && n > 0) body.timeout = n;
+  try {
+    const res = await api('/api/image-config', { method: 'PUT', body });
+    state.conf = Object.assign({}, state.conf, { image: res });
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+async function saveSpeechConf() {
+  const on = $('#sp-enabled');
+  const plugin = $('#sp-plugin');
+  const device = $('#sp-device');
+  const options = $('#sp-options');
+  const stream = $('#sp-stream');
+  const body = {
+    enabled: !!(on && on.checked),
+    stream: !!(stream && stream.checked),
+    plugin: plugin ? plugin.value.trim() : '',
+    device: device ? device.value.trim() : '',
+    options: options ? options.value : '',
+  };
+  try {
+    const res = await api('/api/speech-config', { method: 'PUT', body });
+    state.conf = Object.assign({}, state.conf, { speech: res });
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+function fillImageForm() {
+  const c = (state.conf && state.conf.image) || {};
+  const url = $('#img-url');
+  const to = $('#img-timeout');
+  if (url) url.value = c.url || '';
+  if (to) to.value = c.timeout == null ? '' : c.timeout;
+}
+
+function fillSpeechForm() {
+  const c = (state.conf && state.conf.speech) || {};
+  const set = (sel, v) => { const el = $(sel); if (el) el.value = v == null ? '' : v; };
+  const on = $('#sp-enabled');
+  if (on) on.checked = !!c.enabled;
+  const stream = $('#sp-stream');
+  if (stream) stream.checked = c.stream !== false;
+  set('#sp-plugin', c.plugin);
+  set('#sp-device', c.device);
+  set('#sp-options', c.options);
+}
+
+const SAVE_LABELS = { mode: '模式', model: '模型设置', writing: '写作参数',
+  image: '生图设置', speech: '语音设置' };
 
 /** 分节保存共用一条路径：表单里的值本来就是一份，分开提交只会多出两条出错分支。 */
 async function saveSection(btn) {
@@ -377,7 +435,10 @@ async function saveSection(btn) {
   const label = SAVE_LABELS[sec] || '设置';
   const note = document.querySelector('.prefs-note[data-note="' + sec + '"]');
   if (btn) { btn.disabled = true; btn.textContent = '保存中…'; }
-  const ok = await saveWriting(true);
+  let ok = false;
+  if (sec === 'image') ok = await saveImageConf();
+  else if (sec === 'speech') ok = await saveSpeechConf();
+  else ok = await saveWriting(true);
   if (btn) { btn.disabled = false; btn.textContent = '保存' + label; }
   if (note) {
     note.textContent = ok ? label + '已保存' : '保存失败，检查刚才的数字有没有填错';
@@ -495,6 +556,8 @@ function openPrefs() {
     fillProviderForm();
     fillModelSelect();
     fillWritingForm();
+    fillImageForm();
+    fillSpeechForm();
     syncThemeSeg();
     syncLanguageSeg();
     $('#prefs-modal').classList.remove('hidden');

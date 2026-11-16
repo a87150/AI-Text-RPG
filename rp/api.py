@@ -20,11 +20,13 @@ from .characters import (
 from . import backup
 from . import metrics
 from .llm import reasoning_supported
+from . import speech
 from .config import (
     DEFAULT_MODEL, DEFAULT_PROVIDER, MAX_CHAT_ATTEMPTS, MAX_ENHANCE_ATTEMPTS,
     MAX_OPENING_ATTEMPTS, MIN_CHAT_CHARS, MODES, PROVIDERS,
     PRICES, REASONING_LEVELS, TIERS, TIER_LABELS, app, backup_conf, current_target,
-    prices_text, save_prices,
+    image_conf, prices_text, save_image_conf, save_prices, save_speech_conf,
+    speech_conf,
     list_local_models, load_settings, mode_for, mode_of, provider_public,
     provider_usable, reasoning_effort, save_backup_conf, save_mode,
     save_provider, save_reasoning, save_tier, save_writing, set_current_model,
@@ -169,6 +171,8 @@ def api_config():
         # 单价表拍成文本给设置界面的输入框；解析在 config.save_prices
         "prices": prices_text(),
         "prices_default": PRICES,
+        "image": image_conf(),
+        "speech": speech_conf(),
     })
 
 def _reclaim_context():
@@ -633,6 +637,47 @@ def api_backup_config():
     data = request.get_json(silent=True) or {}
     return jsonify(save_backup_conf(data))
 
+@app.get("/api/image-config")
+def api_image_config():
+    """生图用的 ComfyUI 地址。url 留空时 covers 那边会回退到环境变量。"""
+    return jsonify({"conf": image_conf(), "version": VERSION})
+
+
+@app.put("/api/image-config")
+def api_image_config_save():
+    return jsonify(save_image_conf(request.get_json(silent=True) or {}))
+
+
+@app.get("/api/speech-config")
+def api_speech_config():
+    conf = speech_conf()
+    # 装没装 voco 直接告诉前端，省得用户点朗读才看到报错
+    try:
+        import voco.core  # noqa: F401
+        ready, why = True, ""
+    except Exception as exc:
+        ready, why = False, "pip install voco 之后才念得出来（%s）" % exc
+    return jsonify({"conf": conf, "ready": ready, "why": why})
+
+
+@app.put("/api/speech-config")
+def api_speech_config_save():
+    conf = save_speech_conf(request.get_json(silent=True) or {})
+    # 插件换过就要重新 load，否则还是拿旧模型念
+    speech.reset()
+    return jsonify(conf)
+
+
+@app.post("/api/speech")
+def api_speech():
+    """把一段文字念成 wav 直接吐回去，不落盘。"""
+    data = request.get_json(silent=True) or {}
+    try:
+        audio = speech.speak(data.get("text") or "")
+    except speech.SpeechError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return Response(audio, mimetype="audio/wav")
+
 @app.get("/api/sessions/<sid>/snapshots")
 def api_snapshots(sid):
     if not load_session(sid):
@@ -736,7 +781,7 @@ def api_story_cover_job(story_sid):
         return jsonify({"job": None})
     return jsonify({
         "job": job,
-        "timeout": cover_store.GEN_TIMEOUT,
+        "timeout": cover_store.gen_timeout(),
         "elapsed": round(time.time() - float(job.get("started") or time.time()), 1),
     })
 

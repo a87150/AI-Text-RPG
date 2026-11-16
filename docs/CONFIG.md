@@ -83,6 +83,33 @@
 
 旧版本存的是 `every_hours`，读到会自动乘 60 迁移过来。定时线程每 60 秒重读一次配置，改完不用重启。
 
+## 生图（设置 → 模型 → 生图）
+
+封面走本机 ComfyUI。两个字段：
+
+- `url`：ComfyUI 地址。留空就回退到 `LT_COMFY` 环境变量，再不行才用 `http://127.0.0.1:8188`
+- `timeout`：单张超时秒数，30～1200，默认 180。快卡三十几秒就出，慢卡往上加
+
+工作流固定读项目根目录的 `moss_workflow_api.json`，节点号写在 `rp/covers.py` 顶部（4 正向、5 负向、6 尺寸、7 种子、30 保存）。换工作流这五个号大概率要跟着改。
+
+## 语音（设置 → 模型 → 语音）
+
+朗读走 [voco](https://pypi.org/project/voco/)。它把运行时和模型拆开，换声音只换插件名：
+
+```bash
+pip install voco            # 核心，零依赖
+pip install voco-kokoro     # 装你要的那个模型插件
+```
+
+- `enabled`：总开关，关着时气泡上的 🔊 会提示去开
+- `stream`：边生成边读。开着时模型吐一句念一句；关掉只剩手动点 🔊
+- `plugin`：喂给 `router.load()` 的插件名，空着按 `kokoro` 处理
+- `device`：`cpu` 或 `cuda:0`
+- `options`：一行一个 `key=value`，原样透传给 `router.infer`。kokoro 用 `voice=af_heart`；
+  支持音色描述的插件可以写 `instruct=用平静的语气念`
+
+换了 `plugin`，保存时会把旧的 router 丢掉，下一句按新插件重新加载。
+
 ## 模型单价（设置 → 写作 → 模型单价）
 
 上下文面板的「上轮费用 / 累计费用」按人民币估算，读的是这张表。出厂默认写在 `config.py` 的 `PRICES`，
