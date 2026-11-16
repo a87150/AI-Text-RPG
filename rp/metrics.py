@@ -212,10 +212,8 @@ def snapshot(sid=None):
         out["total"] = dict(one) if one else {
             "calls": 0, "prompt_tokens": 0, "completion_tokens": 0,
             "cached_tokens": 0, "cost": 0.0, "ms": 0, "cost_by_cur": {}}
-        # 面板只关心当前这一局花的钱，按当前模型币种取；换过币种时另一个桶不出现在这一行
-        cur = (out.get("cost") or {}).get("currency") or "CNY"
-        out["total"]["cost_cur"] = out["total"].get("cost_by_cur", {}).get(cur)
-        out["total"]["currency"] = cur
+        # 币种可能不止一种（中途换过模型），整本交给前端并排写出来，不做汇算
+        out["total"]["cost_by_cur"] = dict(out["total"].get("cost_by_cur") or {})
     else:
         out["total"] = {k: v for k, v in TOTAL.items() if k != "by_session"}
     return out

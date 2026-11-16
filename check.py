@@ -2576,6 +2576,15 @@ def main():
     check("不填币种默认人民币",
           rp_config.save_prices("zz-cny-test 3 6", persist=False)["zz-cny-test"][3] == "CNY")
     rp_config.save_prices({}, persist=False)
+    # 跨币种的累计要分开记，面板才能写成 ¥3.2 + $0.5；混加会得到一个不对的数
+    _mix = "zz-mix-currency"
+    rp_metrics.TOTAL["by_session"].pop(_mix, None)
+    rp_metrics.record({"prompt_tokens": 1000000}, "deepseek-flash", sid=_mix)
+    rp_metrics.record({"prompt_tokens": 1000000}, "gpt-4o", sid=_mix)
+    _book = rp_metrics.snapshot(_mix)["total"]["cost_by_cur"]
+    check("累计费用按币种分开记",
+          abs(_book.get("CNY", 0) - 1.0) < 1e-9 and abs(_book.get("USD", 0) - 2.5) < 1e-9, str(_book))
+    rp_metrics.TOTAL["by_session"].pop(_mix, None)
     check("未知模型不乱报价", rp_config.estimate_cost("mystery-model", {}) is None)
 
     rp_metrics.record({"prompt_tokens": 100, "completion_tokens": 50}, "deepseek-chat")

@@ -512,6 +512,12 @@ export function renderContextDetail() {
     // 不到一角时多给几位小数，否则便宜的轮次全是 0.00
     return sign + (v >= 0.1 ? v.toFixed(2) : v.toFixed(4));
   };
+  // 跨币种就并排写出来，不做汇算：中途从 deepseek 换到 gpt 时两边都算数
+  const moneyBook = (book) => {
+    const keys = Object.keys(book || {}).sort();
+    if (!keys.length) return '—';
+    return keys.map((k) => money({ total: book[k] }, k)).join(' + ');
+  };
   // 累计费用是按轮加出来的，高峰时段那一轮本身就贵，所以在标签上标一下现在的档
   const peakNow = st.cost && st.cost.peak;
   const core = document.createElement('div');
@@ -525,7 +531,7 @@ export function renderContextDetail() {
   core.appendChild(mkRow('累计 tok', tot.calls
     ? '入 ' + fmtNumber(tot.prompt_tokens) + ' · 出 ' + fmtNumber(tot.completion_tokens)
       + ' · ' + tot.calls + ' 次' : '—'));
-  core.appendChild(mkRow('累计费用', money({ total: tot.cost_cur }, tot.currency)));
+  core.appendChild(mkRow('累计费用', moneyBook(tot.cost_by_cur)));
   core.appendChild(mkRow('首字等待', ttft ? fmtNumber(ttft) + ' ms' : '—'));
   core.appendChild(mkRow('生成速度', speed
     ? speed + ' token/s（' + fmtNumber(outTok) + ' 出 / ' + fmtNumber(decodeMs) + ' ms）' : '—'));
