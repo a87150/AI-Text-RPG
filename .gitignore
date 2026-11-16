@@ -30,3 +30,5 @@ _*.log.*
 _*.log
 _*.wav
 tts_probe.py
+_srv.log
+_srv.err
