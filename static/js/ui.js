@@ -1228,49 +1228,7 @@ function emptyNode(text) {
   return el;
 }
 
-const STATUS_LABELS = [
-  ['location', '地点'], ['time', '时间'], ['relations', '关系'], ['goal', '目标'],
-];
-
-/** 每轮结束时模型给的状态：位置 / 时间 / 关系 / 目标。物品归人，去角色弹层看。 */
-export function statusNode(status) {
-  if (!status) return null;
-  const rows = STATUS_LABELS.filter(([key]) => status[key]);
-  if (!rows.length) return null;
-  const el = document.createElement('div');
-  el.className = 'status-card';
-  const head = document.createElement('div');
-  head.className = 'st-head';
-  head.textContent = '🧭 当前状态';
-  el.appendChild(head);
-  for (const [key, label] of rows) {
-    const row = document.createElement('div');
-    row.className = 'st-row';
-    const k = document.createElement('span');
-    k.className = 'st-k';
-    k.textContent = label;
-    const v = document.createElement('span');
-    v.className = 'st-v';
-    v.textContent = status[key];
-    row.append(k, v);
-    el.appendChild(row);
-  }
-  return el;
-}
-
-/** 生成结束后只换状态卡，不重建整个消息列表。 */
-export function updateStatusCard(status) {
-  const box = $('#messages');
-  if (!box) return;
-  const old = box.querySelector('.status-card');
-  if (old) old.remove();
-  const node = statusNode(status || {});
-  if (!node) return;
-  const summary = box.querySelector('.summary-card');
-  if (summary && summary.nextSibling) box.insertBefore(node, summary.nextSibling);
-  else box.insertBefore(node, box.firstChild);
-}
-
+/** 压缩摘要：更早的剧情折叠成这样，插在被折叠那截消息的后面。 */
 function summaryNode(summary) {
   const card = document.createElement('div');
   card.className = 'summary-card';
@@ -1317,11 +1275,12 @@ export function renderMessages() {
     return;
   }
 
-  if (s.summary) box.appendChild(summaryNode(s.summary));
-  const st = statusNode(s.status);
-  if (st) box.appendChild(st);
-
   const msgs = s.messages || [];
+  // 前情提要插在被折叠的那截消息后面，一眼看出它替代的是哪一段；
+  // 还没压缩过（游标是 0）就照旧放最前面
+  const ctx = s.context || {};
+  const upto = Math.min((ctx.compress && ctx.compress.upto) || 0, msgs.length);
+  if (s.summary && !upto) box.appendChild(summaryNode(s.summary));
   if (!msgs.length) {
     box.appendChild(emptyNode('故事还没开始。点右上角「设定」写下双方人设与故事背景，'
       + '让 AI 帮你完善并生成开场白，就可以开演了。'));
@@ -1330,6 +1289,7 @@ export function renderMessages() {
 
   const userLabel = s.user_name || '我';
   msgs.forEach((m, index) => {
+    if (s.summary && index === upto) box.appendChild(summaryNode(s.summary));
     let host;
     if (m.role === 'user') {
       host = buildMessage('user', m.content, userLabel, m.edited).el;

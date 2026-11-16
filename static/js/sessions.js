@@ -500,6 +500,9 @@ export async function clearSession() {
 export async function compressSession(btn) {
   if (!state.session) return;
   if (state.busy) return;
+  // 压缩是单向的：原文还在文件里，但不再进上下文，后面几轮都是照摘要接着写。
+  // 压缩前会自动存一个「压缩前」的存档点，不过先问一句更省事
+  if (!confirm('压缩会把更早的剧情折叠成一段摘要：原文还在，但不再进上下文，之后的回复都照摘要接着写。继续？')) return;
   if (btn) btn.disabled = true;
   toast('正在压缩上下文…');
   try {

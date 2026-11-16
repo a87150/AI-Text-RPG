@@ -100,6 +100,12 @@ def looks_like_name(name):
     # 建卡那条路会给它开一张空卡，把角色名额占掉
     if text in _NOT_NAMES:
         return False
+    # 「顾清岚及警员」「阿杰和沈知微」是两个人被连接词并成了一条。拆开两边
+    # 都够两个字，说明它根本不是某一个人的名字；只拆出单字的才可能是真名，
+    # 「林和平」被「和」拆成「林」「平」，那种不拦
+    if all(len(x) >= 2 for x in _CAST_WEAK_RE.split(text) if x.strip()) \
+            and len([x for x in _CAST_WEAK_RE.split(text) if x.strip()]) > 1:
+        return False
     # 「卖面的老头」「穿红衣服的女人」是描述，不是名字。中文人名基本不带「的」，
     # 带上就是临时称呼——放它建卡会占掉名额，主要角色反而进不来。
     if "的" in text:

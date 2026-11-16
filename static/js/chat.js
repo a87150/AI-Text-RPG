@@ -3,7 +3,7 @@ import { streamSSE, StreamEventError } from './api.js';
 import { state } from './state.js';
 import {
   $, toast, buildMessage, buildTurn, renderTurn, renderStreaming,
-  setAiStatus, appendRetryHint, renderMessages, updateStatusCard, askCharacterPick,
+  setAiStatus, appendRetryHint, renderMessages, askCharacterPick,
   scrollToBottom, syncAll, syncComposer, focusComposer, mdToHtml, escapeHtml, updateSub,
   clearDraft,
 } from './ui.js';
@@ -131,8 +131,10 @@ export async function sendFromInput() {
 }
 
 export async function retryLast(text) {
-  if (!state.session || state.busy) return;
-  if (!text) return;
+  // 这三条以前都是静默 return，点了重发什么都不发生，看着像按钮坏了
+  if (!state.session) { toast('还没选中对话', 'error'); return; }
+  if (state.busy) { toast('上一轮还在生成，等它写完再重发', 'error'); return; }
+  if (!text) { toast('这条前面没有可以重发的用户消息', 'error'); return; }
   // 只有「上一条就是这条没答上的用户消息」才算重试；
   // 否则后端会真的新增一条，界面也必须把它渲染出来
   const msgs = state.session.messages || [];
@@ -360,7 +362,7 @@ async function sendMessage(text, { isRetry, isContinue }) {
               }
             });
           }
-          if (ev.status) { s.status = ev.status; updateStatusCard(ev.status); }
+          if (ev.status) s.status = ev.status;
           s.context_tokens = ev.context_tokens;
           if (ev.context) s.context = ev.context;
           updateSub();

@@ -1463,7 +1463,8 @@ def api_opening(sid):
         try:
             yield sse({"type": "speaker", "name": first_speaker})
             text, attempts_used = yield from _stream_model(
-                messages, first_speaker, 0.9, MAX_OPENING_ATTEMPTS, use_rp)
+                messages, first_speaker, 0.9, MAX_OPENING_ATTEMPTS, use_rp,
+                sid=sid)
             if not text:
                 return
 
@@ -1504,7 +1505,7 @@ def api_opening(sid):
     )
 
 def _stream_model(messages, speaker, temperature, max_attempts, use_rp,
-                  min_chars=None):
+                  min_chars=None, sid=None):
     """把 completion_events 包成 SSE 事件流；成功时返回 (正文, 尝试次数)。
 
     用 yield from 的返回值传结果，调用方不用再写一遍同样的循环。
@@ -1519,7 +1520,7 @@ def _stream_model(messages, speaker, temperature, max_attempts, use_rp,
             metrics.first_token()      # 用户感知的等待到此结束
         if ev["type"] == "final":
             # 服务端报多少就记多少；报不出来就是空字典，面板显示—
-            metrics.record(ev.get("usage") or {}, current_target()[1])
+            metrics.record(ev.get("usage") or {}, current_target()[1], sid=sid)
             return ev["text"], ev["attempts"]
         if ev["type"] == "error":
             yield sse({"type": "error", "message": ev["message"] + "。请稍后手动重试。"})
@@ -1716,7 +1717,7 @@ def api_chat():
             _floor = max(10, min(MIN_CHAT_CHARS, input_density(sess)[1][0]))
             answer, attempts_used = yield from _stream_model(
                 messages, speaker, temperature, tier_limits()["attempts"], use_rp,
-                _floor)
+                _floor, sid=sid)
             if answer is None:
                 return
 

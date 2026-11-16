@@ -89,7 +89,8 @@ def context_info(sess):
         "messages": len(msgs),
         # 读写一份会话 JSON 的耗时：超过 100ms 就该拆数据层了
         "io": dict(IO_TIMING),
-        "stream": metrics.snapshot(),   # 上一轮的 prompt 大小与首字节耗时
+        # 只报这一局：跨局累加会把别人的用量算进来，看着像自己烧掉的
+        "stream": metrics.snapshot(sess.get("id")),
         # 显示压缩真正会留下的条数，别跟实际行为对不上
         "keep_recent": max(writing()["keep_recent"],
                            tier_limits()["history_msgs"] or writing()["keep_recent"]),
@@ -99,6 +100,8 @@ def context_info(sess):
             "dropped": int(comp.get("dropped") or 0),
             "dropped_tokens": int(comp.get("dropped_tokens") or 0),
             "updated_at": comp.get("updated_at") or 0,
+            # 折叠到第几条：前情提要卡片要插在那个位置后面
+            "upto": min(int(sess.get("compressed_upto") or 0), len(msgs)),
         },
     }
 

@@ -37,7 +37,10 @@ LAST = {
 }
 # 累计：这一会话问过多少次、花了多少
 TOTAL = {"calls": 0, "prompt_tokens": 0, "completion_tokens": 0,
-         "cached_tokens": 0, "cost": 0.0, "ms": 0}
+         "cached_tokens": 0, "cost": 0.0, "ms": 0,
+         # 分会话的同一套数字：面板要的是「这一局花了多少」，不是全部加起来。
+         # ponytail: 只留最近 40 局，删掉的会话条目不会自己消失
+         "by_session": {}}
 # 累计要跨重启：只放内存的话，一重启面板就全变横杠，
 # 用户想问的「总共花了多少」直接查不到。
 TOTAL_FILE = os.path.join(DATA_DIR, "totals.json")
@@ -52,6 +55,11 @@ def _load_totals():
         return
     for key in TOTAL:
         value = saved.get(key)
+        if isinstance(value, dict):
+            if key == "by_session":
+                TOTAL[key] = {k: dict(v) for k, v in value.items()
+                              if isinstance(v, dict)}
+            continue
         if isinstance(value, (int, float)) and not isinstance(value, bool):
             TOTAL[key] = value
 
@@ -139,12 +147,26 @@ def end(session_id, ok=True, **extra):
     if t0:
         with _lock:
             TOTAL["ms"] += total
+            if session_id:
+                _bump(session_id)["ms"] += total
     _save_totals()
     note("chat.done", sid=session_id, ok=ok, total_ms=total,
          first_token_ms=LAST["first_token_ms"],
          prompt_chars=LAST["prompt_chars"], **extra)
 
-def record(usage, model=""):
+def _bump(sid):
+    """取这一局的累计桶，没有就建一个，顺手把太老的清掉。"""
+    book = TOTAL["by_session"]
+    one = book.get(str(sid))
+    if one is None:
+        while len(book) >= 40:
+            book.pop(next(iter(book)), None)
+        one = book[str(sid)] = {
+            "calls": 0, "prompt_tokens": 0, "completion_tokens": 0,
+            "cached_tokens": 0, "cost": 0.0, "ms": 0}
+    return one
+
+def record(usage, model="", sid=None):
     """一轮结束后把用量记进来，顺带算个估算费用。"""
     from .config import estimate_cost
     usage = usage if isinstance(usage, dict) else {}
@@ -161,17 +183,31 @@ def record(usage, model=""):
         TOTAL["cached_tokens"] += hit
         if LAST["cost"]:
             TOTAL["cost"] = round(TOTAL["cost"] + LAST["cost"]["total"], 6)
+        if sid:
+            one = _bump(sid)
+            one["calls"] += 1
+            one["prompt_tokens"] += int(usage.get("prompt_tokens") or 0)
+            one["completion_tokens"] += int(usage.get("completion_tokens") or 0)
+            one["cached_tokens"] += hit
+            if LAST["cost"]:
+                one["cost"] = round(one["cost"] + LAST["cost"]["total"], 6)
     _save_totals()
     note("chat.usage", model=LAST["model"], usage=usage, cost=LAST["cost"])
 
 _load_totals()
 
 
-def snapshot():
-    """面板要读的数字。"""
+def snapshot(sid=None):
+    """面板要读的数字。给了 sid 就只报这一局的累计。"""
     out = dict(LAST)
     # 首 token 之后模型还在吐，用总耗时推个粗略的生成速度
     if out.get("total_ms") and out.get("first_token_ms"):
         out["decode_ms"] = max(0, out["total_ms"] - out["first_token_ms"])
-    out["total"] = dict(TOTAL)
+    if sid:
+        one = TOTAL["by_session"].get(str(sid))
+        out["total"] = dict(one) if one else {
+            "calls": 0, "prompt_tokens": 0, "completion_tokens": 0,
+            "cached_tokens": 0, "cost": 0.0, "ms": 0}
+    else:
+        out["total"] = {k: v for k, v in TOTAL.items() if k != "by_session"}
     return out

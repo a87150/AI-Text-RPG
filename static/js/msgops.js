@@ -19,13 +19,21 @@ function userTextBefore(index) {
   return '';
 }
 
-async function rewrite(index) {
-  if (!state.session) return;
+async function rewrite(index, confirmed) {
+  if (!state.session) { toast('还没选中对话', 'error'); return; }
   if (state.busy) { toast('正在生成，稍后再重写', 'error'); return; }
   const msg = messagesOf()[index];
-  if (!msg) return;
+  // 拿不到消息说明 DOM 上的序号和记录对不上了，得说清楚，别让人以为按钮坏了
+  if (!msg) { toast('这条对不上消息记录，刷新一下页面再试', 'error'); return; }
   const text = msg.role === 'user' ? (msg.content || '') : userTextBefore(index);
   if (!text) { toast('这条前面没有可以重发的用户消息', 'error'); return; }
+  // 后面还有回复的话，重发会把它们删掉重写，先问一句。
+  // 编辑后走 askRegenerate 那条路已经问过了，别问两遍
+  if (!confirmed && hasAfter(index)
+      && !confirm('重发这一句会删掉后面的 '
+        + (messagesOf().length - index - 1) + ' 条，重新生成。继续？')) {
+    return;
+  }
   try {
     await api('/api/sessions/' + state.session.id + '/rewind', {
       method: 'POST', body: { index },
@@ -77,7 +85,7 @@ function askRegenerate(index) {
   no.textContent = '就这样';
   yes.onclick = () => {
     bar.remove();
-    rewrite(index);
+    rewrite(index, true);
   };
   no.onclick = () => bar.remove();
   bar.append(tip, yes, no);
