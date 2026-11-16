@@ -523,6 +523,12 @@ export function renderContextDetail() {
   const core = document.createElement('div');
   core.className = 'ctx-rows';
   // 四个数成对排：上轮 / 累计，各一对 token 和费用。顺序固定，扫一眼就能上下比
+  // 顺序固定成这样：先耗时三项，再上轮的两个数，再累计的两个数，最后才是会话结构。
+  // 上轮和累计挨着放，方便一眼横着比
+  core.appendChild(mkRow('首字等待', ttft ? fmtNumber(ttft) + ' ms' : '—'));
+  core.appendChild(mkRow('生成速度', speed
+    ? speed + ' token/s（' + fmtNumber(outTok) + ' 出 / ' + fmtNumber(decodeMs) + ' ms）' : '—'));
+  core.appendChild(mkRow('上轮总耗时', totalMs ? fmtNumber(totalMs) + ' ms' : '—'));
   core.appendChild(mkRow('上轮 tok', inTok
     ? '入 ' + fmtNumber(inTok) + ' · 出 ' + fmtNumber(outTok)
     : '还没发过'));
@@ -532,10 +538,6 @@ export function renderContextDetail() {
     ? '入 ' + fmtNumber(tot.prompt_tokens) + ' · 出 ' + fmtNumber(tot.completion_tokens)
       + ' · ' + tot.calls + ' 次' : '—'));
   core.appendChild(mkRow('累计费用', moneyBook(tot.cost_by_cur)));
-  core.appendChild(mkRow('首字等待', ttft ? fmtNumber(ttft) + ' ms' : '—'));
-  core.appendChild(mkRow('生成速度', speed
-    ? speed + ' token/s（' + fmtNumber(outTok) + ' 出 / ' + fmtNumber(decodeMs) + ' ms）' : '—'));
-  core.appendChild(mkRow('上轮总耗时', totalMs ? fmtNumber(totalMs) + ' ms' : '—'));
   box.appendChild(core);
 
   // 四、system prompt 构成：占比条只回答一个问题——哪一块在膨胀

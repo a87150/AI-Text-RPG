@@ -12,7 +12,7 @@ import requests
 from flask import Flask
 
 # ============================== 版本 ==============================
-VERSION = "1.24"
+VERSION = "1.25"
 
 # ============================== 模型配置 ==============================
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
