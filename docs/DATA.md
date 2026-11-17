@@ -208,6 +208,8 @@ totals.json 的累计费用按币种分开记（`cost_by_cur`），混着加会�
     PUT    /api/backup-config              定时备份：enabled / every_minutes / keep
     GET    /api/image-config              生图用的 ComfyUI 地址与超时
     PUT    /api/image-config              保存生图配置
+    GET    /api/prefs/<block>             导出单价表或音色表，block 是 prices / voices
+    POST   /api/prefs/<block>             导入上面那份 json，先校验再存
     GET    /api/image-workflow             导出当前 ComfyUI 工作流 json
     POST   /api/image-workflow             导入工作流，先校验再落盘，旧的留 .bak
     GET    /api/speech-config             语音配置，同时报解释器和模型在不在

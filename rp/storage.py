@@ -19,7 +19,7 @@ _busy_guard = threading.Lock()
 
 TEXT_FIELDS = (
     "title", "user_name", "ai_name", "user_role", "ai_role",
-    "world", "rules", "opening", "summary",
+    "world", "rules", "opening", "summary", "user_voice",
 )
 DEFAULT_TITLE = "未命名故事"
 

@@ -405,17 +405,23 @@ async function saveSpeechConf() {
   }
 }
 
-// 工作流的导入导出：导出直接下 json，导入先让后端校验
-function noteWorkflow(text, bad) {
-  const el = document.querySelector('[data-note="workflow"]');
+// 设置里这几张表都能存成 json 带走；导入时先让后端校验，通过了才落盘
+const JSON_PAIRS = [
+  { key: 'workflow', url: '/api/image-workflow', file: 'workflow.json', after: null },
+  { key: 'prices', url: '/api/prefs/prices', file: 'prices.json', after: 'writing' },
+  { key: 'voices', url: '/api/prefs/voices', file: 'voices.json', after: 'speech' },
+];
+
+function notePair(key, text, bad) {
+  const el = document.querySelector('[data-note="' + key + '"]');
   if (!el) return;
   el.textContent = text;
   el.classList.toggle('bad', !!bad);
 }
 
-async function exportWorkflow() {
+async function exportJson(pair) {
   try {
-    const res = await fetch('/api/image-workflow');
+    const res = await fetch(pair.url);
     if (!res.ok) {
       const info = await res.json().catch(() => ({}));
       throw new Error(info.error || ('HTTP ' + res.status));
@@ -423,29 +429,53 @@ async function exportWorkflow() {
     const blob = await res.blob();
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'workflow.json';
+    a.download = pair.file;
     a.click();
     URL.revokeObjectURL(a.href);
-    noteWorkflow('已导出');
+    notePair(pair.key, '已导出');
   } catch (e) {
-    noteWorkflow('导出失败：' + (e && e.message ? e.message : e), true);
+    notePair(pair.key, '导出失败：' + (e && e.message ? e.message : e), true);
   }
 }
 
-async function importWorkflow(file) {
+async function importJson(pair, file) {
   if (!file) return;
   try {
-    const text = await file.text();
     let data;
     try {
-      data = JSON.parse(text);
+      data = JSON.parse(await file.text());
     } catch (e) {
       throw new Error('不是合法的 json');
     }
-    const res = await api('/api/image-workflow', { method: 'POST', body: data });
-    noteWorkflow('已导入，' + (res && res.nodes ? res.nodes + ' 个节点' : '完成'));
+    const res = await api(pair.url, { method: 'POST', body: data });
+    const n = res && (res.count != null ? res.count : res.nodes);
+    notePair(pair.key, '已导入' + (n != null ? '，' + n + ' 条' : ''));
+    // 输入框还是旧内容，重新拉一份填回去
+    if (pair.after) {
+      state.conf = await api('/api/config');
+      if (pair.after === 'writing') fillWritingForm();
+      else fillSpeechForm();
+    }
   } catch (e) {
-    noteWorkflow('导入失败：' + (e && e.message ? e.message : e), true);
+    notePair(pair.key, '导入失败：' + (e && e.message ? e.message : e), true);
+  }
+}
+
+function bindJsonButtons() {
+  for (const pair of JSON_PAIRS) {
+    const exp = $('#' + pair.key + '-export');
+    const imp = $('#' + pair.key + '-import');
+    const file = $('#' + pair.key + '-file');
+    if (!exp || exp.dataset.bound) continue;
+    exp.dataset.bound = '1';
+    exp.addEventListener('click', () => exportJson(pair));
+    if (imp && file) {
+      imp.addEventListener('click', () => file.click());
+      file.addEventListener('change', () => {
+        importJson(pair, file.files && file.files[0]);
+        file.value = '';
+      });
+    }
   }
 }
 
@@ -455,24 +485,6 @@ function fillImageForm() {
   const to = $('#img-timeout');
   if (url) url.value = c.url || '';
   if (to) to.value = c.timeout == null ? '' : c.timeout;
-}
-
-function bindWorkflowButtons() {
-  const exp = $('#wf-export');
-  const imp = $('#wf-import');
-  const file = $('#wf-file');
-  if (exp && !exp.dataset.bound) {
-    exp.dataset.bound = '1';
-    exp.addEventListener('click', exportWorkflow);
-  }
-  if (imp && file && !imp.dataset.bound) {
-    imp.dataset.bound = '1';
-    imp.addEventListener('click', () => file.click());
-    file.addEventListener('change', () => {
-      importWorkflow(file.files && file.files[0]);
-      file.value = '';
-    });
-  }
 }
 
 function fillSpeechForm() {
@@ -629,7 +641,7 @@ function openPrefs() {
     fillWritingForm();
     fillImageForm();
     fillSpeechForm();
-    bindWorkflowButtons();
+    bindJsonButtons();
     syncThemeSeg();
     syncLanguageSeg();
     $('#prefs-modal').classList.remove('hidden');

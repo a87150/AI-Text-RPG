@@ -25,7 +25,8 @@ from .config import (
     DEFAULT_MODEL, DEFAULT_PROVIDER, MAX_CHAT_ATTEMPTS, MAX_ENHANCE_ATTEMPTS,
     MAX_OPENING_ATTEMPTS, MIN_CHAT_CHARS, MODES, PROVIDERS,
     PRICES, REASONING_LEVELS, TIERS, TIER_LABELS, app, backup_conf, current_target,
-    image_conf, prices_text, save_image_conf, save_prices, save_speech_conf,
+    image_conf, prices, prices_text, save_image_conf, save_prices, save_speech_conf,
+    SPEECH_VOICES,
     speech_conf,
     list_local_models, load_settings, mode_for, mode_of, provider_public,
     provider_usable, reasoning_effort, save_backup_conf, save_mode,
@@ -173,6 +174,8 @@ def api_config():
         "prices_default": PRICES,
         "image": image_conf(),
         "speech": speech_conf(),
+        # 角色卡上的音色下拉直接用这份，别让前端自己抄一遍
+        "speech_voices": list(SPEECH_VOICES),
     })
 
 def _reclaim_context():
@@ -661,6 +664,68 @@ def api_image_workflow():
         headers={"Content-Disposition": 'attachment; filename="workflow.json"'})
 
 
+@app.get("/api/prefs/<block>")
+def api_prefs_export(block):
+    """设置里那几张文本表也能导成 json 带走。"""
+    if block == "prices":
+        data = {name: {"in": n[0], "out": n[1], "cache": n[2], "currency": n[3]}
+                for name, n in prices().items()}
+    elif block == "voices":
+        data = speech.parse_options(speech_conf().get("voices"))
+    else:
+        return jsonify({"error": "没有这块配置"}), 404
+    return Response(
+        json.dumps(data, ensure_ascii=False, indent=2),
+        mimetype="application/json",
+        headers={"Content-Disposition": 'attachment; filename="%s.json"' % block})
+
+
+@app.post("/api/prefs/<block>")
+def api_prefs_import(block):
+    """导入同上面的 json。形式对不上就直接说哪一条。"""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not data:
+        return jsonify({"error": "要一个非空的 json 对象"}), 400
+
+    if block == "prices":
+        rows = {}
+        for name, val in data.items():
+            key = str(name).strip().lower()
+            if not key:
+                continue
+            if isinstance(val, dict):
+                row = [val.get("in"), val.get("out")]
+                if val.get("cache") is not None:
+                    row.append(val.get("cache"))
+                if val.get("currency"):
+                    row.append(val.get("currency"))
+            elif isinstance(val, (list, tuple)):
+                row = list(val)
+            else:
+                return jsonify({"error": "%s 的价目要写成对象或数组" % name}), 400
+            rows[key] = row
+        kept = save_prices(rows)
+        if not kept:
+            return jsonify({"error": "一条都没认出来，检查模型名和数字"}), 400
+        return jsonify({"ok": True, "count": len(kept)})
+
+    if block == "voices":
+        lines = []
+        for role, voice in data.items():
+            role = str(role).strip()
+            voice = str(voice).strip()
+            if not role or not voice:
+                return jsonify({"error": "角色和音色都不能空"}), 400
+            if voice.lower() not in SPEECH_VOICES:
+                return jsonify({"error": "%s 的音色 %s 不在内置列表里" % (role, voice)}), 400
+            lines.append("%s=%s" % (role, voice.lower()))
+        save_speech_conf({"voices": "\n".join(lines)})
+        speech.reset()
+        return jsonify({"ok": True, "count": len(lines)})
+
+    return jsonify({"error": "没有这块配置"}), 404
+
+
 @app.post("/api/image-workflow")
 def api_image_workflow_save():
     """导入工作流。先校验再落盘，旧的会留一份 .bak。"""
@@ -982,6 +1047,8 @@ def api_update_session(sid):
                     "name": str(c.get("name") or ""),
                     "role": str(c.get("role") or ""),
                     "state": str(c.get("state") or ""),
+                    # 音色是用户在这张卡上选的，模型不碰
+                    "voice": str(c.get("voice") or ""),
                     "history": c.get("history") or [],
                 }
                 for c in data["characters"] if isinstance(c, dict)

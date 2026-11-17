@@ -34,3 +34,5 @@ _srv.log
 _srv.err
 models/
 check_msg.tmp
+_shot_*.png
+_voicesdir/

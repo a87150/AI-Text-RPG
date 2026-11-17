@@ -73,6 +73,8 @@ def ensure_characters(sess):
                 # 而且截完还写回文件，救不回来
                 "role": (item.get("role") or "").strip(),
                 "state": (item.get("state") or "").strip()[:200],
+                # 这个角色朗读时用哪个音色。空 = 走设置里的音色表 / 默认音色
+                "voice": (item.get("voice") or "").strip()[:40],
                 "history": [h for h in (item.get("history") or [])
                             if isinstance(h, str)][-CHARACTER_HISTORY_KEEP:],
             })
@@ -198,6 +200,8 @@ def upsert_character(sess, data):
         "role": (data.get("role") or "").strip()[:400],
         "state": (data.get("relation") or "").strip()[:120],
         "history": [],
+        # 音色归用户所有，模型给的 data 里没有这个字段，别让它被覆盖
+        "voice": "",
     })
     return (name, True)
 

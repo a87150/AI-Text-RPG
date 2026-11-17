@@ -157,7 +157,10 @@ window.addEventListener('unhandledrejection', function (e) {
     </div>
 
 
-    <div class="field"><label for="f-user-name">我扮演的角色名</label><input id="f-user-name" placeholder="例如：林晚"></div>
+    <div class="field-pair">
+      <div class="field"><label for="f-user-name">我扮演的角色名</label><input id="f-user-name" placeholder="例如：林晚"></div>
+      <div class="field"><label for="f-user-voice">我的音色</label><select id="f-user-voice"></select></div>
+    </div>
     <div class="field">
       <div class="field-head">
         <label for="f-user-role">我扮演的角色</label>
@@ -444,13 +447,19 @@ window.addEventListener('unhandledrejection', function (e) {
         </div>
         <div class="field">
           <label>工作流文件</label>
-          <div class="prefs-actions">
-            <button type="button" class="prefs-btn" id="wf-export">导出 json</button>
-            <button type="button" class="prefs-btn" id="wf-import">导入 json</button>
-            <input id="wf-file" type="file" accept=".json,application/json" hidden>
+          <div class="wf-actions">
+            <button type="button" class="prefs-btn" id="workflow-export">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 20h16"/></svg>
+              导出
+            </button>
+            <button type="button" class="prefs-btn" id="workflow-import">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 20h16"/></svg>
+              导入
+            </button>
+            <input id="workflow-file" type="file" accept=".json,application/json" hidden>
             <span class="prefs-note" data-note="workflow"></span>
           </div>
-          <div class="hint">导出就是当前这份 <code>moss_workflow_api.json</code>；导入前会先检查必要节点（提示词、负提示词、空 latent、KSampler、保存），对不上就直接说差哪个，不会写进去。旧的会留一份 <code>.bak</code>。</div>
+          <div class="hint">导入前会先检查必要节点，对不上就说差哪个，不写进去；旧的留 <code>.bak</code>。</div>
         </div>
         <div class="prefs-actions">
           <span class="prefs-note" data-note="image"></span>
@@ -514,6 +523,18 @@ window.addEventListener('unhandledrejection', function (e) {
         <div class="field">
           <label for="sp-voices">按角色换音色，一行一个 <code>角色=音色</code>。旁白里带引号的话走 <code>引述</code></label>
           <textarea id="sp-voices" rows="3" spellcheck="false" placeholder="旁白=vivian&#10;引述=ryan&#10;凛=eric&#10;*=vivian"></textarea>
+          <div class="wf-actions">
+            <button type="button" class="prefs-btn" id="voices-export">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 20h16"/></svg>
+              导出
+            </button>
+            <button type="button" class="prefs-btn" id="voices-import">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 20h16"/></svg>
+              导入
+            </button>
+            <input id="voices-file" type="file" accept=".json,application/json" hidden>
+            <span class="prefs-note" data-note="voices"></span>
+          </div>
         </div>
         <div class="prefs-actions">
           <span class="prefs-note" data-note="speech"></span>
@@ -563,8 +584,20 @@ window.addEventListener('unhandledrejection', function (e) {
                 <div class="field"><label for="w-gen-open-max">开场白最多字数</label><input id="w-gen-open-max" type="number" min="60" max="1500" step="10"></div>
               </div>
               <div class="field">
-                <label for="w-prices">模型单价（每百万 token，一行一条：<code>模型名 输入 输出 缓存命中 币种</code>。前缀匹配，长名字优先；缓存那项省了就按输入价走，币种省了就按人民币。厂商调价就改这里，面板的费用立刻跟着变）</label>
+                <label for="w-prices">模型单价（每百万 token，一行一条：<code>模型名 输入 输出 缓存命中 币种</code>）</label>
                 <textarea id="w-prices" rows="7" spellcheck="false" placeholder="deepseek-chat 0.27 1.10 0.07"></textarea>
+          <div class="wf-actions">
+            <button type="button" class="prefs-btn" id="prices-export">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 20h16"/></svg>
+              导出
+            </button>
+            <button type="button" class="prefs-btn" id="prices-import">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 20h16"/></svg>
+              导入
+            </button>
+            <input id="prices-file" type="file" accept=".json,application/json" hidden>
+            <span class="prefs-note" data-note="prices"></span>
+          </div>
               </div>
         <div class="prefs-actions">
           <span class="prefs-note" data-note="writing"></span>

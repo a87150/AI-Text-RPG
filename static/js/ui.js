@@ -344,7 +344,24 @@ export function renderCharacterEditor(box, list, onChange) {
     stateField.value = c.state || '';
     stateField.oninput = () => { c.state = stateField.value; };
 
-    card.append(head, name, role, count, stateField);
+    // 音色跟着角色卡走：留空就退回设置里的音色表，不用为了换个声音去改全局
+    const voice = document.createElement('select');
+    voice.className = 'cc-input';
+    const none = document.createElement('option');
+    none.value = '';
+    none.textContent = '音色：跟设置里的音色表';
+    voice.appendChild(none);
+    for (const v of ((state.conf && state.conf.speech_voices) || [])) {
+      const o = document.createElement('option');
+      o.value = v;
+      // 带前缀，不然下拉收起后只显示一个英文名，看不出这行是音色
+      o.textContent = '音色 · ' + v;
+      voice.appendChild(o);
+    }
+    voice.value = c.voice || '';
+    voice.onchange = () => { c.voice = voice.value; };
+
+    card.append(head, name, voice, role, count, stateField);
     box.appendChild(card);
   });
 
@@ -1220,11 +1237,11 @@ function toggleSpeakPause() {
   return true;
 }
 
-async function fetchSpeech(text, role) {
+async function fetchSpeech(text, role, voice) {
   const res = await fetch('/api/speech', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text, role: role || '' }),
+    body: JSON.stringify({ text, role: role || '', voice: voice || '' }),
   });
   if (!res.ok) {
     const info = await res.json().catch(() => ({}));
@@ -1339,21 +1356,33 @@ function splitQuotes(text) {
  * 多角色那条路是白给的：后端已经把 lines 里的 speaker 分好了。
  * 一般模式只有旁白，旁白里人物说的话靠引号切，角色名给「引述」。
  */
+/** 查这个角色卡上配的音色；没配过返回空串，让它退回设置里的音色表。 */
+export function voiceOf(name) {
+  const key = String(name || '').trim();
+  if (!key) return '';
+  const chars = (state.session && state.session.characters) || [];
+  const hit = chars.find((c) => c && String(c.name || '').trim() === key);
+  return (hit && hit.voice) || '';
+}
+
 export function segmentsOf(msg, userLabel) {
   const out = [];
-  const push = (role, text) => {
+  const push = (role, text, voice) => {
     const body = speakable(text);
-    if (body) out.push({ role, text: body });
+    if (body) out.push({ role, text: body, voice: voice || '' });
   };
   if (!msg) return out;
   if (msg.role === 'user') {
-    push(userLabel || '\u6211', msg.content);
+    // 我念的词跟着「我的角色」那张卡走，没设过就退回全局音色表
+    const mine = (state.session && state.session.user_voice) || '';
+    push(userLabel || '\u6211', msg.content, mine);
     return out;
   }
   const lines = (msg.lines || []).filter((x) => x && x.text);
   if (lines.length) {
-    if (msg.narrator) push('\u65c1\u767d', msg.narrator);
-    for (const it of lines) push(it.speaker || 'AI', it.text);
+    // 旁白没有角色卡，留空让它走全局音色表
+    if (msg.narrator) push('\u65c1\u767d', msg.narrator, '');
+    for (const it of lines) push(it.speaker || 'AI', it.text, voiceOf(it.speaker));
     return out;
   }
   for (const piece of splitQuotes(msg.narrator || msg.content || '')) {
@@ -1389,7 +1418,7 @@ export async function speakSegments(segments, btn) {
   const flat = [];
   for (const seg of (segments || [])) {
     if (!seg || !seg.text) continue;
-    for (const piece of splitLong(seg.text)) flat.push({ role: seg.role, text: piece });
+    for (const piece of splitLong(seg.text)) flat.push({ role: seg.role, text: piece, voice: seg.voice });
   }
   const list = flat;
   if (!list.length) { toast('这段没什么可以念的。'); return; }
@@ -1400,7 +1429,7 @@ export async function speakSegments(segments, btn) {
   stopSpeak();
   const pending = new Map();
   const ask = (i) => {
-    if (!pending.has(i)) pending.set(i, fetchSpeech(list[i].text, list[i].role));
+    if (!pending.has(i)) pending.set(i, fetchSpeech(list[i].text, list[i].role, list[i].voice));
     return pending.get(i);
   };
 

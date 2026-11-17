@@ -214,6 +214,7 @@ export async function openSettings(opts = {}) {
 
   $('#f-story-title').value = s.title || '';
   $('#f-user-name').value = s.user_name || '';
+  fillUserVoice(s.user_voice);
   $('#f-user-role').value = s.user_role || '';
   $('#f-world').value = s.world || '';
   $('#f-rules').value = s.rules || '';
@@ -385,6 +386,25 @@ function mountSettingsForm(where) {
  * 角色表编辑器：AI 会在剧情中往里加人和改状态，但增删改的最终决定权在用户手上。
  * 打开弹窗时复制一份草稿，保存时才写回，取消就等于什么都不改。
  */
+/** 我的音色下拉：空值 = 跟设置里那张音色表走。 */
+function fillUserVoice(current) {
+  const el = $('#f-user-voice');
+  if (!el) return;
+  const list = (state.conf && state.conf.speech_voices) || [];
+  el.innerHTML = '';
+  const none = document.createElement('option');
+  none.value = '';
+  none.textContent = '跟设置里的音色表';
+  el.appendChild(none);
+  for (const v of list) {
+    const o = document.createElement('option');
+    o.value = v;
+    o.textContent = '音色 · ' + v;
+    el.appendChild(o);
+  }
+  el.value = current || '';
+}
+
 function renderCharacterList() {
   renderCharacterEditor($('#char-list'), draftChars, () => {
     renderCharacterList();
@@ -434,6 +454,7 @@ export async function saveSettings() {
       name: (c.name || '').trim(),
       role: (c.role || '').trim(),
       state: (c.state || '').trim(),
+      voice: (c.voice || '').trim(),
       history: c.history || [],
     }))
     .filter((c) => c.name);
@@ -444,6 +465,7 @@ export async function saveSettings() {
     title: val('#f-story-title'),
     mode: activeMode ? activeMode.dataset.modeValue : draftMode,
     user_name: val('#f-user-name'),
+    user_voice: val('#f-user-voice'),
     user_role: val('#f-user-role'),
     world: val('#f-world'),
     rules: val('#f-rules'),
