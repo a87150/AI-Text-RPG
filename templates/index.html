@@ -442,6 +442,16 @@ window.addEventListener('unhandledrejection', function (e) {
           <label for="img-timeout">单张超时（秒，30～1200；慢卡就往上加，快卡三十几秒就出）</label>
           <input id="img-timeout" type="number" min="30" max="1200" step="10">
         </div>
+        <div class="field">
+          <label>工作流文件</label>
+          <div class="prefs-actions">
+            <button type="button" class="prefs-btn" id="wf-export">导出 json</button>
+            <button type="button" class="prefs-btn" id="wf-import">导入 json</button>
+            <input id="wf-file" type="file" accept=".json,application/json" hidden>
+            <span class="prefs-note" data-note="workflow"></span>
+          </div>
+          <div class="hint">导出就是当前这份 <code>moss_workflow_api.json</code>；导入前会先检查必要节点（提示词、负提示词、空 latent、KSampler、保存），对不上就直接说差哪个，不会写进去。旧的会留一份 <code>.bak</code>。</div>
+        </div>
         <div class="prefs-actions">
           <span class="prefs-note" data-note="image"></span>
           <button type="button" class="prefs-save" data-save="image">保存生图设置</button>

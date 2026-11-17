@@ -648,6 +648,34 @@ def api_image_config_save():
     return jsonify(save_image_conf(request.get_json(silent=True) or {}))
 
 
+@app.get("/api/image-workflow")
+def api_image_workflow():
+    """导出当前的 ComfyUI 工作流，下载成 json。"""
+    try:
+        wf = cover_store.workflow_text()
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 400
+    return Response(
+        json.dumps(wf, ensure_ascii=False, indent=2),
+        mimetype="application/json",
+        headers={"Content-Disposition": 'attachment; filename="workflow.json"'})
+
+
+@app.post("/api/image-workflow")
+def api_image_workflow_save():
+    """导入工作流。先校验再落盘，旧的会留一份 .bak。"""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "请传一个 ComfyUI 的 API 格式 json"}), 400
+    try:
+        wf = cover_store.save_workflow(data)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except OSError as exc:
+        return jsonify({"error": "写不进去：%s" % exc}), 500
+    return jsonify({"ok": True, "nodes": len(wf)})
+
+
 @app.get("/api/speech-config")
 def api_speech_config():
     conf = speech_conf()

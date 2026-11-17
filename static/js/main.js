@@ -405,12 +405,74 @@ async function saveSpeechConf() {
   }
 }
 
+// 工作流的导入导出：导出直接下 json，导入先让后端校验
+function noteWorkflow(text, bad) {
+  const el = document.querySelector('[data-note="workflow"]');
+  if (!el) return;
+  el.textContent = text;
+  el.classList.toggle('bad', !!bad);
+}
+
+async function exportWorkflow() {
+  try {
+    const res = await fetch('/api/image-workflow');
+    if (!res.ok) {
+      const info = await res.json().catch(() => ({}));
+      throw new Error(info.error || ('HTTP ' + res.status));
+    }
+    const blob = await res.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'workflow.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    noteWorkflow('已导出');
+  } catch (e) {
+    noteWorkflow('导出失败：' + (e && e.message ? e.message : e), true);
+  }
+}
+
+async function importWorkflow(file) {
+  if (!file) return;
+  try {
+    const text = await file.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      throw new Error('不是合法的 json');
+    }
+    const res = await api('/api/image-workflow', { method: 'POST', body: data });
+    noteWorkflow('已导入，' + (res && res.nodes ? res.nodes + ' 个节点' : '完成'));
+  } catch (e) {
+    noteWorkflow('导入失败：' + (e && e.message ? e.message : e), true);
+  }
+}
+
 function fillImageForm() {
   const c = (state.conf && state.conf.image) || {};
   const url = $('#img-url');
   const to = $('#img-timeout');
   if (url) url.value = c.url || '';
   if (to) to.value = c.timeout == null ? '' : c.timeout;
+}
+
+function bindWorkflowButtons() {
+  const exp = $('#wf-export');
+  const imp = $('#wf-import');
+  const file = $('#wf-file');
+  if (exp && !exp.dataset.bound) {
+    exp.dataset.bound = '1';
+    exp.addEventListener('click', exportWorkflow);
+  }
+  if (imp && file && !imp.dataset.bound) {
+    imp.dataset.bound = '1';
+    imp.addEventListener('click', () => file.click());
+    file.addEventListener('change', () => {
+      importWorkflow(file.files && file.files[0]);
+      file.value = '';
+    });
+  }
 }
 
 function fillSpeechForm() {
@@ -567,6 +629,7 @@ function openPrefs() {
     fillWritingForm();
     fillImageForm();
     fillSpeechForm();
+    bindWorkflowButtons();
     syncThemeSeg();
     syncLanguageSeg();
     $('#prefs-modal').classList.remove('hidden');
