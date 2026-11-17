@@ -94,21 +94,40 @@
 
 ## 语音（设置 → 模型 → 语音）
 
-朗读走 [voco](https://pypi.org/project/voco/)。它把运行时和模型拆开，换声音只换插件名：
+朗读走 [vox-tts](https://pypi.org/project/vox-tts/)：C++ 引擎，不依赖 torch，权重 mmap 自单个 `.tmod`
+文件。它只出到 Python 3.13 的轮子，而主程序一般跑 3.14，所以两个解释器并存：
 
-```bash
-pip install voco            # 核心，零依赖
-pip install voco-kokoro     # 装你要的那个模型插件
+```
+pip install vox-tts                                     # 用 3.13 那个 pip
+python -m vox.build --model <HF 目录> --dtype bf16 --quant q8 -o models/x.tmod
 ```
 
-- `enabled`：总开关，关着时气泡上的 🔊 会提示去开
-- `stream`：边生成边读。开着时模型吐一句念一句；关掉只剩手动点 🔊
-- `plugin`：喂给 `router.load()` 的插件名，空着按 `kokoro` 处理
-- `device`：`cpu` 或 `cuda:0`
-- `options`：一行一个 `key=value`，原样透传给 `router.infer`。kokoro 用 `voice=af_heart`；
-  支持音色描述的插件可以写 `instruct=用平静的语气念`
+主程序第一次要念的时候把 `python -m vox serve` 拉起来当子进程，之后只走 HTTP。
+实测加载 2.5 秒，一句 6.3 秒的音频合成 3.2 秒，流式首包 0.18 秒。
 
-换了 `plugin`，保存时会把旧的 router 丢掉，下一句按新插件重新加载。
+```json
+"speech": {
+"mode": "stream",
+"python": "",
+"model": "models/qwen3-custom.tmod",
+"url": "http://127.0.0.1:8190",
+"device": "auto",
+"threads": 0,
+"language": "chinese",
+"voice": "vivian",
+"voices": ""
+}
+```
+
+- `mode`：`stream` 边生成边读，`manual` 点消息上的按钮才念
+- `python`：装了 vox-tts 的解释器，留空自动找 3.13
+- `model`：`.tmod` 路径，相对项目根
+- `url`：vox 服务的地址，主进程自己监听
+- `device` / `threads`：设备（`auto`/`cpu`/`vulkan`）和线程数，0 让引擎自己定
+- `voice` / `language`：默认音色和语言；内置音色 aiden、dylan、eric、ono_anna、ryan、serena、sohee、uncle_fu、vivian
+- `voices`：角色名 -> 音色，一行一个 `角色=vivian`，`*` 兜底
+
+改了模型或解释器，保存时会把旧服务停掉，下一句按新配置重起。
 
 ## 模型单价（设置 → 写作 → 模型单价）
 

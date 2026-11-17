@@ -447,8 +447,8 @@ window.addEventListener('unhandledrejection', function (e) {
           <button type="button" class="prefs-save" data-save="image">保存生图设置</button>
         </div>
       
-              <div class="sub-head">语音（朗读）</div>
-        <div class="hint">念文本走 <a href="https://pypi.org/project/voco/" target="_blank" rel="noopener">voco</a>：运行时和模型是分开的，换声音只要换插件名。先 <code>pip install voco</code>，再装你要的模型插件（例如 <code>pip install voco-kokoro</code>）。</div>
+        <div class="sub-head">语音（朗读）</div>
+        <div class="hint">念文本走 <a href="https://pypi.org/project/vox-tts/" target="_blank" rel="noopener">vox-tts</a>：C++ 引擎，不依赖 torch，一句一般两三秒就出声。装法 <code>pip install vox-tts</code>，但它只出到 Python 3.13 的轮子，主程序跑 3.14 时得单独指一个解释器。模型要先转一次：<code>python -m vox build --model &lt;HF 目录&gt; --dtype bf16 --quant q8 -o models/x.tmod</code>。</div>
         <div class="field">
           <label>怎么念（二选一）</label>
           <div class="seg" id="speech-mode-seg">
@@ -457,23 +457,44 @@ window.addEventListener('unhandledrejection', function (e) {
           </div>
           <div class="hint">边生成边读：按句切好就念，不等整段写完。点按钮朗读：只有你点某条消息右下角那个 🔊 时才出声，旁白和角色按音色表分开念。</div>
         </div>
+        <div class="field">
+          <label for="sp-model">模型文件（<code>.tmod</code>），相对路径按项目根算</label>
+          <input id="sp-model" type="text" placeholder="models/qwen3-custom.tmod" spellcheck="false">
+        </div>
         <div class="grid2">
           <div class="field">
-            <label for="sp-plugin">插件名（voco 里 load 的那个）</label>
-            <input id="sp-plugin" type="text" placeholder="kokoro" spellcheck="false">
+            <label for="sp-python">跑 vox 的解释器，留空自动找 3.13</label>
+            <input id="sp-python" type="text" placeholder="C:\\Python313\\python.exe" spellcheck="false">
           </div>
           <div class="field">
-            <label for="sp-device">设备</label>
-            <input id="sp-device" type="text" placeholder="cpu / cuda:0" spellcheck="false">
+            <label for="sp-url">服务地址（主程序自己拉起来）</label>
+            <input id="sp-url" type="text" placeholder="http://127.0.0.1:8190" spellcheck="false">
           </div>
         </div>
-        <div class="field">
-          <label for="sp-options">推理参数，一行一个 <code>key=value</code>，原样透给插件。例如 <code>voice=af_heart</code>，支持音色描述的插件可以用 <code>instruct=用平静的语气念</code></label>
-          <textarea id="sp-options" rows="4" spellcheck="false" placeholder="voice=af_heart"></textarea>
+        <div class="grid2">
+          <div class="field">
+            <label for="sp-device">设备</label>
+            <input id="sp-device" type="text" placeholder="auto" spellcheck="false">
+          </div>
+          <div class="field">
+            <label for="sp-threads">线程数（0 = 引擎自己定）</label>
+            <input id="sp-threads" type="number" min="0" max="64" step="1">
+          </div>
         </div>
+        <div class="grid2">
+          <div class="field">
+            <label for="sp-voice">默认音色</label>
+            <input id="sp-voice" type="text" placeholder="vivian" spellcheck="false">
+          </div>
+          <div class="field">
+            <label for="sp-language">语言</label>
+            <input id="sp-language" type="text" placeholder="chinese" spellcheck="false">
+          </div>
+        </div>
+        <div class="hint">设备只认 auto / gpu / cpu，填 cuda:0 之类的会静默退回 CPU，一句要等三十秒。内置音色：aiden、dylan、eric、ono_anna、ryan、serena、sohee、uncle_fu、vivian。语言可选 chinese、english、japanese、korean、beijing_dialect、sichuan_dialect 等。</div>
         <div class="field">
-          <label for="sp-voices">按角色换音色，一行一个 <code>角色=音色</code>。旁白里带引号的话走 <code>引述</code>，用在 <code>voices</code> 里配的同一个名字</label>
-          <textarea id="sp-voices" rows="3" spellcheck="false" placeholder="旁白=Vivian&#10;引述=Ryan&#10;凛=Ethan&#10;*=Vivian"></textarea>
+          <label for="sp-voices">按角色换音色，一行一个 <code>角色=音色</code>。旁白里带引号的话走 <code>引述</code></label>
+          <textarea id="sp-voices" rows="3" spellcheck="false" placeholder="旁白=vivian&#10;引述=ryan&#10;凛=eric&#10;*=vivian"></textarea>
         </div>
         <div class="prefs-actions">
           <span class="prefs-note" data-note="speech"></span>

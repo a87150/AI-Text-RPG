@@ -149,22 +149,25 @@ IMAGE_DEFAULTS = {"url": "", "timeout": 180}
 _image = dict(IMAGE_DEFAULTS)
 IMAGE_BOUNDS = {"timeout": (30, 1200)}
 
-# 语音：任何开了 OpenAI 兼容 /v1/audio/speech 的本地服务都能接
-# （GPT-SoVITS、Fish-Speech、CosyVoice、Kokoro-FastAPI 都有这个口）。url 填到根就行，脚本自己补路径。
-# 本地语音走 voco（pip install voco）。它把运行时和模型拆开，每个模型是一个插件：
-#   pip install voco            # 核心，零依赖
-#   pip install voco-kokoro     # 装你要的那个模型
-# 想换模型就把 plugin 改成对应的插件名，不用动代码。
-# options 里每行一个 key=value，原样透给 router.infer：
-#   voice=af_heart（kokoro 用）、instruct=用平静的语气念（支持的插件用）
+# 语音走 vox-tts：C++ 引擎，不依赖 torch，权重 mmap 自单个 .tmod 文件。
+#   pip install vox-tts                       # 轮子只到 cp313，主应用跑 3.14 时要另找解释器
+#   python -m vox.build --model <HF 目录> --dtype bf16 --quant q8 -o models/x.tmod
+# 主应用把它当子进程拉起来（python -m vox serve），自己只走 HTTP。
+# 实测一句 6.3 秒音频合成 3.2 秒，首包 0.18 秒。
 SPEECH_DEFAULTS = {
-    # stream：边生成边读；manual：生成完再点气泡上的按钮念。二选一
+    # stream：边生成边读；manual：生成完再点消息右下角的按钮念。二选一
     "mode": "stream",
-    "plugin": "qwen3-tts",
-    "alias": "tts",
-    "device": "cuda:0",
-    "options": "variant=custom\ndtype=bfloat16\nlanguage=Chinese\nspeaker=Vivian",
-    # 角色名 -> 音色，一行一个「角色=Vivian」。* 是兜底，没配的角色走它
+    # 装 vox-tts 的那个解释器。留空就自动找 3.13
+    "python": "",
+    # .tmod 模型；相对路径按项目根算
+    "model": "models/qwen3-custom.tmod",
+    # vox serve 的地址
+    "url": "http://127.0.0.1:8190",
+    "device": "auto",
+    "threads": 0,
+    "language": "chinese",
+    "voice": "vivian",
+    # 角色名 -> 音色，一行一个「角色=vivian」。* 是兜底，没配的角色走它
     "voices": "",
 }
 SPEECH_READ_MODES = ("stream", "manual")
@@ -474,14 +477,19 @@ def save_speech_conf(data):
     with _model_lock:
         if data.get("mode") in SPEECH_READ_MODES:
             _speech["mode"] = data["mode"]
-        for field in ("plugin", "alias", "device", "options", "voices"):
+        for field in ("python", "model", "url", "device", "language", "voice", "voices"):
             if field in data:
                 _speech[field] = str(data.get(field) or "").strip()
-        # 插件名没了就回退到 kokoro，否则 router.load 会一直报错
-        if not _speech["plugin"]:
-            _speech["plugin"] = SPEECH_DEFAULTS["plugin"]
-        if not _speech["alias"]:
-            _speech["alias"] = SPEECH_DEFAULTS["alias"]
+        if "threads" in data:
+            try:
+                _speech["threads"] = max(0, int(data.get("threads") or 0))
+            except (TypeError, ValueError):
+                _speech["threads"] = 0
+        # 模型或地址空了就退回默认，否则每次都起不来
+        if not _speech.get("model"):
+            _speech["model"] = SPEECH_DEFAULTS["model"]
+        if not _speech.get("url"):
+            _speech["url"] = SPEECH_DEFAULTS["url"]
         snapshot = dict(_speech)
     persist_settings()
     return snapshot
@@ -740,8 +748,16 @@ def load_settings():
     _speech.pop("enabled", None)
     if _speech.get("mode") not in SPEECH_READ_MODES:
         _speech["mode"] = SPEECH_DEFAULTS["mode"]
-    if not _speech.get("plugin"):
-        _speech["plugin"] = SPEECH_DEFAULTS["plugin"]
+    # 盘上的 voco 时代的键（plugin/alias/options）直接丢掉，留着会被写回去污染配置
+    for dead in ("plugin", "alias", "options"):
+        _speech.pop(dead, None)
+    # device 写成 cuda:0 / gpu:0 会悄悄退回 CPU，30 秒才出一句。统一收成 auto
+    if str(_speech.get("device") or "").strip().lower() not in ("auto", "gpu", "cpu", "vulkan"):
+        _speech["device"] = SPEECH_DEFAULTS["device"]
+    if not _speech.get("model"):
+        _speech["model"] = SPEECH_DEFAULTS["model"]
+    if not _speech.get("url"):
+        _speech["url"] = SPEECH_DEFAULTS["url"]
 
     saved_prices = data.get("prices")
     if isinstance(saved_prices, (dict, str)):

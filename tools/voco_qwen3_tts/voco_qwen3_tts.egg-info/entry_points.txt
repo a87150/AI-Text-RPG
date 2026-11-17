@@ -1,2 +1,0 @@
-[voco.plugins]
-qwen3-tts = voco_qwen3_tts

@@ -1162,14 +1162,18 @@ export function hueOf(name) {
 }
 
 let _sayAudio = null;
-// \u8fb9\u751f\u6210\u8fb9\u8bfb\uff1a\u6a21\u578b\u4e00\u4e2a\u5b57\u4e00\u4e2a\u5b57\u5410\uff0c\u6309\u53e5\u5207\u597d\u4e22\u8fdb\u961f\u5217\uff0c\u5ff5\u5b8c\u4e00\u53e5\u63a5\u4e0b\u4e00\u53e5\u3002
-// \u961f\u5217\u4e32\u884c\u662f\u523b\u610f\u7684\uff1a\u51e0\u6bb5\u58f0\u97f3\u53e0\u5728\u4e00\u8d77\u6ca1\u6cd5\u542c\u3002
+let _speakingBtn = null;
+// 边生成边读：模型一个字一个字吐，按句切好丢进队列，念完一句接下一句。
+// 队列串行是刻意的：几段声音叠在一起没法听。
 const TTS_QUEUE = [];
 let ttsBusy = false;
 let ttsOn = false;
 let ttsBuf = '';
+// 播当前段时把后面两段先合成好，轮到时直接放。
+// 长消息慢就慢在串行等 HTTP，预取几段基本上就被播放时间盖住了。
+const PREFETCH = 2;
 
-/** \u628a markdown \u53d8\u6210\u80fd\u5ff5\u7684\u5e72\u51c0\u6587\u5b57\uff1a\u4ee3\u7801\u5757\u548c\u72b6\u6001\u6807\u8bb0\u8df3\u8fc7\uff0c\u5426\u5219\u4f1a\u5ff5\u51fa\u4e00\u4e32\u661f\u53f7\u3002 */
+/** 把 markdown 变成能念的干净文字：代码块和状态标记跳过，否则会念出一串星号。 */
 function speakable(text) {
   return String(text || '')
     .replace(/\x60\x60\x60[\s\S]*?\x60\x60\x60/g, ' ')
@@ -1181,9 +1185,22 @@ function speakable(text) {
 
 function stopSpeak() {
   if (!_sayAudio) return;
-  try { _sayAudio.pause(); } catch (e) { /* \u5df2\u7ecf\u505c\u4e86 */ }
+  try { _sayAudio.pause(); } catch (e) { /* 已经停了 */ }
   URL.revokeObjectURL(_sayAudio.src);
   _sayAudio = null;
+}
+
+/** 正在读时再点一下就暂停，再点继续。返回 true 表示这一下被它吃掉了。 */
+function toggleSpeakPause() {
+  if (!_sayAudio) return false;
+  if (_sayAudio.paused) {
+    _sayAudio.play().catch(() => {});
+    if (_speakingBtn) _speakingBtn.classList.remove('paused');
+  } else {
+    try { _sayAudio.pause(); } catch (e) { return false; }
+    if (_speakingBtn) _speakingBtn.classList.add('paused');
+  }
+  return true;
 }
 
 async function fetchSpeech(text, role) {
@@ -1199,13 +1216,13 @@ async function fetchSpeech(text, role) {
   return URL.createObjectURL(await res.blob());
 }
 
+// 不再在这里 stopSpeak()：那会把上一段连带暂停状态一起打掉。
 function playUrl(url) {
   return new Promise((resolve, reject) => {
-    stopSpeak();
     const audio = new Audio(url);
     _sayAudio = audio;
-    audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
-    audio.onerror = () => { URL.revokeObjectURL(url); reject(new Error('\u64ad\u653e\u5668\u62a5\u9519')); };
+    audio.onended = () => { URL.revokeObjectURL(url); if (_sayAudio === audio) _sayAudio = null; resolve(); };
+    audio.onerror = () => { URL.revokeObjectURL(url); if (_sayAudio === audio) _sayAudio = null; reject(new Error('播放器报错')); };
     audio.play().catch(reject);
   });
 }
@@ -1323,19 +1340,65 @@ export function segmentsOf(msg, userLabel) {
   return out;
 }
 
-/** 逐段念：一段一个请求，串行播，上一段念完才轮下一段。 */
+/** 逐段念：一段一个请求，串行播。正在播时再点一下就暂停。 */
+/**
+ * 把一段长文字按句号再切一层。每小句单独发请求，预取才能真正提前。
+ * 只切长的：太碎的话每句都要一次请求，反而更慢。
+ */
+const SPLIT_AT = 24;
+function splitLong(text) {
+  const body = String(text || '');
+  if (body.length <= SPLIT_AT * 1.5) return [body];
+  const parts = body.match(/[^\u3002\uff01\uff1f\uff1b\n]+[\u3002\uff01\uff1f\uff1b\n]?/g) || [body];
+  const out = [];
+  let buf = '';
+  for (const part of parts) {
+    buf += part;
+    if (buf.length >= SPLIT_AT) { out.push(buf.trim()); buf = ''; }
+  }
+  if (buf.trim()) out.push(buf.trim());
+  return out.filter(Boolean);
+}
+
 export async function speakSegments(segments, btn) {
-  const list = (segments || []).filter((s) => s && s.text);
-  if (!list.length) { toast('\u8fd9\u6bb5\u6ca1\u4ec0\u4e48\u53ef\u4ee5\u5ff5\u7684\u3002'); return; }
-  if (btn) btn.disabled = true;
+  // 同一个按钮再点一下：当前没念完就暂停/继续，不重新发请求
+  if (btn && btn === _speakingBtn && toggleSpeakPause()) return;
+  const flat = [];
+  for (const seg of (segments || [])) {
+    if (!seg || !seg.text) continue;
+    for (const piece of splitLong(seg.text)) flat.push({ role: seg.role, text: piece });
+  }
+  const list = flat;
+  if (!list.length) { toast('这段没什么可以念的。'); return; }
+  stopSpeak();
+  const pending = new Map();
+  const ask = (i) => {
+    if (!pending.has(i)) pending.set(i, fetchSpeech(list[i].text, list[i].role));
+    return pending.get(i);
+  };
+  const prevBtn = _speakingBtn;
+  if (prevBtn && prevBtn !== btn) prevBtn.classList.remove('speaking', 'paused');
+  _speakingBtn = btn || null;
+  if (btn) { btn.classList.add('speaking'); btn.classList.remove('paused'); }
   try {
-    for (const seg of list) {
-      await playUrl(await fetchSpeech(seg.text, seg.role));
+    for (let i = 0; i < list.length; i += 1) {
+      // 顺手把后面几段发出去，等轮到时多半已经好了
+      for (let k = i + 1; k <= i + PREFETCH && k < list.length; k += 1) ask(k);
+      await playUrl(await ask(i));
     }
   } catch (e) {
-    toast('\u5ff5\u4e0d\u51fa\u6765\uff1a' + (e && e.message ? e.message : e), 'error');
+    toast('念不出来：' + (e && e.message ? e.message : e), 'error');
   } finally {
-    if (btn) btn.disabled = false;
+    // 预取了没用上的要回收，否则 blob URL 一直占着
+    for (const pr of pending.values()) {
+      pr.then((u) => { try { URL.revokeObjectURL(u); } catch (e) { /* 已经没了 */ } })
+        .catch(() => {});
+    }
+    pending.clear();
+    if (_speakingBtn === btn) {
+      if (btn) btn.classList.remove('speaking', 'paused');
+      _speakingBtn = null;
+    }
   }
 }
 

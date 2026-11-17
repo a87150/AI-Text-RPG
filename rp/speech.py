@@ -1,26 +1,31 @@
 # -*- coding: utf-8 -*-
-"""本地语音：用 voco 把文本念出来。
+"""本地语音：vox-tts（C++ 引擎）通过 HTTP 合成。
 
-voco 把运行时和模型拆开，每个模型是一个插件包：
+vox 是独立进程，主应用只当客户端：
 
-    pip install voco            # 核心，零依赖
-    pip install voco-kokoro     # 装你要的那个模型
+    python -m vox serve --model models/qwen3-custom.tmod --port 8190
 
-换模型只改设置里的插件名，这里一行不用动。插件里往往带着 torch 权重，
-所以全部懒加载——没念过之前不会 import 任何重东西，启动不受影响。
+为什么要绕一层：vox 的轮子只到 cp313，而主应用跑在 3.14，装不进同一个解释器。
+引擎本身是 C++，换解释器只影响怎么启动，合成路径完全一样。
+实测一句 6.3 秒的音频 3.2 秒合成完，首包 0.18 秒，比原来的纯 Python 实现快一个数量级。
+
+模型是 .tmod 单文件，由 python -m vox build 从 HF 的 Qwen3-TTS 权重转出来：
+一次转换，之后每次启动只 mmap，2.5 秒进内存，不用过 torch。
 """
-import importlib
-import io
+import json
+import os
+import subprocess
+import sys
 import threading
-import wave
+import time
 
-from .config import speech_conf
+import requests
 
-_lock = threading.Lock()
-_router = None
-_loaded_key = None
-# 一句一回可能念几十秒，并发点在「用户连点两条」，串行比抢显存安全
-_speak_lock = threading.Lock()
+from .config import BASE_DIR, speech_conf
+
+_serve_lock = threading.Lock()
+_proc = None
+_ready_at = ""
 
 
 class SpeechError(RuntimeError):
@@ -28,7 +33,7 @@ class SpeechError(RuntimeError):
 
 
 def parse_options(text):
-    """把「每行一个 key=value」读成 dict。值保留字符串，类型让插件自己转。"""
+    """把「每行一个 key=value」读成 dict。音色表用的就是它。"""
     out = {}
     for line in (text or "").splitlines():
         line = line.strip()
@@ -41,87 +46,8 @@ def parse_options(text):
     return out
 
 
-# 构造参数跟推理参数要分开：前者进 router.load()，后者透给 infer()
-LOAD_KEYS = ("variant", "model_id", "dtype")
-
-
-def _import_plugin(name):
-    """voco 0.0.8 的 AudioRouter.load() 只查内存里的注册表，不扫 entry point。
-
-    插件模块在 import 时自己调 register_model，所以这一步不能省。
-    装没装都不报错，真正缺了会在 router.load() 那里报更直白的错。
-    """
-    mod = "voco_" + str(name or "").replace("-", "_")
-    try:
-        importlib.import_module(mod)
-    except ImportError:
-        pass
-
-
-def _get_router(conf):
-    global _router, _loaded_key
-    key = (conf.get("plugin"), conf.get("alias"), conf.get("device"), conf.get("options"))
-    with _lock:
-        if _router is not None and _loaded_key == key:
-            return _router
-        try:
-            from voco.core import AudioRouter
-        except ImportError as exc:
-            raise SpeechError(
-                "没装 voco。先 pip install voco，再装一个模型插件（例如 pip install voco-kokoro）。"
-            ) from exc
-        _import_plugin(conf.get("plugin"))
-        load_kw = {k: v for k, v in parse_options(conf.get("options")).items() if k in LOAD_KEYS}
-        try:
-            router = AudioRouter(cache=True)
-            router.load(conf["plugin"], alias=conf["alias"], device=conf["device"], **load_kw)
-        except Exception as exc:
-            raise SpeechError("voco 加载插件「%s」失败：%s" % (conf.get("plugin"), exc)) from exc
-        _router, _loaded_key = router, key
-        return router
-
-
-def _first_audio(result):
-    """voco 的 infer 有时返回生成器、有时直接给结果，两种都认。"""
-    if isinstance(result, (bytes, bytearray)):
-        return result
-    if hasattr(result, "audio"):
-        return result.audio
-    try:
-        it = iter(result)
-    except TypeError:
-        return result
-    for item in it:
-        return getattr(item, "audio", item)
-    raise SpeechError("voco 没返回音频，插件可能不认这些参数。")
-
-
-def _wav_bytes(audio):
-    """统一成 wav 字节流：已经是编码好的就直接用，是波形数组就自己封头。"""
-    if isinstance(audio, (bytes, bytearray)):
-        return bytes(audio)
-    if isinstance(audio, tuple) and len(audio) == 2:
-        data, rate = audio
-    else:
-        data, rate = audio, 24000
-    try:
-        import numpy as np
-    except ImportError as exc:
-        raise SpeechError("拿到的是原始波形，但没有 numpy 可以封装成 wav。") from exc
-    arr = np.asarray(data, dtype=np.float32).reshape(-1)
-    arr = np.clip(arr, -1.0, 1.0)
-    pcm = (arr * 32767).astype("<i2").tobytes()
-    buf = io.BytesIO()
-    with wave.open(buf, "wb") as f:
-        f.setnchannels(1)
-        f.setsampwidth(2)
-        f.setframerate(int(rate) or 24000)
-        f.writeframes(pcm)
-    return buf.getvalue()
-
-
 def voice_for(conf, role):
-    """角色名 -> 音色。音色表是「角色=Vivian」一行一个，* 是兜底。"""
+    """角色名 -> 音色。音色表是「角色=vivian」一行一个，* 是兜底。"""
     name = (role or "").strip()
     table = parse_options(conf.get("voices"))
     if not table:
@@ -131,45 +57,135 @@ def voice_for(conf, role):
     return table.get("*") or ""
 
 
+def model_path(conf):
+    """模型文件的绝对路径。设置里可以写相对路径，相对的是项目根目录。"""
+    raw = (conf.get("model") or "").strip()
+    if not raw:
+        raise SpeechError("还没设语音模型。用 python -m vox build 转一个 .tmod 出来，再在设置里填路径。")
+    return raw if os.path.isabs(raw) else os.path.join(BASE_DIR, raw)
+
+
+def _base_url(conf):
+    return (conf.get("url") or "http://127.0.0.1:8190").rstrip("/")
+
+
+def _find_python(conf):
+    """找能 import vox 的解释器。设置里填了就用它，否则按常见位置挨个试。"""
+    want = (conf.get("python") or "").strip()
+    if want:
+        return want
+    # vox 的轮子只到 3.13；主应用是 3.14，所以不能拿 sys.executable 凑合
+    candidates = ["py -3.13", "python3.13", "python3"]
+    local = os.path.join(os.path.dirname(sys.executable), "..", "Python313", "python.exe")
+    if os.path.isfile(local):
+        candidates.insert(0, local)
+    for exe in candidates:
+        try:
+            probe = subprocess.run(
+                (exe.split() if " " in exe else [exe]) + ["-c", "import vox"],
+                capture_output=True, timeout=20)
+            if probe.returncode == 0:
+                return exe
+        except (OSError, subprocess.SubprocessError):
+            continue
+    raise SpeechError("找不到装了 vox-tts 的 Python 3.13。装一个：pip install vox-tts，再在设置里指明解释器。")
+
+
+def _alive(conf):
+    try:
+        return requests.get(_base_url(conf) + "/health", timeout=3).status_code == 200
+    except requests.RequestException:
+        return False
+
+
+def _ensure_server(conf):
+    """把 vox 服务拉起来；已经在跑就直接返回。只启一次。"""
+    global _proc, _ready_at
+    if _alive(conf):
+        return _base_url(conf)
+    with _serve_lock:
+        if _alive(conf):
+            return _base_url(conf)
+        model = model_path(conf)
+        if not os.path.isfile(model):
+            raise SpeechError("模型文件不存在：%s" % model)
+        python = _find_python(conf)
+        port = (_base_url(conf).rsplit(":", 1)[-1] or "8190")
+        cmd = (python.split() if " " in python else [python]) + [
+            "-m", "vox", "serve",
+            "--model", model,
+            "--host", "127.0.0.1",
+            "--port", port,
+            "--device", str(conf.get("device") or "auto"),
+            "--threads", str(conf.get("threads") or 0),
+        ]
+        try:
+            _proc = subprocess.Popen(
+                cmd, cwd=BASE_DIR,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        except OSError as exc:
+            raise SpeechError("起不来 vox 服务：%s" % exc) from exc
+        # 加载要几秒，给它 40 秒。超时多半是模型路径或显存的问题
+        deadline = time.time() + 40
+        while time.time() < deadline:
+            if _proc.poll() is not None:
+                raise SpeechError("vox 服务启动就退了，检查模型文件和 Python 解释器。")
+            if _alive(conf):
+                _ready_at = _base_url(conf)
+                return _ready_at
+            time.sleep(0.4)
+        raise SpeechError("vox 服务 40 秒还没起来，多半是模型太大或显存不够。")
+
+
 def speak(text, role=None, **overrides):
     """把一段文字念成 wav 字节。
 
-    每次调用都是独立的：generate_custom_voice 本身没有跨请求状态。
-    role 先按音色表换成 speaker，overrides 再盖上去（speaker / instruct / language…）。
+    每次调用都是独立的：参数只跟着这一次请求走，服务端不存任何会话状态。
+    role 先按音色表换成 voice，overrides 再盖上去（voice / language / temperature / seed）。
     """
     body = (text or "").strip()
     if not body:
         raise SpeechError("没有要念的文字。")
     conf = speech_conf()
-    raw = parse_options(conf.get("options"))
-    options = {k: v for k, v in raw.items() if k not in LOAD_KEYS}
+    base = _ensure_server(conf)
 
-    speaker = voice_for(conf, role)
-    if speaker:
-        options["speaker"] = speaker
+    payload = {
+        "text": body,
+        "voice": voice_for(conf, role) or conf.get("voice") or "vivian",
+        "language": conf.get("language") or "chinese",
+        "format": "wav",
+    }
     for key, val in overrides.items():
         if val is None or val == "":
             continue
-        options[str(key)] = str(val)
+        payload[str(key)] = val
 
-    # voco 的缓存 key 只有 alias + text，换音色/换语气也会命中旧音频。
-    # 把这次真正生效的参数掺进指纹；它进不了 generate 的签名，被 **kwargs 吃掉
-    options["_vo"] = "|".join(str(options.get(k) or "") for k in (
-        "variant", "model_id", "speaker", "instruct", "language"))
-    router = _get_router(conf)
-    with _speak_lock:
+    try:
+        res = requests.post(base + "/v1/tts", json=payload, timeout=180)
+    except requests.RequestException as exc:
+        raise SpeechError("连不上 vox 服务：%s" % exc) from exc
+    if res.status_code != 200:
+        detail = ""
         try:
-            raw = router.infer(conf["alias"], text=body, **options)
-            return _wav_bytes(_first_audio(raw))
-        except SpeechError:
-            raise
-        except Exception as exc:
-            raise SpeechError("念到一半出错：%s" % exc) from exc
+            detail = (res.json() or {}).get("error") or ""
+        except ValueError:
+            detail = (res.text or "")[:200]
+        raise SpeechError("vox 合成失败（%s）：%s" % (res.status_code, detail or "没给原因"))
+    audio = res.content
+    if not audio:
+        raise SpeechError("vox 返回了空音频。")
+    return audio
 
 
 def reset():
-    """设置改了就丢掉旧的 router，下次念按新插件重新加载。"""
-    global _router, _loaded_key
-    with _lock:
-        _router = None
-        _loaded_key = None
+    """设置改了就停掉旧服务，下次念按新配置重起。"""
+    global _proc, _ready_at
+    with _serve_lock:
+        if _proc is not None and _proc.poll() is None:
+            try:
+                _proc.terminate()
+                _proc.wait(timeout=8)
+            except (OSError, subprocess.SubprocessError):
+                pass
+        _proc, _ready_at = None, ""

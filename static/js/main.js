@@ -385,16 +385,17 @@ async function saveImageConf() {
 }
 
 async function saveSpeechConf() {
-  const plugin = $('#sp-plugin');
-  const device = $('#sp-device');
-  const options = $('#sp-options');
-  const voices = $('#sp-voices');
+  const val = (sel) => { const el = $(sel); return el ? el.value.trim() : ''; };
   const body = {
     mode: state.speechMode || 'stream',
-    plugin: plugin ? plugin.value.trim() : '',
-    device: device ? device.value.trim() : '',
-    options: options ? options.value : '',
-    voices: voices ? voices.value : '',
+    model: val('#sp-model'),
+    python: val('#sp-python'),
+    url: val('#sp-url'),
+    device: val('#sp-device'),
+    threads: val('#sp-threads') || 0,
+    voice: val('#sp-voice'),
+    language: val('#sp-language'),
+    voices: (($('#sp-voices') || {}).value || ''),
   };
   try {
     const res = await api('/api/speech-config', { method: 'PUT', body });
@@ -418,9 +419,13 @@ function fillSpeechForm() {
   const set = (sel, v) => { const el = $(sel); if (el) el.value = v == null ? '' : v; };
   state.speechMode = c.mode === 'manual' ? 'manual' : 'stream';
   syncSpeechModeSeg();
-  set('#sp-plugin', c.plugin);
+  set('#sp-model', c.model);
+  set('#sp-python', c.python);
+  set('#sp-url', c.url);
   set('#sp-device', c.device);
-  set('#sp-options', c.options);
+  set('#sp-threads', c.threads);
+  set('#sp-voice', c.voice);
+  set('#sp-language', c.language);
   set('#sp-voices', c.voices);
 }
 

@@ -473,6 +473,23 @@ body.story-view #btn-search { display: none; }
   transition: opacity .12s ease; align-self: flex-end;
 }
 .msg:hover .msg-tools, .turn:hover .msg-tools, .msg-tools:focus-within { opacity: 1; }
+/* 正在念 / 暂停：没这两个状态就不知道再点一下会发生什么 */
+.msg-tools button.speaking {
+  opacity: 1; border-color: var(--accent, #c98b5a);
+  color: var(--accent, #c98b5a);
+  animation: speak-pulse 1.4s ease-in-out infinite;
+}
+.msg-tools button.speaking.paused {
+  animation: none; border-style: dashed; opacity: .75;
+}
+@keyframes speak-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(201, 139, 90, .45); }
+  50% { box-shadow: 0 0 0 4px rgba(201, 139, 90, 0); }
+}
+/* 暂停了就不该只在 hover 时才看得见 */
+.msg:has(button.speaking) .msg-tools,
+.turn:has(button.speaking) .msg-tools { opacity: 1; }
+
 .msg-tools button {
   border: 1px solid var(--border-strong); background: var(--bg-elev);
   color: var(--text-mute); border-radius: 6px; cursor: pointer;

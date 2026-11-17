@@ -651,19 +651,23 @@ def api_image_config_save():
 @app.get("/api/speech-config")
 def api_speech_config():
     conf = speech_conf()
-    # 装没装 voco 直接告诉前端，省得用户点朗读才看到报错
+    # 先把结论告诉前端：解释器有没有、模型在不在，省得点朗读才看到报错
+    why = ""
     try:
-        import voco.core  # noqa: F401
-        ready, why = True, ""
-    except Exception as exc:
-        ready, why = False, "pip install voco 之后才念得出来（%s）" % exc
-    return jsonify({"conf": conf, "ready": ready, "why": why})
+        python = speech._find_python(conf)
+    except speech.SpeechError as exc:
+        python, why = "", str(exc)
+    if not why:
+        model = speech.model_path(conf)
+        if not os.path.isfile(model):
+            why = "模型文件不存在：%s" % model
+    return jsonify({"conf": conf, "ready": not why, "why": why, "python": python})
 
 
 @app.put("/api/speech-config")
 def api_speech_config_save():
     conf = save_speech_conf(request.get_json(silent=True) or {})
-    # 插件换过就要重新 load，否则还是拿旧模型念
+    # 模型或解释器换过就要重起服务，否则还是拿旧的那个念
     speech.reset()
     return jsonify(conf)
 
@@ -672,8 +676,8 @@ def api_speech_config_save():
 def api_speech():
     """把一段文字念成 wav 直接吐回去，不落盘。"""
     data = request.get_json(silent=True) or {}
-    # 每次请求独立：role 按音色表换成 speaker，其余字段直接盖到这一次调用上
-    overrides = {k: data.get(k) for k in ("speaker", "instruct", "language") if data.get(k)}
+    # 每次请求独立：role 按音色表换成 voice，其余字段直接盖到这一次调用上
+    overrides = {k: data.get(k) for k in ("voice", "language", "temperature", "seed") if data.get(k)}
     try:
         audio = speech.speak(data.get("text") or "", role=data.get("role") or "", **overrides)
     except speech.SpeechError as exc:

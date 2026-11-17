@@ -1,5 +1,0 @@
-Metadata-Version: 2.4
-Name: voco-qwen3-tts
-Version: 0.1.0
-Summary: Qwen3-TTS plugin for voco
-Requires-Python: >=3.10

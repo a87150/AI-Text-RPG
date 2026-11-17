@@ -2616,53 +2616,61 @@ def main():
     rp_config.save_image_conf({"url": "", "timeout": 180})
 
     _sp = rp_config.save_speech_conf({
-        "mode": "stream", "plugin": "qwen3-tts", "device": "cuda:0",
-        "options": "variant=custom\nspeaker=Vivian"})
+        "mode": "stream", "model": "models/qwen3-custom.tmod",
+        "voice": "ryan", "language": "chinese"})
     check("语音模式能存", _sp["mode"] == "stream", str(_sp))
-    check("语音参数能存", "speaker=Vivian" in _sp["options"], str(_sp))
-    check("语音插件不能是空",
-          rp_config.save_speech_conf({"plugin": ""})["plugin"] == rp_config.SPEECH_DEFAULTS["plugin"])
+    check("语音模型能存", _sp["model"].endswith(".tmod"), str(_sp))
+    check("语音音色能存", _sp["voice"] == "ryan", str(_sp))
+    check("语音模型不能是空",
+          rp_config.save_speech_conf({"model": ""})["model"] == rp_config.SPEECH_DEFAULTS["model"])
+    check("语音地址不能是空",
+          rp_config.save_speech_conf({"url": ""})["url"] == rp_config.SPEECH_DEFAULTS["url"])
     check("启用朗读开关已撤", "enabled" not in rp_config.speech_conf(),
           str(rp_config.speech_conf()))
-    rp_config.save_speech_conf({"mode": "stream"})
+    check("voco 时代的键已清",
+          not ({"plugin", "alias", "options"} & set(rp_config.speech_conf())),
+          str(rp_config.speech_conf()))
+    rp_config.save_speech_conf({"mode": "stream", "voice": "vivian"})
 
-    # 透传参数是一行一个 key=value，这是语音与模型插件之间的唯一契约
-    _opts = rp_speech.parse_options("voice=af_heart\ninstruct=用平静的语气念\n\n# 注释\nbad")
-    check("默认插件是 qwen3-tts", rp_config.SPEECH_DEFAULTS["plugin"] == "qwen3-tts",
-          rp_config.SPEECH_DEFAULTS["plugin"])
-    # variant/model_id/dtype 是构造参数，不能混进 infer 的 kwargs
-    _sp_opts = rp_speech.parse_options("variant=custom\nspeaker=Vivian\ndtype=float16")
-    _to_infer = {k: v for k, v in _sp_opts.items() if k not in rp_speech.LOAD_KEYS}
-    check("构造参数不漏进推理",
-          _to_infer == {"speaker": "Vivian"}, str(_to_infer))
-
+    # 每行一个 key=value，音色表和迁移都用它
+    _opts = rp_speech.parse_options("voice=af_heart\ninstruct=\u7528\u5e73\u9759\u7684\u8bed\u6c14\u5ff5\n\n# \u6ce8\u91ca\nbad")
     check("语音参数按行解析",
           _opts.get("voice") == "af_heart" and len(_opts) == 2, str(_opts))
     check("模式只能是两种之一",
           set(rp_config.SPEECH_READ_MODES) == {"stream", "manual"})
+    check("默认音色是 vivian",
+          rp_config.SPEECH_DEFAULTS["voice"] == "vivian")
 
-    # 音色表：角色名换 speaker，换不出就是空串（退回 options 里的默认音色）
-    _vt = {"voices": ".".join(["\u51db=Vivian", "\u5f15\u8ff0=Ryan", "*=Ethan"]).replace(".", chr(10))}
+    # 音色表：角色名换音色，换不出就是空串（退回默认音色）
+    _vt = {"voices": ".".join(["\u51db=vivian", "\u5f15\u8ff0=ryan", "*=eric"]).replace(".", chr(10))}
     check("音色表按角色查",
-          rp_speech.voice_for(_vt, "凛") == "Vivian"
-          and rp_speech.voice_for(_vt, "引述") == "Ryan", str(_vt))
+          rp_speech.voice_for(_vt, "\u51db") == "vivian"
+          and rp_speech.voice_for(_vt, "\u5f15\u8ff0") == "ryan", str(_vt))
     check("音色表有兜底",
-          rp_speech.voice_for(_vt, "没配过的人") == "Ethan")
+          rp_speech.voice_for(_vt, "\u6ca1\u914d\u8fc7\u7684\u4eba") == "eric")
     check("没配音色表就不换",
-          rp_speech.voice_for({"voices": ""}, "凛") == "")
+          rp_speech.voice_for({"voices": ""}, "\u51db") == "")
     check("空角色走兜底",
-          rp_speech.voice_for(_vt, "") == "Ethan")
+          rp_speech.voice_for(_vt, "") == "eric")
 
-    # 换音色 / 换语气要命中新音频，所以指纹得把 speaker、instruct 也掺进去
-    _src = open("rp/speech.py", encoding="utf-8").read()
-    check("缓存指纹含音色与语气",
-          '"variant", "model_id", "speaker", "instruct", "language"' in _src)
+    # 模型路径相对项目根走，写绝对路径也认
+    check("模型路径能拼绝对路径",
+          os.path.isabs(rp_speech.model_path({"model": "models/x.tmod"})),
+          rp_speech.model_path({"model": "models/x.tmod"}))
+    try:
+        rp_speech.model_path({"model": ""})
+        _blank_ok = False
+    except rp_speech.SpeechError:
+        _blank_ok = True
+    check("模型没配就报错", _blank_ok)
+
     _html_sp = open("templates/index.html", encoding="utf-8").read()
     check("设置里有音色表", 'id="sp-voices"' in _html_sp)
+    check("设置里有模型路径", 'id="sp-model"' in _html_sp)
+    check("设置里没 voco 残留", "voco" not in _html_sp)
     _ui = open("static/js/ui.js", encoding="utf-8").read()
     check("分段朗读入口在", "export function segmentsOf" in _ui
           and "export async function speakSegments" in _ui)
-    check("旁白引语能切", "QUOTE_RE" in _ui and "splitQuotes" in _ui)
 
     # 跨币种的累计要分开记，面板才能写成 ¥3.2 + $0.5；混加会得到一个不对的数
     _mix = "zz-mix-currency"

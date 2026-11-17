@@ -61,6 +61,64 @@ def _load_workflow():
     with open(WORKFLOW_PATH, encoding="utf-8") as f:
         return json.load(f)
 
+
+# 换工作流时这几个节点号要跟着改，所以导入时得说清楚缺哪个
+NODE_ROLES = {
+    NODE_PROMPT: "正向提示词",
+    NODE_NEG: "负向提示词",
+    NODE_LATENT: "空 latent（尺寸）",
+    NODE_SEED: "KSampler（种子）",
+    NODE_SAVE: "保存",
+}
+
+
+def workflow_text():
+    """导出：把当前工作流原样吐成文本。"""
+    return _load_workflow()
+
+
+def workflow_problems(workflow):
+    """导入前检查。返回问题列表，空表示能用。
+
+    只看结构，不猜语义：是对象、每个值是带 class_type 的节点、
+    五个固定节点号都在。少一个就生成不了，与其生成时才炸不如现在说。
+    """
+    if not isinstance(workflow, dict) or not workflow:
+        return ["不是 ComfyUI 的 API 格式（顶层应该是一个非空对象）"]
+    bad = [k for k, v in workflow.items()
+           if not isinstance(v, dict) or not v.get("class_type")]
+    if bad:
+        return ["这些节点缺少 class_type：%s" % ", ".join(map(str, bad[:5]))]
+    missing = [("%s（%s）" % (n, r)) for n, r in NODE_ROLES.items() if n not in workflow]
+    if missing:
+        return ["缺少节点：" + "、".join(missing)]
+    return []
+
+
+def save_workflow(workflow):
+    """导入：校验通过才落盘，旧的先留一份 .bak，导错了能退回去。"""
+    problems = workflow_problems(workflow)
+    if problems:
+        raise ValueError("；".join(problems))
+    if os.path.isfile(WORKFLOW_PATH):
+        try:
+            os.replace(WORKFLOW_PATH, WORKFLOW_PATH + ".bak")
+        except OSError:
+            pass
+    # 先写临时文件再换名，写到一半断电也不会留下半个 json
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(WORKFLOW_PATH) or ".", suffix=".json")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(workflow, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, WORKFLOW_PATH)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+    return workflow_text()
+
 def _submit(workflow):
     res = requests.post(comfy_url() + "/prompt",
                         json={"prompt": workflow, "client_id": uuid.uuid4().hex},
