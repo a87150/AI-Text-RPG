@@ -267,8 +267,7 @@ function fillWritingForm() {
     const el = $(id);
     if (el) el.value = w[key] == null ? '' : w[key];
   }
-  const priceBox = $('#w-prices');
-  if (priceBox) priceBox.value = (state.conf && state.conf.prices) || '';
+  renderPricesTable((state.conf && state.conf.prices) || '');
   const font = $('#prefs-font');
   if (font) font.value = localStorage.getItem(FONT_KEY) || 'md';
   syncLanguageSeg();
@@ -384,6 +383,173 @@ async function saveImageConf() {
   }
 }
 
+// ---------- 设置里的两张键值表：单价、说话风格 ----------
+
+/** 表格里每一行丢掉的空行不要，剩下的按 [键, ...] 交出去。 */
+function readTable(tableId, cols) {
+  const tbody = document.querySelector('#' + tableId + ' tbody');
+  if (!tbody) return [];
+  const rows = [];
+  for (const tr of tbody.querySelectorAll('tr')) {
+    const cells = [...tr.querySelectorAll('input, select')];
+    if (cells.length < cols) continue;
+    rows.push(cells.map((c) => String(c.value || '').trim()));
+  }
+  return rows;
+}
+
+function tableRow(tableId, html) {
+  const tbody = document.querySelector('#' + tableId + ' tbody');
+  if (!tbody) return null;
+  const tr = document.createElement('tr');
+  tr.innerHTML = html;
+  const del = tr.querySelector('.kv-del');
+  if (del) del.onclick = () => { tr.remove(); markDirty(tableId); };
+  tbody.appendChild(tr);
+  return tr;
+}
+
+function markDirty(tableId) {
+  const note = document.querySelector('[data-note="' + (tableId === 'prices-table' ? 'prices' : 'styles') + '"]');
+  if (note) {
+    note.textContent = '表格已改动，记得点「保存」生效';
+    note.classList.remove('bad', 'ok');
+  }
+}
+
+/** 单价表：模型名 / 输入 / 输出 / 缓存命中 / 币种。 */
+function renderPricesTable(text) {
+  const tbody = document.querySelector('#prices-table tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  const lines = String(text || '').split(String.fromCharCode(10));
+  for (const line of lines) {
+    const body = line.trim();
+    if (!body || body.startsWith('#')) continue;
+    const parts = body.split(/\s+/);
+    if (parts.length < 3) continue;
+    const [name, inp, out, cache, cur] = parts;
+    tableRow('prices-table',
+      '<td><input data-f="name" placeholder="模型名" value="' + esc(name) + '"></td>'
+      + '<td><input data-f="in" type="number" step="0.01" min="0" value="' + esc(inp) + '"></td>'
+      + '<td><input data-f="out" type="number" step="0.01" min="0" value="' + esc(out) + '"></td>'
+      + '<td><input data-f="cache" type="number" step="0.01" min="0" value="' + esc(cache || '') + '"></td>'
+      + '<td><select data-f="cur">' + curOptions(cur || 'CNY') + '</select></td>'
+      + '<td><button type="button" class="kv-del" title="删掉这行">×</button></td>');
+  }
+  syncPricesEmpty();
+}
+
+function curOptions(sel) {
+  return ['CNY', 'USD'].map((c) => '<option value="' + c + '"' + (c === sel ? ' selected' : '') + '>' + c + '</option>').join('');
+}
+
+function syncPricesEmpty() {
+  const tbody = document.querySelector('#prices-table tbody');
+  if (!tbody) return;
+  const empty = document.querySelector('#prices-table .kv-empty');
+  if (!tbody.children.length && !empty) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td class="kv-empty" colspan="6">还没有单价，点上面的「加一行」加一个</td>';
+    tbody.appendChild(tr);
+  } else if (tbody.children.length > 1 || (tbody.children.length === 1 && !tbody.querySelector('.kv-empty'))) {
+    if (empty) empty.closest('tr').remove();
+  }
+}
+
+/** 表里返回给后端的仍然是原来那行文本，格式没变。 */
+function pricesText() {
+  return readTable('prices-table', 3)
+    .filter((c) => c[0] && c[1] !== '' && c[2] !== '')
+    .map((c) => [c[0], c[1], c[2], c[3] || '0', c[4] || 'CNY'].join(' '))
+    .join(String.fromCharCode(10));
+}
+
+/** 风格表：风格名 / 描述。 */
+function renderStylesTable(text) {
+  const tbody = document.querySelector('#styles-table tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  for (const line of String(text || '').split(String.fromCharCode(10))) {
+    const body = line.trim();
+    if (!body || body.startsWith('#')) continue;
+    const at = body.indexOf('=');
+    if (at < 1) continue;
+    tableRow('styles-table',
+      '<td><input data-f="name" placeholder="风格名" value="' + esc(body.slice(0, at).trim()) + '"></td>'
+      + '<td><input data-f="desc" placeholder="说话很小声，害羞，有点结巴" value="' + esc(body.slice(at + 1).trim()) + '"></td>'
+      + '<td><button type="button" class="kv-del" title="删掉这行">×</button></td>');
+  }
+  syncStylesEmpty();
+}
+
+function syncStylesEmpty() {
+  const tbody = document.querySelector('#styles-table tbody');
+  if (!tbody) return;
+  const empty = document.querySelector('#styles-table .kv-empty');
+  if (!tbody.children.length && !empty) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td class="kv-empty" colspan="3">还没有风格，点上面的「加一条」加一个</td>';
+    tbody.appendChild(tr);
+  } else if (tbody.children.length > 1 || (tbody.children.length === 1 && !tbody.querySelector('.kv-empty'))) {
+    if (empty) empty.closest('tr').remove();
+  }
+}
+
+function stylesText() {
+  return readTable('styles-table', 2)
+    .filter((c) => c[0] && c[1])
+    .map((c) => c[0] + '=' + c[1])
+    .join(String.fromCharCode(10));
+}
+
+function esc(v) {
+  return String(v == null ? '' : v)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/** 两张表的「加一行」按钮。 */
+/** 表格里改了任何一格都提示还没保存。 */
+function bindTableDirty() {
+  for (const [id, noteKey] of [['prices-table', 'prices'], ['styles-table', 'styles']]) {
+    const tbody = document.querySelector('#' + id + ' tbody');
+    if (!tbody) continue;
+    tbody.addEventListener('input', () => markDirty(id), true);
+    tbody.addEventListener('change', () => markDirty(id), true);
+  }
+}
+
+function bindTableAdd() {
+  const addPrice = $('#prices-add');
+  if (addPrice) {
+    addPrice.onclick = () => {
+      const empty = document.querySelector('#prices-table .kv-empty');
+      if (empty) empty.closest('tr').remove();
+      const tr = tableRow('prices-table',
+        '<td><input data-f="name" placeholder="模型名"></td>'
+        + '<td><input data-f="in" type="number" step="0.01" min="0"></td>'
+        + '<td><input data-f="out" type="number" step="0.01" min="0"></td>'
+        + '<td><input data-f="cache" type="number" step="0.01" min="0"></td>'
+        + '<td><select data-f="cur">' + curOptions('CNY') + '</select></td>'
+        + '<td><button type="button" class="kv-del" title="删掉这行">×</button></td>');
+      if (tr) { const inp = tr.querySelector('input'); if (inp) inp.focus(); }
+    };
+  }
+  const addStyle = $('#styles-add');
+  if (addStyle) {
+    addStyle.onclick = () => {
+      const empty = document.querySelector('#styles-table .kv-empty');
+      if (empty) empty.closest('tr').remove();
+      const tr = tableRow('styles-table',
+        '<td><input data-f="name" placeholder="风格名"></td>'
+        + '<td><input data-f="desc" placeholder="说话很小声，害羞，有点结巴"></td>'
+        + '<td><button type="button" class="kv-del" title="删掉这行">×</button></td>');
+      if (tr) { const inp = tr.querySelector('input'); if (inp) inp.focus(); }
+    };
+  }
+}
+
 async function saveSpeechConf() {
   const val = (sel) => { const el = $(sel); return el ? el.value.trim() : ''; };
   const body = {
@@ -394,7 +560,7 @@ async function saveSpeechConf() {
     voice: val('#sp-voice'),
     threads: val('#sp-threads') || 0,
     idle: val('#sp-idle'),
-    voices: (($('#sp-voices') || {}).value || ''),
+    styles: stylesText(),
   };
   try {
     const res = await api('/api/speech-config', { method: 'PUT', body });
@@ -410,6 +576,7 @@ const JSON_PAIRS = [
   { key: 'workflow', url: '/api/image-workflow', file: 'workflow.json', after: null },
   { key: 'prices', url: '/api/prefs/prices', file: 'prices.json', after: 'writing' },
   { key: 'voices', url: '/api/prefs/voices', file: 'voices.json', after: 'speech' },
+  { key: 'styles', url: '/api/prefs/styles', file: 'styles.json', after: 'speech' },
 ];
 
 function notePair(key, text, bad) {
@@ -479,6 +646,16 @@ function bindJsonButtons() {
   }
 }
 
+let tablesBound = false;
+
+/** 打开设置时调一次：按钮和「已改动」提示只绑一遍。 */
+export function bindSettingsTables() {
+  if (tablesBound) return;
+  tablesBound = true;
+  bindTableAdd();
+  bindTableDirty();
+}
+
 function fillImageForm() {
   const c = (state.conf && state.conf.image) || {};
   const url = $('#img-url');
@@ -498,7 +675,7 @@ function fillSpeechForm() {
   set('#sp-voice', c.voice);
   set('#sp-threads', c.threads);
   set('#sp-idle', c.idle);
-  set('#sp-voices', c.voices);
+  renderStylesTable(c.styles);
 }
 
 function syncSpeechModeSeg() {
@@ -564,8 +741,7 @@ async function saveWriting(quiet = false) {
     const value = Number(raw);
     if (raw !== '' && Number.isFinite(value)) body[key] = value;
   }
-  const priceBox = $('#w-prices');
-  if (priceBox) body.prices = priceBox.value || '';
+  body.prices = pricesText();
   body.language = currentLanguage();
   body.reasoning_effort = currentReasoning();
   body.tier = currentTier();
@@ -642,6 +818,7 @@ function openPrefs() {
     fillImageForm();
     fillSpeechForm();
     bindJsonButtons();
+    bindSettingsTables();
     syncThemeSeg();
     syncLanguageSeg();
     $('#prefs-modal').classList.remove('hidden');

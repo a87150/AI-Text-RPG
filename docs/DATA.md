@@ -127,11 +127,18 @@ cover 只存文件名，路径由 DATA_DIR 推，换机器能跑。cover_history
       "prices": {"deepseek-flash": [1.00, 4.00, 0.02, "CNY"]},
       "image": {"url": "", "timeout": 180},
       "speech": {"mode": "stream", "model": "models/qwen3-custom.tmod",
-                 "url": "http://127.0.0.1:8190", "device": "auto", "voice": "vivian"}
+                 "device": "auto", "voice": "vivian",
+                 "voices": "旁白=vivian\n*=vivian",
+                 "styles": "害羞=说话很小声，害羞，结巴"}
     }
 
 image 是生图的 ComfyUI 配置，url 留空会回退到 LT_COMFY 环境变量。
-speech 是朗读配置，交给 vox 子进程，见 CONFIG.md。
+speech 是朗读配置，交给常驻的 vox 合成进程（rp/vox_worker.py），见 CONFIG.md。
+
+voices 是「角色=音色」表，按角色换内置发音人；styles 是「风格名=自然语言描述」表，
+风格交给模型的 instruct 参数，同一个音色能换语气（害羞、气势汹汹这类）。
+角色卡上的 voice / style、以及会话上的 user_voice / user_style 优先于这两张表，
+表里留空的那一项才回落到表和全局音色。
 
 prices 是用户在设置里改过的模型单价，只存覆盖项，没动过的模型仍走 config.py 的 `PRICES` 默认表。
 值是 [输入, 输出, 缓存命中, 币种]，每百万 token，币种是 CNY 或 USD。每个模型自带币种不折算，
@@ -208,7 +215,7 @@ totals.json 的累计费用按币种分开记（`cost_by_cur`），混着加会�
     PUT    /api/backup-config              定时备份：enabled / every_minutes / keep
     GET    /api/image-config              生图用的 ComfyUI 地址与超时
     PUT    /api/image-config              保存生图配置
-    GET    /api/prefs/<block>             导出单价表或音色表，block 是 prices / voices
+    GET    /api/prefs/<block>             导出单价表 / 音色表 / 风格表，block 是 prices / voices / styles
     POST   /api/prefs/<block>             导入上面那份 json，先校验再存
     GET    /api/image-workflow             导出当前 ComfyUI 工作流 json
     POST   /api/image-workflow             导入工作流，先校验再落盘，旧的留 .bak

@@ -361,7 +361,28 @@ export function renderCharacterEditor(box, list, onChange) {
     voice.value = c.voice || '';
     voice.onchange = () => { c.voice = voice.value; };
 
-    card.append(head, name, voice, role, count, stateField);
+    // 语气也挂在卡上：同一个音色，说话方式跟着角色走
+    const style = document.createElement('select');
+    style.className = 'cc-input';
+    const noStyle = document.createElement('option');
+    noStyle.value = '';
+    noStyle.textContent = '语气：平常';
+    style.appendChild(noStyle);
+    for (const nm of ((state.conf && state.conf.speech_styles) || [])) {
+      const o = document.createElement('option');
+      o.value = nm;
+      o.textContent = '语气 · ' + nm;
+      style.appendChild(o);
+    }
+    style.value = c.style || '';
+    style.onchange = () => { c.style = style.value; };
+
+    // 音色和语气并排：两行下拉会把卡撑得很长
+    const says = document.createElement('div');
+    says.className = 'cc-says';
+    says.append(voice, style);
+
+    card.append(head, name, says, role, count, stateField);
     box.appendChild(card);
   });
 
@@ -1237,11 +1258,11 @@ function toggleSpeakPause() {
   return true;
 }
 
-async function fetchSpeech(text, role, voice) {
+async function fetchSpeech(text, role, voice, style) {
   const res = await fetch('/api/speech', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text, role: role || '', voice: voice || '' }),
+    body: JSON.stringify({ text, role: role || '', voice: voice || '', style: style || '' }),
   });
   if (!res.ok) {
     const info = await res.json().catch(() => ({}));
@@ -1356,6 +1377,15 @@ function splitQuotes(text) {
  * 多角色那条路是白给的：后端已经把 lines 里的 speaker 分好了。
  * 一般模式只有旁白，旁白里人物说的话靠引号切，角色名给「引述」。
  */
+/** 查这个角色卡上配的风格；没配过返回空串，就是平常的语气。 */
+export function styleOf(name) {
+  const key = String(name || '').trim();
+  if (!key) return '';
+  const chars = (state.session && state.session.characters) || [];
+  const hit = chars.find((c) => c && String(c.name || '').trim() === key);
+  return (hit && hit.style) || '';
+}
+
 /** 查这个角色卡上配的音色；没配过返回空串，让它退回设置里的音色表。 */
 export function voiceOf(name) {
   const key = String(name || '').trim();
@@ -1367,22 +1397,25 @@ export function voiceOf(name) {
 
 export function segmentsOf(msg, userLabel) {
   const out = [];
-  const push = (role, text, voice) => {
+  const push = (role, text, voice, style) => {
     const body = speakable(text);
-    if (body) out.push({ role, text: body, voice: voice || '' });
+    if (body) out.push({ role, text: body, voice: voice || '', style: style || '' });
   };
   if (!msg) return out;
   if (msg.role === 'user') {
     // 我念的词跟着「我的角色」那张卡走，没设过就退回全局音色表
     const mine = (state.session && state.session.user_voice) || '';
-    push(userLabel || '\u6211', msg.content, mine);
+    const myStyle = (state.session && state.session.user_style) || '';
+    push(userLabel || '\u6211', msg.content, mine, myStyle);
     return out;
   }
   const lines = (msg.lines || []).filter((x) => x && x.text);
   if (lines.length) {
     // 旁白没有角色卡，留空让它走全局音色表
-    if (msg.narrator) push('\u65c1\u767d', msg.narrator, '');
-    for (const it of lines) push(it.speaker || 'AI', it.text, voiceOf(it.speaker));
+    if (msg.narrator) push('\u65c1\u767d', msg.narrator, '', '');
+    for (const it of lines) {
+      push(it.speaker || 'AI', it.text, voiceOf(it.speaker), styleOf(it.speaker));
+    }
     return out;
   }
   for (const piece of splitQuotes(msg.narrator || msg.content || '')) {
@@ -1418,7 +1451,9 @@ export async function speakSegments(segments, btn) {
   const flat = [];
   for (const seg of (segments || [])) {
     if (!seg || !seg.text) continue;
-    for (const piece of splitLong(seg.text)) flat.push({ role: seg.role, text: piece, voice: seg.voice });
+    for (const piece of splitLong(seg.text)) {
+      flat.push({ role: seg.role, text: piece, voice: seg.voice, style: seg.style });
+    }
   }
   const list = flat;
   if (!list.length) { toast('这段没什么可以念的。'); return; }
@@ -1429,7 +1464,9 @@ export async function speakSegments(segments, btn) {
   stopSpeak();
   const pending = new Map();
   const ask = (i) => {
-    if (!pending.has(i)) pending.set(i, fetchSpeech(list[i].text, list[i].role, list[i].voice));
+    if (!pending.has(i)) {
+      pending.set(i, fetchSpeech(list[i].text, list[i].role, list[i].voice, list[i].style));
+    }
     return pending.get(i);
   };
 

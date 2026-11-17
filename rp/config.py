@@ -161,7 +161,7 @@ SPEECH_DEFAULTS = {
     "python": "",
     # .tmod 模型；相对路径按项目根算
     "model": "models/qwen3-custom.tmod",
-    # vox serve 的地址
+    # 已经不看了：合成改成走常驻进程的管道。留着是为了老配置不报错
     "url": "http://127.0.0.1:8190",
     "device": "auto",
     "threads": 0,
@@ -170,6 +170,9 @@ SPEECH_DEFAULTS = {
     "idle": 120,
     # 角色名 -> 音色，一行一个「角色=vivian」。* 是兜底，没配的角色走它
     "voices": "",
+    # 风格名 -> 自然语言描述，一行一个「害羞=说话很小声，害羞，结巴」。
+    # 交给模型当 instruct，同一音色能换语气
+    "styles": "",
 }
 # 设备只认这三个。写 cuda:0 之类的会静默退回 CPU，一句要等三十秒
 SPEECH_DEVICES = ("auto", "gpu", "cpu")
@@ -230,20 +233,14 @@ CREATIVITY_LABELS = {
 PRICES = {
     "deepseek-flash": (1.00, 4.00, 0.02, "CNY"),
     "deepseek-v4-pro": (4.50, 13.50, 0.15, "CNY"),
-    # 官网现表已不列这两个，按 V3 当时的人民币价留着，给还在用的会话兜底
     "deepseek-chat": (2.00, 8.00, 0.50, "CNY"),
     "deepseek-reasoner": (4.00, 16.00, 1.00, "CNY"),
-    "gpt-4o-mini": (0.15, 0.60, 0.075, "USD"),
     "gpt-4o": (2.50, 10.00, 1.25, "USD"),
-    "gpt-4.1-mini": (0.40, 1.60, 0.10, "USD"),
-    "gpt-4.1-nano": (0.10, 0.40, 0.025, "USD"),
-    "gpt-4.1": (2.00, 8.00, 0.50, "USD"),
+    "gpt-5": (1.25, 10.00, 0.125, "USD"),
     "gpt-5-mini": (0.25, 2.00, 0.025, "USD"),
     "gpt-5-nano": (0.05, 0.40, 0.005, "USD"),
-    "gpt-5": (1.25, 10.00, 0.125, "USD"),
+    "gpt-4o-mini": (0.15, 0.60, 0.075, "USD"),
     "o4-mini": (1.10, 4.40, 0.275, "USD"),
-    "o3-mini": (1.10, 4.40, 0.55, "USD"),
-    "o3": (2.00, 8.00, 0.50, "USD"),
     "claude-3-5-sonnet": (3.00, 15.00, 0.30, "USD"),
     "claude-3-5-haiku": (0.80, 4.00, 0.08, "USD"),
     "qwen-max": (1.60, 6.40, 0.80, "USD"),
@@ -266,35 +263,23 @@ def is_peak(at=None):
     return any(lo <= t.tm_hour < hi for lo, hi in PEAK_HOURS)
 
 _prices_override = {}
+# 用户删掉的模型。默认表里还有，但用户说不要了，就别再冒出来
+_prices_deleted = set()
 
 def prices():
-    """默认价目表叠上用户改过的。用户填的整行生效，不做逐字段合并。"""
-    out = dict(PRICES)
+    """默认价目表叠上用户改过的。用户填的整行生效，不做逐字段合并。
+
+    用户删掉的行记在 _prices_deleted 里：只在默认表里删不掉，
+    下次回显又被默认值带回来，等于删了个寂寞。
+    """
+    out = {k: v for k, v in PRICES.items() if k not in _prices_deleted}
     out.update(_prices_override)
     return out
 
-def save_prices(data, persist=True):
-    """接受 {模型名: [输入, 输出, 缓存]} 或 {"模型名 输入 输出 缓存"} 的文本。
-
-    文本形式是设置界面的输入框用的：一行一条，空格或逗号分开，缓存单价可省。
-    """
-    global _prices_override
-    rows = {}
-    if isinstance(data, str):
-        for line in data.splitlines():
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            parts = re.split(r"[\s,]+", line)
-            if len(parts) < 3:
-                continue
-            rows[parts[0].lower()] = parts[1:]
-    elif isinstance(data, dict):
-        for key, value in data.items():
-            if isinstance(value, (list, tuple)):
-                rows[str(key).strip().lower()] = list(value)
+def _clean_rows(rows):
+    """把 {名字: [...]} 清洗成 {名字: (输入, 输出, 缓存, 币种)}，认不出的丢。"""
     clean = {}
-    for name, value in rows.items():
+    for name, value in (rows or {}).items():
         if not name:
             continue
         vals = list(value)
@@ -313,12 +298,66 @@ def save_prices(data, persist=True):
         while len(nums) < 3:
             nums.append(nums[0])
         clean[name] = (nums[0], nums[1], nums[2], cur)
+    return clean
+
+
+def save_prices(data, persist=True, replace=False):
+    """接受 {模型名: [输入, 输出, 缓存]} 或 {"模型名 输入 输出 缓存"} 的文本。
+
+    文本形式是设置界面的表格用的：一行一条，空格或逗号分开，缓存单价可省。
+
+    replace=True 表示这是界面上整张表提交：默认表里有、这次没交上来的模型
+    会被记成「用户删掉了」，之后回显不再带出来。其它地方只想补几条覆盖时
+    不要传它，否则会把默认表整个判死。
+    """
+    global _prices_override
+    rows = {}
+    if isinstance(data, str):
+        for line in data.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = re.split(r"[\s,]+", line)
+            if len(parts) < 3:
+                continue
+            rows[parts[0].lower()] = parts[1:]
+    elif isinstance(data, dict):
+        for key, value in data.items():
+            if isinstance(value, (list, tuple)):
+                rows[str(key).strip().lower()] = list(value)
+    clean = _clean_rows(rows)
     with _model_lock:
         _prices_override = clean
+        # 只有界面整表提交（replace=True）才推断删除：没交上来的就是用户删的。
+        # 别处调 save_prices 只是补几条覆盖，不能据此把默认表整个判死。
+        if replace:
+            for name in PRICES:
+                if name in clean:
+                    _prices_deleted.discard(name)
+                else:
+                    _prices_deleted.add(name)
         snapshot = dict(_prices_override)
     if persist:
         persist_settings()
     return snapshot
+
+def _load_prices(data):
+    """从设置文件载入覆盖项。不推导删除名单，那份单独存。"""
+    global _prices_override
+    rows = data
+    if isinstance(data, str):
+        rows = {}
+        for line in data.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = re.split(r"[\s,]+", line)
+            if len(parts) >= 3:
+                rows[parts[0].lower()] = parts[1:]
+    clean = _clean_rows(rows if isinstance(rows, dict) else {})
+    with _model_lock:
+        _prices_override = clean
+
 
 def prices_text():
     """把当前价目表拍成一行一条的文本，给设置界面的输入框回显。"""
@@ -493,7 +532,7 @@ def save_speech_conf(data):
     with _model_lock:
         if data.get("mode") in SPEECH_READ_MODES:
             _speech["mode"] = data["mode"]
-        for field in ("python", "model", "url", "voices"):
+        for field in ("python", "model", "url", "voices", "styles"):
             if field in data:
                 _speech[field] = str(data.get(field) or "").strip()
         # 设备和音色只能是白名单里的，填错了就回退默认
@@ -686,6 +725,7 @@ def persist_settings():
         "tier": prev.get("tier") or _tier,
         "backup": _backup,
         "prices": _prices_override or (prev.get("prices") or {}),
+        "prices_deleted": sorted(_prices_deleted),
         "image": _image if _loaded else (prev.get("image") or dict(IMAGE_DEFAULTS)),
         "speech": _speech if _loaded else (prev.get("speech") or dict(SPEECH_DEFAULTS)),
     }
@@ -784,9 +824,15 @@ def load_settings():
     if not _speech.get("url"):
         _speech["url"] = SPEECH_DEFAULTS["url"]
 
+    saved_deleted = data.get("prices_deleted")
+    if isinstance(saved_deleted, list):
+        global _prices_deleted
+        _prices_deleted = {str(x).strip().lower() for x in saved_deleted if str(x).strip()}
+
     saved_prices = data.get("prices")
     if isinstance(saved_prices, (dict, str)):
-        save_prices(saved_prices, persist=False)
+        # 载入时不重新推导删除名单，用文件里记的那份
+        _load_prices(saved_prices)
 
     backup_saved = data.get("backup")
     if isinstance(backup_saved, dict):

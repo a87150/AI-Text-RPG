@@ -2681,7 +2681,7 @@ def main():
     check("模型没配就报错", _blank_ok)
 
     _html_sp = open("templates/index.html", encoding="utf-8").read()
-    check("设置里有音色表", 'id="sp-voices"' in _html_sp)
+    check("设置里有风格表", 'id="styles-table"' in _html_sp)
     check("设置里有模型路径", 'id="sp-model"' in _html_sp)
     check("设置里没 voco 残留", "voco" not in _html_sp)
     _ui = open("static/js/ui.js", encoding="utf-8").read()

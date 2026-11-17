@@ -174,8 +174,9 @@ def api_config():
         "prices_default": PRICES,
         "image": image_conf(),
         "speech": speech_conf(),
-        # 角色卡上的音色下拉直接用这份，别让前端自己抄一遍
+        # 角色卡上的音色/风格下拉直接用这份，别让前端自己解析那张表
         "speech_voices": list(SPEECH_VOICES),
+        "speech_styles": list(speech.styles_of(speech_conf()).keys()),
     })
 
 def _reclaim_context():
@@ -239,7 +240,8 @@ def api_writing():
     if data.get("creativity"):
         save_creativity(data["creativity"])
     if isinstance(data.get("prices"), str):
-        save_prices(data["prices"])
+        # 界面整表提交，没出现在表里的模型算用户删掉了
+        save_prices(data["prices"], replace=True)
     return jsonify({"writing": conf, "mode": mode_of(),
                     "reasoning_effort": reasoning_effort(), "tier": tier(),
                     "creativity": creativity(), "prices": prices_text()})
@@ -670,8 +672,9 @@ def api_prefs_export(block):
     if block == "prices":
         data = {name: {"in": n[0], "out": n[1], "cache": n[2], "currency": n[3]}
                 for name, n in prices().items()}
-    elif block == "voices":
-        data = speech.parse_options(speech_conf().get("voices"))
+    elif block in ("voices", "styles"):
+        # 两张表都是「名字=文本」的格式，存法一样
+        data = speech.parse_options(speech_conf().get(block))
     else:
         return jsonify({"error": "没有这块配置"}), 404
     return Response(
@@ -709,17 +712,19 @@ def api_prefs_import(block):
             return jsonify({"error": "一条都没认出来，检查模型名和数字"}), 400
         return jsonify({"ok": True, "count": len(kept)})
 
-    if block == "voices":
+    if block in ("voices", "styles"):
         lines = []
-        for role, voice in data.items():
-            role = str(role).strip()
-            voice = str(voice).strip()
-            if not role or not voice:
-                return jsonify({"error": "角色和音色都不能空"}), 400
-            if voice.lower() not in SPEECH_VOICES:
-                return jsonify({"error": "%s 的音色 %s 不在内置列表里" % (role, voice)}), 400
-            lines.append("%s=%s" % (role, voice.lower()))
-        save_speech_conf({"voices": "\n".join(lines)})
+        for key, val in data.items():
+            key = str(key).strip()
+            val = str(val).strip()
+            if not key or not val:
+                return jsonify({"error": "名字和值都不能空"}), 400
+            if block == "voices":
+                if val.lower() not in SPEECH_VOICES:
+                    return jsonify({"error": "%s 的音色 %s 不在内置列表里" % (key, val)}), 400
+                val = val.lower()
+            lines.append("%s=%s" % (key, val))
+        save_speech_conf({block: "\n".join(lines)})
         speech.reset()
         return jsonify({"ok": True, "count": len(lines)})
 
@@ -770,7 +775,7 @@ def api_speech():
     """把一段文字念成 wav 直接吐回去，不落盘。"""
     data = request.get_json(silent=True) or {}
     # 每次请求独立：role 按音色表换成 voice，其余字段直接盖到这一次调用上
-    overrides = {k: data.get(k) for k in ("voice", "temperature", "seed") if data.get(k)}
+    overrides = {k: data.get(k) for k in ("voice", "style", "temperature", "seed") if data.get(k)}
     try:
         audio = speech.speak(data.get("text") or "", role=data.get("role") or "", **overrides)
     except speech.SpeechError as exc:
@@ -1047,8 +1052,9 @@ def api_update_session(sid):
                     "name": str(c.get("name") or ""),
                     "role": str(c.get("role") or ""),
                     "state": str(c.get("state") or ""),
-                    # 音色是用户在这张卡上选的，模型不碰
+                    # 音色和语气是用户在这张卡上选的，模型不碰
                     "voice": str(c.get("voice") or ""),
+                    "style": str(c.get("style") or ""),
                     "history": c.get("history") or [],
                 }
                 for c in data["characters"] if isinstance(c, dict)

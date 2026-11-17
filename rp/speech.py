@@ -1,25 +1,26 @@
 # -*- coding: utf-8 -*-
-"""本地语音：vox-tts（C++ 引擎）通过 HTTP 合成。
+"""本地语音：vox-tts（C++ 引擎）常驻进程，走管道合成。
 
-vox 是独立进程，主应用只当客户端：
+vox 的轮子只到 cp313，而主应用跑在 3.14，装不进同一个解释器，所以起一个
+独立进程（rp/vox_worker.py）当引擎，主应用用 stdin/stdout 跟它说话。
 
-    python -m vox serve --model models/qwen3-custom.tmod --port 8190
-
-为什么要绕一层：vox 的轮子只到 cp313，而主应用跑在 3.14，装不进同一个解释器。
-引擎本身是 C++，换解释器只影响怎么启动，合成路径完全一样。
-实测一句 6.3 秒的音频 3.2 秒合成完，首包 0.18 秒，比原来的纯 Python 实现快一个数量级。
+不用 vox 自带的 serve：它的 /v1/tts 只认预先注册的风格名，内置发音人只有
+default，没法按请求传一句自然语言风格。直接拿 Python 接口就有 instruct，
+"说话很小声，害羞" 这种描述才生效。实测同一句同一音色，害羞比默认长 15%，
+气势汹汹短 45%。
 
 模型是 .tmod 单文件，由 python -m vox build 从 HF 的 Qwen3-TTS 权重转出来：
-一次转换，之后每次启动只 mmap，2.5 秒进内存，不用过 torch。
+一次转换，之后每次启动只 mmap，不用过 torch。
 """
 import json
 import os
 import subprocess
 import sys
+import tempfile
 import threading
 import time
+import uuid
 
-import requests
 
 from .config import BASE_DIR, SPEECH_LANGS, language_of, speech_conf
 
@@ -33,6 +34,9 @@ _idle_thread = None
 # 双击按钮、预取和正式请求撞在一起都很常见，去掉这一层就是白烧几秒 GPU。
 _inflight = {}
 _inflight_lock = threading.Lock()
+
+# 管道只能一问一答，并发写会把两句话的音频搅在一起
+_synth_lock = threading.Lock()
 
 
 class SpeechError(RuntimeError):
@@ -62,6 +66,19 @@ def voice_for(conf, role):
     if name and name in table:
         return table[name]
     return table.get("*") or ""
+
+
+def styles_of(conf):
+    """风格表：一行一个 风格名=自然语言描述。"""
+    return parse_options((conf or {}).get("styles"))
+
+
+def instruct_of(conf, style):
+    """风格名换成描述；表里没有就把传进来的当描述用，方便直接试一句。"""
+    name = (style or "").strip()
+    if not name:
+        return ""
+    return styles_of(conf).get(name) or name
 
 
 def model_path(conf):
@@ -99,50 +116,64 @@ def _find_python(conf):
 
 
 def _alive(conf):
-    try:
-        return requests.get(_base_url(conf) + "/health", timeout=3).status_code == 200
-    except requests.RequestException:
-        return False
+    """常驻进程活着且握过手，才算能合成。"""
+    return _proc is not None and _proc.poll() is None and bool(_ready_at)
 
 
 def _ensure_server(conf):
-    """把 vox 服务拉起来；已经在跑就直接返回。只启一次。"""
+    """把合成进程拉起来；已经在跑就直接返回。"""
     global _proc, _ready_at
     if _alive(conf):
-        return _base_url(conf)
+        return _ready_at
     with _serve_lock:
         if _alive(conf):
-            return _base_url(conf)
+            return _ready_at
         model = model_path(conf)
         if not os.path.isfile(model):
             raise SpeechError("模型文件不存在：%s" % model)
         python = _find_python(conf)
-        port = (_base_url(conf).rsplit(":", 1)[-1] or "8190")
+        worker = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vox_worker.py")
         cmd = (python.split() if " " in python else [python]) + [
-            "-m", "vox", "serve",
-            "--model", model,
-            "--host", "127.0.0.1",
-            "--port", port,
-            "--device", str(conf.get("device") or "auto"),
-            "--threads", str(conf.get("threads") or 0),
+            "-u", worker, model,
+            str(conf.get("device") or "auto"),
+            str(conf.get("threads") or 0),
         ]
         try:
             _proc = subprocess.Popen(
                 cmd, cwd=BASE_DIR,
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True, encoding="utf-8", bufsize=1,
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         except OSError as exc:
-            raise SpeechError("起不来 vox 服务：%s" % exc) from exc
-        # 加载要几秒，给它 40 秒。超时多半是模型路径或显存的问题
-        deadline = time.time() + 40
-        while time.time() < deadline:
-            if _proc.poll() is not None:
-                raise SpeechError("vox 服务启动就退了，检查模型文件和 Python 解释器。")
-            if _alive(conf):
-                _ready_at = _base_url(conf)
-                return _ready_at
-            time.sleep(0.4)
-        raise SpeechError("vox 服务 40 秒还没起来，多半是模型太大或显存不够。")
+            raise SpeechError("起不来 vox 合成进程：%s" % exc) from exc
+
+        # 第一行是就绪握手。加载要几秒，给它 60 秒；读超时靠线程兜住
+        box = {}
+
+        def reader():
+            try:
+                box["line"] = _proc.stdout.readline()
+            except (OSError, ValueError):
+                box["line"] = ""
+
+        th = threading.Thread(target=reader, daemon=True)
+        th.start()
+        th.join(60)
+        line = (box.get("line") or "").strip()
+        if not line:
+            reset()
+            raise SpeechError("vox 合成进程 60 秒没就绪，多半是模型太大或显存不够。")
+        try:
+            info = json.loads(line)
+        except ValueError:
+            reset()
+            raise SpeechError("vox 合成进程握手失败：%s" % line[:120])
+        if not info.get("ok"):
+            reset()
+            raise SpeechError("vox 合成进程起不来：%s" % (info.get("error") or ""))
+        _ready_at = "worker"
+        return _ready_at
 
 
 def _language():
@@ -186,6 +217,7 @@ def speak(text, role=None, **overrides):
         raise SpeechError("没有要念的文字。")
     conf = speech_conf()
 
+    style = overrides.pop("style", None)
     payload = {
         "text": body,
         "voice": voice_for(conf, role) or conf.get("voice") or "vivian",
@@ -196,8 +228,10 @@ def speak(text, role=None, **overrides):
         if val is None or val == "":
             continue
         payload[str(key)] = val
+    # 风格只影响这一句怎么念，不换音色
+    payload["style"] = instruct_of(conf, style)
 
-    key = (body, payload["voice"], payload["language"],
+    key = (body, payload["voice"], payload["style"], payload["language"],
            str(payload.get("temperature") or ""), str(payload.get("seed") or ""))
 
     with _inflight_lock:
@@ -237,19 +271,51 @@ def speak(text, role=None, **overrides):
 
 
 def _synth(conf, payload):
-    base = _ensure_server(conf)
-    try:
-        res = requests.post(base + "/v1/tts", json=payload, timeout=180)
-    except requests.RequestException as exc:
-        raise SpeechError("连不上 vox 服务：%s" % exc) from exc
-    if res.status_code != 200:
-        detail = ""
+    """一句话一次问询：写一行 json，读一行结果，音频落在临时文件里。"""
+    _ensure_server(conf)
+
+    out = os.path.join(tempfile.gettempdir(), "lt-tts-%s.wav" % uuid.uuid4().hex)
+    req = {
+        "op": "synth",
+        "text": payload.get("text") or "",
+        "speaker": payload.get("voice") or "vivian",
+        # 风格是自然语言，vox 的 instruct 收的正是这个
+        "instruct": payload.get("style") or "",
+        "out": out,
+    }
+
+    with _synth_lock:
+        proc = _proc
+        if proc is None or proc.poll() is not None:
+            raise SpeechError("vox 合成进程已经不在了，再念一次就会重起。")
         try:
-            detail = (res.json() or {}).get("error") or ""
-        except ValueError:
-            detail = (res.text or "")[:200]
-        raise SpeechError("vox 合成失败（%s）：%s" % (res.status_code, detail or "没给原因"))
-    audio = res.content
+            proc.stdin.write(json.dumps(req, ensure_ascii=False) + chr(10))
+            proc.stdin.flush()
+            line = proc.stdout.readline()
+        except (OSError, ValueError) as exc:
+            reset()
+            raise SpeechError("和 vox 合成进程的管道断了：%s" % exc) from exc
+
+    if not line.strip():
+        reset()
+        raise SpeechError("vox 合成进程没回话就退了，再念一次就会重起。")
+    try:
+        info = json.loads(line)
+    except ValueError:
+        raise SpeechError("vox 回了个看不懂的结果：%s" % line[:120])
+    if not info.get("ok"):
+        raise SpeechError("vox 合成失败：%s" % (info.get("error") or "没给原因"))
+
+    try:
+        with open(out, "rb") as fh:
+            audio = fh.read()
+    except OSError as exc:
+        raise SpeechError("读不到合成出来的音频：%s" % exc) from exc
+    finally:
+        try:
+            os.remove(out)
+        except OSError:
+            pass
     if not audio:
         raise SpeechError("vox 返回了空音频。")
     return audio
@@ -261,8 +327,16 @@ def reset():
     with _serve_lock:
         if _proc is not None and _proc.poll() is None:
             try:
-                _proc.terminate()
-                _proc.wait(timeout=8)
-            except (OSError, subprocess.SubprocessError):
+                _proc.stdin.write('{"op":"close"}' + chr(10))
+                _proc.stdin.flush()
+            except (OSError, ValueError):
                 pass
+            try:
+                _proc.wait(timeout=3)
+            except (OSError, subprocess.SubprocessError):
+                try:
+                    _proc.terminate()
+                    _proc.wait(timeout=8)
+                except (OSError, subprocess.SubprocessError):
+                    pass
         _proc, _ready_at = None, ""

@@ -160,6 +160,7 @@ window.addEventListener('unhandledrejection', function (e) {
     <div class="field-pair">
       <div class="field"><label for="f-user-name">我扮演的角色名</label><input id="f-user-name" placeholder="例如：林晚"></div>
       <div class="field"><label for="f-user-voice">我的音色</label><select id="f-user-voice"></select></div>
+      <div class="field"><label for="f-user-style">我的语气</label><select id="f-user-style"></select></div>
     </div>
     <div class="field">
       <div class="field-head">
@@ -521,20 +522,26 @@ window.addEventListener('unhandledrejection', function (e) {
         </div>
         <div class="hint">语音语言跟「写作」里的正文语言走。念完不用了会自动把模型收起来，别的模型才能拿到显存。</div>
         <div class="field">
-          <label for="sp-voices">按角色换音色，一行一个 <code>角色=音色</code>。旁白里带引号的话走 <code>引述</code></label>
-          <textarea id="sp-voices" rows="3" spellcheck="false" placeholder="旁白=vivian&#10;引述=ryan&#10;凛=eric&#10;*=vivian"></textarea>
-          <div class="wf-actions">
-            <button type="button" class="prefs-btn" id="voices-export">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 20h16"/></svg>
-              导出
-            </button>
-            <button type="button" class="prefs-btn" id="voices-import">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 20h16"/></svg>
-              导入
-            </button>
-            <input id="voices-file" type="file" accept=".json,application/json" hidden>
-            <span class="prefs-note" data-note="voices"></span>
+          <div class="field-head">
+            <label>说话风格（风格名配一句描述，描述是给模型看的话）</label>
+            <div class="head-acts">
+              <button type="button" class="prefs-btn" id="styles-add">＋ 加一条</button>
+              <button type="button" class="prefs-btn" id="styles-export">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 20h16"/></svg>
+                导出
+              </button>
+              <button type="button" class="prefs-btn" id="styles-import">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 20h16"/></svg>
+                导入
+              </button>
+              <input id="styles-file" type="file" accept=".json,application/json" hidden>
+            </div>
           </div>
+          <div class="tbl-wrap"><table class="kv-table" id="styles-table">
+            <thead><tr><th class="kv-k">风格名</th><th>描述</th><th class="kv-x"></th></tr></thead>
+            <tbody></tbody>
+          </table></div>
+          <span class="prefs-note" data-note="styles"></span>
         </div>
         <div class="prefs-actions">
           <span class="prefs-note" data-note="speech"></span>
@@ -584,20 +591,26 @@ window.addEventListener('unhandledrejection', function (e) {
                 <div class="field"><label for="w-gen-open-max">开场白最多字数</label><input id="w-gen-open-max" type="number" min="60" max="1500" step="10"></div>
               </div>
               <div class="field">
-                <label for="w-prices">模型单价（每百万 token，一行一条：<code>模型名 输入 输出 缓存命中 币种</code>）</label>
-                <textarea id="w-prices" rows="7" spellcheck="false" placeholder="deepseek-chat 0.27 1.10 0.07"></textarea>
-          <div class="wf-actions">
-            <button type="button" class="prefs-btn" id="prices-export">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 20h16"/></svg>
-              导出
-            </button>
-            <button type="button" class="prefs-btn" id="prices-import">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 20h16"/></svg>
-              导入
-            </button>
-            <input id="prices-file" type="file" accept=".json,application/json" hidden>
-            <span class="prefs-note" data-note="prices"></span>
-          </div>
+                <div class="field-head">
+                  <label>模型单价（每百万 token）</label>
+                  <div class="head-acts">
+                    <button type="button" class="prefs-btn" id="prices-add">＋ 加一行</button>
+                    <button type="button" class="prefs-btn" id="prices-export">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 20h16"/></svg>
+                      导出
+                    </button>
+                    <button type="button" class="prefs-btn" id="prices-import">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 20h16"/></svg>
+                      导入
+                    </button>
+                    <input id="prices-file" type="file" accept=".json,application/json" hidden>
+                  </div>
+                </div>
+                <div class="tbl-wrap"><table class="kv-table" id="prices-table">
+                  <thead><tr><th class="kv-k">模型</th><th>输入</th><th>输出</th><th>缓存命中</th><th class="kv-cur">币种</th><th class="kv-x"></th></tr></thead>
+                  <tbody></tbody>
+                </table></div>
+                <span class="prefs-note" data-note="prices"></span>
               </div>
         <div class="prefs-actions">
           <span class="prefs-note" data-note="writing"></span>
@@ -610,23 +623,14 @@ window.addEventListener('unhandledrejection', function (e) {
       <div class="prefs-body">
         <div class="hint">把 data/ 整个打包成 zip 存到 backups/。包里的 API Key 会被抹掉，所以可以放心挪走。</div>
         <div class="prefs-actions">
-          <button type="button" id="btn-backup-now">立即备份</button>
           <span class="prefs-note" id="backup-msg"></span>
+          <button type="button" class="prefs-now" id="btn-backup-now">立即备份</button>
         </div>
         <div class="backup-conf">
           <label class="prefs-check">
-            <input type="checkbox" id="backup-enabled"> 定时自动备份
+            <input type="checkbox" id="backup-enabled"> 定时自动备份：
           </label>
-          <div class="grid2">
-            <div class="field">
-              <label for="backup-minutes">隔多少分钟备份一次</label>
-              <input type="number" id="backup-minutes" min="5" max="20160" step="5" value="1440">
-            </div>
-            <div class="field">
-              <label for="backup-keep">最多留几份</label>
-              <input type="number" id="backup-keep" min="1" max="30" value="30">
-            </div>
-          </div>
+          <span class="backup-inline">间隔 <input type="number" id="backup-minutes" min="5" max="20160" step="5" value="1440"> 分钟备份一次，最多保留 <input type="number" id="backup-keep" min="1" max="30" value="30"> 份</span>
           <button type="button" class="ghost" id="btn-backup-save">保存</button>
         </div>
         <div class="backup-list" id="backup-list"></div>

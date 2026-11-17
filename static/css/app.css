@@ -791,8 +791,8 @@ body.story-view #btn-search { display: none; }
 #btn-backup-now:disabled { opacity: .55; cursor: default; }
 
 .backup-conf {
-  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
-  padding: 10px 12px; margin-bottom: 12px; border-radius: 10px;
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px;
+  padding: 5px 10px; margin-top: 10px; margin-bottom: 10px; border-radius: 9px;
   border: 1px solid var(--border); background: var(--bg-input);
   font-size: .7813rem; color: var(--text-dim);
 }
@@ -801,9 +801,9 @@ body.story-view #btn-search { display: none; }
 .prefs-check input { accent-color: var(--accent); }
 /* 备份节奏：每 [N] 分钟一次，最多留 [M] 份，两块各自成组，别再挤成一串 */
 #backup-minutes, #backup-keep {
-  width: 68px; padding: 4px 6px; border-radius: 6px; font-family: inherit;
-  text-align: center; font-variant-numeric: tabular-nums;
-  border: 1px solid transparent; background: transparent; color: var(--text);
+  width: 62px; padding: 2px 6px; border-radius: 6px; font-family: inherit;
+  text-align: center; font-variant-numeric: tabular-nums; font-size: .7813rem;
+  border: 1px solid var(--border-strong); background: var(--bg); color: var(--text);
 }
 #backup-keep { width: 52px; }
 #backup-minutes:focus, #backup-keep:focus {
@@ -1395,3 +1395,84 @@ body.story-view #btn-io { display: none; }
 /* 名字和音色并排，别各占一行把面板拉长 */
 .field-pair { display: flex; gap: 10px; align-items: flex-start; }
 .field-pair > .field { flex: 1; min-width: 0; }
+
+/* 角色卡上的音色和语气并排，各占一半 */
+.cc-says { display: flex; gap: 8px; }
+.cc-says > .cc-input { flex: 1; min-width: 0; }
+
+/* ---------- 设置面板里的键值表格 ---------- */
+.tbl-wrap {
+  max-height: 268px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-input);
+}
+.kv-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .8125rem;
+  table-layout: fixed;
+}
+.kv-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-hover);
+  color: var(--text-dim);
+  font-weight: 600;
+  text-align: left;
+  padding: 7px 9px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.kv-table td { padding: 4px 6px; border-bottom: 1px solid var(--border); }
+.kv-table tr:last-child td { border-bottom: 0; }
+.kv-table input, .kv-table select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 5px 8px;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid transparent;
+  border-radius: 7px;
+}
+.kv-table input:hover, .kv-table select:hover { border-color: var(--border-strong); }
+.kv-table input:focus, .kv-table select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.kv-table .kv-k { width: 30%; }
+.kv-table .kv-cur { width: 96px; }
+.kv-table .kv-x { width: 38px; }
+.kv-table .kv-del {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+}
+.kv-table .kv-del:hover { color: var(--danger); background: var(--bg-hover); }
+.kv-table .kv-empty {
+  padding: 14px 10px;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+/* 节标题后面的按钮组靠右 */
+.head-acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.head-acts .prefs-btn { padding: 5px 11px 5px 9px; font-size: .7813rem; }
+/* 备份节奏排成一句话，别分两行 */
+.backup-inline {
+  display: inline-flex; align-items: center; gap: 5px;
+  white-space: nowrap; font-size: .7813rem; color: var(--text-dim);
+}
+.backup-inline input { text-align: center; }
+.backup-conf { flex-wrap: nowrap; }
+.backup-conf .prefs-check { white-space: nowrap; }
