@@ -177,6 +177,28 @@ function renderPickList() {
     const item = document.createElement('button');
     item.type = 'button';
     item.className = 'pick-item';
+
+    // 有封面就放缩略图，没有就留个占位块，卡片高度才齐
+    const shot = document.createElement('div');
+    shot.className = 'pi-shot';
+    const src = story.thumb || story.cover;
+    if (src) {
+      const img = document.createElement('img');
+      img.src = src;
+      img.alt = '';
+      img.loading = 'lazy';
+      // 小图可能已经被清掉了，加载失败就退成占位块，别留个破图
+      img.onerror = () => {
+        shot.innerHTML = '';
+        shot.classList.add('pi-shot-empty');
+        shot.textContent = '无封面';
+      };
+      shot.appendChild(img);
+    } else {
+      shot.classList.add('pi-shot-empty');
+      shot.textContent = '无封面';
+    }
+
     const body = document.createElement('div');
     body.className = 'pi-body';
     const title = document.createElement('b');
@@ -188,7 +210,7 @@ function renderPickList() {
     const go = document.createElement('i');
     go.className = 'pi-go';
     go.textContent = '›';
-    item.append(body, go);
+    item.append(shot, body, go);
     item.onclick = () => startRun(story.id);
     box.appendChild(item);
   }

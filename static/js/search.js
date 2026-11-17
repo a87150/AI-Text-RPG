@@ -110,7 +110,11 @@ async function runQuery(text) {
   const count = $('#search-count');
   if (count) count.textContent = '搜索中…';
   try {
-    const got = await api('/api/search?q=' + encodeURIComponent(q));
+    // 对话页的搜索只看这一局，别把别的会话串进来
+    const sid = (state.session && state.session.id) || '';
+    const url = '/api/search?q=' + encodeURIComponent(q)
+      + (sid ? '&session_id=' + encodeURIComponent(sid) : '');
+    const got = await api(url);
     if (mine !== seq) return;
     const hits = got.hits || [];
     if (!hits.length) {
@@ -139,7 +143,7 @@ export function openSearch() {
   if (!modal || !input) return;
   modal.classList.remove('hidden');
   input.value = '';
-  say('输入关键词，扫的是所有会话的全文。');
+  say('输入关键词，只在当前这个对话里找。');
   input.focus();
 }
 

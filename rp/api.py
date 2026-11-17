@@ -254,8 +254,13 @@ def api_writing_reset():
 
 @app.get("/api/search")
 def api_search():
-    """全文搜索：几千条消息直接扫 json 就够快，不需要索引。"""
+    """全文搜索：几千条消息直接扫 json 就够快，不需要索引。
+
+    session_id 传了只搜那一局；对话页的搜索框就带着当前会话，
+    跨会话找东西走 /api/search 不带 session_id。
+    """
     query = (request.args.get("q") or "").strip()
+    want = (request.args.get("session_id") or "").strip()
     try:
         limit = max(1, min(int(request.args.get("limit") or 80), 200))
     except (TypeError, ValueError):
@@ -264,8 +269,16 @@ def api_search():
         return jsonify({"hits": [], "query": query})
     needle = query.lower()
     hits = []
-    for item in list_sessions():
-        sess = load_session(item["id"])
+    only = None
+    if want:
+        only = load_session(want)
+        if not only:
+            return jsonify({"hits": [], "query": query, "session_id": want})
+        scope = [{"id": only.get("id") or want, "title": only.get("title") or "未命名对话"}]
+    else:
+        scope = list_sessions()
+    for item in scope:
+        sess = only or load_session(item["id"])
         if not sess:
             continue
         for index, msg in enumerate(sess.get("messages") or []):
