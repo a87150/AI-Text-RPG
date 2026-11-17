@@ -458,40 +458,49 @@ window.addEventListener('unhandledrejection', function (e) {
           <div class="hint">边生成边读：按句切好就念，不等整段写完。点按钮朗读：只有你点某条消息右下角那个 🔊 时才出声，旁白和角色按音色表分开念。</div>
         </div>
         <div class="field">
+        <div class="field">
           <label for="sp-model">模型文件（<code>.tmod</code>），相对路径按项目根算</label>
           <input id="sp-model" type="text" placeholder="models/qwen3-custom.tmod" spellcheck="false">
         </div>
-        <div class="grid2">
-          <div class="field">
-            <label for="sp-python">跑 vox 的解释器，留空自动找 3.13</label>
-            <input id="sp-python" type="text" placeholder="C:\\Python313\\python.exe" spellcheck="false">
-          </div>
-          <div class="field">
-            <label for="sp-url">服务地址（主程序自己拉起来）</label>
-            <input id="sp-url" type="text" placeholder="http://127.0.0.1:8190" spellcheck="false">
-          </div>
+        <div class="field">
+          <label for="sp-python">跑 vox 的解释器，留空自动找 3.13</label>
+          <input id="sp-python" type="text" placeholder="C:\\Python313\\python.exe" spellcheck="false">
         </div>
         <div class="grid2">
           <div class="field">
             <label for="sp-device">设备</label>
-            <input id="sp-device" type="text" placeholder="auto" spellcheck="false">
+            <select id="sp-device">
+              <option value="auto">自动</option>
+              <option value="gpu">显卡</option>
+              <option value="cpu">CPU</option>
+            </select>
           </div>
           <div class="field">
-            <label for="sp-threads">线程数（0 = 引擎自己定）</label>
-            <input id="sp-threads" type="number" min="0" max="64" step="1">
+            <label for="sp-voice">默认音色</label>
+            <select id="sp-voice">
+              <option value="vivian">vivian</option>
+              <option value="aiden">aiden</option>
+              <option value="dylan">dylan</option>
+              <option value="eric">eric</option>
+              <option value="ono_anna">ono_anna</option>
+              <option value="ryan">ryan</option>
+              <option value="serena">serena</option>
+              <option value="sohee">sohee</option>
+              <option value="uncle_fu">uncle_fu</option>
+            </select>
           </div>
         </div>
         <div class="grid2">
           <div class="field">
-            <label for="sp-voice">默认音色</label>
-            <input id="sp-voice" type="text" placeholder="vivian" spellcheck="false">
+            <label for="sp-threads">线程数（0 = 引擎自己定）</label>
+            <input id="sp-threads" type="number" min="0" max="64" step="1">
           </div>
           <div class="field">
-            <label for="sp-language">语言</label>
-            <input id="sp-language" type="text" placeholder="chinese" spellcheck="false">
+            <label for="sp-idle">空闲多少秒释放显存（0 = 不释放）</label>
+            <input id="sp-idle" type="number" min="0" max="3600" step="30">
           </div>
         </div>
-        <div class="hint">设备只认 auto / gpu / cpu，填 cuda:0 之类的会静默退回 CPU，一句要等三十秒。内置音色：aiden、dylan、eric、ono_anna、ryan、serena、sohee、uncle_fu、vivian。语言可选 chinese、english、japanese、korean、beijing_dialect、sichuan_dialect 等。</div>
+        <div class="hint">语音语言跟「写作」里的正文语言走。念完不用了会自动把模型收起来，别的模型才能拿到显存。</div>
         <div class="field">
           <label for="sp-voices">按角色换音色，一行一个 <code>角色=音色</code>。旁白里带引号的话走 <code>引述</code></label>
           <textarea id="sp-voices" rows="3" spellcheck="false" placeholder="旁白=vivian&#10;引述=ryan&#10;凛=eric&#10;*=vivian"></textarea>

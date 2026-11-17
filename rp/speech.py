@@ -21,11 +21,18 @@ import time
 
 import requests
 
-from .config import BASE_DIR, speech_conf
+from .config import BASE_DIR, SPEECH_LANGS, language_of, speech_conf
 
 _serve_lock = threading.Lock()
 _proc = None
 _ready_at = ""
+_last_used = 0.0
+_idle_thread = None
+
+# 同一句话正在合成时，后来的请求等同一个结果，不重复跑模型。
+# 双击按钮、预取和正式请求撞在一起都很常见，去掉这一层就是白烧几秒 GPU。
+_inflight = {}
+_inflight_lock = threading.Lock()
 
 
 class SpeechError(RuntimeError):
@@ -138,22 +145,51 @@ def _ensure_server(conf):
         raise SpeechError("vox 服务 40 秒还没起来，多半是模型太大或显存不够。")
 
 
+def _language():
+    """语音语言跟正文语言走，不单独设。"""
+    return SPEECH_LANGS.get(language_of(), "chinese")
+
+
+def _start_idle_watch():
+    """空下来就把 vox 收掉，它占着好几 GB 显存。"""
+    global _idle_thread
+
+    def loop():
+        while True:
+            time.sleep(15)
+            conf = speech_conf()
+            limit = int(conf.get("idle") or 0)
+            if limit <= 0 or not _last_used:
+                continue
+            if time.time() - _last_used < limit:
+                continue
+            if _proc is not None and _proc.poll() is None:
+                reset()
+
+    with _serve_lock:
+        if _idle_thread is not None and _idle_thread.is_alive():
+            return
+        _idle_thread = threading.Thread(target=loop, name="vox-idle", daemon=True)
+        _idle_thread.start()
+
+
 def speak(text, role=None, **overrides):
     """把一段文字念成 wav 字节。
 
     每次调用都是独立的：参数只跟着这一次请求走，服务端不存任何会话状态。
     role 先按音色表换成 voice，overrides 再盖上去（voice / language / temperature / seed）。
     """
+    global _last_used
+
     body = (text or "").strip()
     if not body:
         raise SpeechError("没有要念的文字。")
     conf = speech_conf()
-    base = _ensure_server(conf)
 
     payload = {
         "text": body,
         "voice": voice_for(conf, role) or conf.get("voice") or "vivian",
-        "language": conf.get("language") or "chinese",
+        "language": _language(),
         "format": "wav",
     }
     for key, val in overrides.items():
@@ -161,6 +197,47 @@ def speak(text, role=None, **overrides):
             continue
         payload[str(key)] = val
 
+    key = (body, payload["voice"], payload["language"],
+           str(payload.get("temperature") or ""), str(payload.get("seed") or ""))
+
+    with _inflight_lock:
+        slot = _inflight.get(key)
+        owner = slot is None
+        if owner:
+            slot = {"done": threading.Event(), "audio": None, "error": None}
+            _inflight[key] = slot
+
+    if not owner:
+        # 有人正在合成同一句，等他的结果
+        slot["done"].wait(200)
+        if slot["error"]:
+            raise SpeechError(slot["error"])
+        if slot["audio"]:
+            _last_used = time.time()
+            return slot["audio"]
+        # 等超时了就当没这回事，自己重跑
+        with _inflight_lock:
+            slot = {"done": threading.Event(), "audio": None, "error": None}
+            _inflight[key] = slot
+
+    try:
+        audio = _synth(conf, payload)
+        slot["audio"] = audio
+        _last_used = time.time()
+        _start_idle_watch()
+        return audio
+    except SpeechError as exc:
+        slot["error"] = str(exc)
+        raise
+    finally:
+        slot["done"].set()
+        with _inflight_lock:
+            if _inflight.get(key) is slot:
+                _inflight.pop(key, None)
+
+
+def _synth(conf, payload):
+    base = _ensure_server(conf)
     try:
         res = requests.post(base + "/v1/tts", json=payload, timeout=180)
     except requests.RequestException as exc:

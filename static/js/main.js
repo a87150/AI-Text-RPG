@@ -390,11 +390,10 @@ async function saveSpeechConf() {
     mode: state.speechMode || 'stream',
     model: val('#sp-model'),
     python: val('#sp-python'),
-    url: val('#sp-url'),
     device: val('#sp-device'),
-    threads: val('#sp-threads') || 0,
     voice: val('#sp-voice'),
-    language: val('#sp-language'),
+    threads: val('#sp-threads') || 0,
+    idle: val('#sp-idle'),
     voices: (($('#sp-voices') || {}).value || ''),
   };
   try {
@@ -421,11 +420,10 @@ function fillSpeechForm() {
   syncSpeechModeSeg();
   set('#sp-model', c.model);
   set('#sp-python', c.python);
-  set('#sp-url', c.url);
   set('#sp-device', c.device);
-  set('#sp-threads', c.threads);
   set('#sp-voice', c.voice);
-  set('#sp-language', c.language);
+  set('#sp-threads', c.threads);
+  set('#sp-idle', c.idle);
   set('#sp-voices', c.voices);
 }
 

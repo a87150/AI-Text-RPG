@@ -165,11 +165,27 @@ SPEECH_DEFAULTS = {
     "url": "http://127.0.0.1:8190",
     "device": "auto",
     "threads": 0,
-    "language": "chinese",
     "voice": "vivian",
+    # 空闲多久把 vox 子进程收下来（秒），0 = 不收。它占着几 GB 显存
+    "idle": 120,
     # 角色名 -> 音色，一行一个「角色=vivian」。* 是兜底，没配的角色走它
     "voices": "",
 }
+# 设备只认这三个。写 cuda:0 之类的会静默退回 CPU，一句要等三十秒
+SPEECH_DEVICES = ("auto", "gpu", "cpu")
+SPEECH_DEVICE_LABELS = {"auto": "自动", "gpu": "显卡", "cpu": "CPU"}
+# 内置音色，和 vox 对上的那一批
+SPEECH_VOICES = ("aiden", "dylan", "eric", "ono_anna", "ryan",
+                 "serena", "sohee", "uncle_fu", "vivian")
+# 正文语言 -> vox 的语言名
+SPEECH_LANGS = {"zh": "chinese", "en": "english"}
+SPEECH_BOUNDS = {"threads": (0, 64), "idle": (0, 3600)}
+
+def language_of():
+    """正文语言：zh / en。语音语言跟它走，不单独设。"""
+    return _writing.get("language") or "zh"
+
+
 SPEECH_READ_MODES = ("stream", "manual")
 SPEECH_READ_LABELS = {"stream": "边生成边读", "manual": "点按钮朗读"}
 _speech = dict(SPEECH_DEFAULTS)
@@ -477,14 +493,23 @@ def save_speech_conf(data):
     with _model_lock:
         if data.get("mode") in SPEECH_READ_MODES:
             _speech["mode"] = data["mode"]
-        for field in ("python", "model", "url", "device", "language", "voice", "voices"):
+        for field in ("python", "model", "url", "voices"):
             if field in data:
                 _speech[field] = str(data.get(field) or "").strip()
-        if "threads" in data:
-            try:
-                _speech["threads"] = max(0, int(data.get("threads") or 0))
-            except (TypeError, ValueError):
-                _speech["threads"] = 0
+        # 设备和音色只能是白名单里的，填错了就回退默认
+        if "device" in data:
+            dev = str(data.get("device") or "").strip().lower()
+            _speech["device"] = dev if dev in SPEECH_DEVICES else SPEECH_DEFAULTS["device"]
+        if "voice" in data:
+            v = str(data.get("voice") or "").strip().lower()
+            _speech["voice"] = v if v in SPEECH_VOICES else SPEECH_DEFAULTS["voice"]
+        for field in ("threads", "idle"):
+            if field in data:
+                lo, hi = SPEECH_BOUNDS[field]
+                try:
+                    _speech[field] = min(hi, max(lo, int(data.get(field) or 0)))
+                except (TypeError, ValueError):
+                    _speech[field] = SPEECH_DEFAULTS[field]
         # 模型或地址空了就退回默认，否则每次都起不来
         if not _speech.get("model"):
             _speech["model"] = SPEECH_DEFAULTS["model"]
@@ -749,7 +774,7 @@ def load_settings():
     if _speech.get("mode") not in SPEECH_READ_MODES:
         _speech["mode"] = SPEECH_DEFAULTS["mode"]
     # 盘上的 voco 时代的键（plugin/alias/options）直接丢掉，留着会被写回去污染配置
-    for dead in ("plugin", "alias", "options"):
+    for dead in ("plugin", "alias", "options", "language"):
         _speech.pop(dead, None)
     # device 写成 cuda:0 / gpu:0 会悄悄退回 CPU，30 秒才出一句。统一收成 auto
     if str(_speech.get("device") or "").strip().lower() not in ("auto", "gpu", "cpu", "vulkan"):

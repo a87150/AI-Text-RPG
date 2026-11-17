@@ -1163,6 +1163,10 @@ export function hueOf(name) {
 
 let _sayAudio = null;
 let _speakingBtn = null;
+// 每轮朗读一个号，新一轮把旧轮顶掉；没它的话连点两下会两个循环各播各的
+let _speakRun = 0;
+// 合成期间点的暂停，存着等真开播时生效
+let _speakHold = false;
 // 边生成边读：模型一个字一个字吐，按句切好丢进队列，念完一句接下一句。
 // 队列串行是刻意的：几段声音叠在一起没法听。
 const TTS_QUEUE = [];
@@ -1191,12 +1195,25 @@ function stopSpeak() {
 }
 
 /** 正在读时再点一下就暂停，再点继续。返回 true 表示这一下被它吃掉了。 */
+/**
+ * 点一下就切状态：在播就暂停/继续，还在合成就记下暂停意图。
+ * 返回 true 表示这一下被吃掉了，不能再起一轮。
+ * 之前只看 _sayAudio，合成那几秒里它还是空的，于是连点两下就播两遍。
+ */
 function toggleSpeakPause() {
-  if (!_sayAudio) return false;
+  if (!_speakRun) return false;
+  if (!_sayAudio) {
+    // 还在等第一段合成：切暂停意图，真正开播时生效
+    _speakHold = !_speakHold;
+    if (_speakingBtn) _speakingBtn.classList.toggle('paused', _speakHold);
+    return true;
+  }
   if (_sayAudio.paused) {
+    _speakHold = false;
     _sayAudio.play().catch(() => {});
     if (_speakingBtn) _speakingBtn.classList.remove('paused');
   } else {
+    _speakHold = true;
     try { _sayAudio.pause(); } catch (e) { return false; }
     if (_speakingBtn) _speakingBtn.classList.add('paused');
   }
@@ -1221,9 +1238,14 @@ function playUrl(url) {
   return new Promise((resolve, reject) => {
     const audio = new Audio(url);
     _sayAudio = audio;
+    if (_speakHold) {
+      // 用户在合成期间就点了暂停，先别出声
+      try { audio.pause(); } catch (e) { /* 还没开始就算了 */ }
+    }
     audio.onended = () => { URL.revokeObjectURL(url); if (_sayAudio === audio) _sayAudio = null; resolve(); };
     audio.onerror = () => { URL.revokeObjectURL(url); if (_sayAudio === audio) _sayAudio = null; reject(new Error('播放器报错')); };
     audio.play().catch(reject);
+    if (_speakHold) { try { audio.pause(); } catch (e) { /* 同上 */ } }
   });
 }
 
@@ -1361,8 +1383,9 @@ function splitLong(text) {
 }
 
 export async function speakSegments(segments, btn) {
-  // 同一个按钮再点一下：当前没念完就暂停/继续，不重新发请求
+  // 同一个按钮再点一下：不管是在播还是还在合成，都当暂停/继续处理
   if (btn && btn === _speakingBtn && toggleSpeakPause()) return;
+
   const flat = [];
   for (const seg of (segments || [])) {
     if (!seg || !seg.text) continue;
@@ -1370,41 +1393,49 @@ export async function speakSegments(segments, btn) {
   }
   const list = flat;
   if (!list.length) { toast('这段没什么可以念的。'); return; }
+
+  // 新一轮：把上一轮的循环顶掉，否则两个循环会各播各的
+  const myRun = ++_speakRun;
+  _speakHold = false;
   stopSpeak();
   const pending = new Map();
   const ask = (i) => {
     if (!pending.has(i)) pending.set(i, fetchSpeech(list[i].text, list[i].role));
     return pending.get(i);
   };
+
   const prevBtn = _speakingBtn;
   if (prevBtn && prevBtn !== btn) prevBtn.classList.remove('speaking', 'paused');
   _speakingBtn = btn || null;
   if (btn) { btn.classList.add('speaking'); btn.classList.remove('paused'); }
+
   try {
     for (let i = 0; i < list.length; i += 1) {
-      // 顺手把后面几段发出去，等轮到时多半已经好了
+      if (myRun !== _speakRun) return;
       for (let k = i + 1; k <= i + PREFETCH && k < list.length; k += 1) ask(k);
-      await playUrl(await ask(i));
+      const url = await ask(i);
+      if (myRun !== _speakRun) { URL.revokeObjectURL(url); return; }
+      await playUrl(url);
     }
   } catch (e) {
-    toast('念不出来：' + (e && e.message ? e.message : e), 'error');
+    if (myRun === _speakRun) {
+      toast('念不出来：' + (e && e.message ? e.message : e), 'error');
+    }
   } finally {
-    // 预取了没用上的要回收，否则 blob URL 一直占着
     for (const pr of pending.values()) {
       pr.then((u) => { try { URL.revokeObjectURL(u); } catch (e) { /* 已经没了 */ } })
         .catch(() => {});
     }
     pending.clear();
-    if (_speakingBtn === btn) {
+    if (myRun === _speakRun) {
       if (btn) btn.classList.remove('speaking', 'paused');
       _speakingBtn = null;
+      _speakRun = 0;
+      _speakHold = false;
     }
   }
 }
 
-/**
- * 只有一个说话人时的简写。
- */
 export async function speakText(text, btn, role) {
   const body = speakable(text);
   if (!body) { toast('\u8fd9\u6bb5\u6ca1\u4ec0\u4e48\u53ef\u4ee5\u5ff5\u7684\u3002'); return; }

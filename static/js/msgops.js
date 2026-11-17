@@ -166,10 +166,16 @@ function startEdit(index, host) {
   area.setSelectionRange(area.value.length, area.value.length);
 }
 
+// 同一个按钮上一次没跑完就不接第二次。
+// state.busy 是异步置位的，连点两下会都在它变 true 之前进来，所以靠不住。
+// speak 不用这个：它自己要把第二下当暂停。
+const BUSY_ACTS = new Set(['rewrite', 'branch', 'continue']);
+const _inFlight = new WeakSet();
+
 export function bindMessageActions() {
   const box = $('#messages');
   if (!box) return;
-  box.addEventListener('click', (e) => {
+  box.addEventListener('click', async (e) => {
     const btn = e.target.closest('.msg-tools button[data-act]');
     if (!btn) return;
     const host = btn.closest('[data-index]');
@@ -177,6 +183,20 @@ export function bindMessageActions() {
     const index = Number(host.dataset.index);
     if (Number.isNaN(index)) return;
     const act = btn.dataset.act;
+    if (BUSY_ACTS.has(act)) {
+      if (_inFlight.has(btn)) return;
+      _inFlight.add(btn);
+      btn.disabled = true;
+      try {
+        if (act === 'rewrite') await rewrite(index);
+        else if (act === 'branch') await branch(index);
+        else await continueLast();
+      } finally {
+        _inFlight.delete(btn);
+        btn.disabled = false;
+      }
+      return;
+    }
     if (act === 'speak') {
       // 一轮里可能是旁白（.narrator）、也可能是一个或好几个角色气泡，
       // 只取 .bubble 的话纯旁白那种回复就拿不到字。整轮取。
@@ -191,9 +211,6 @@ export function bindMessageActions() {
         speakSegments([{ role: '旁白', text: clone.textContent || '' }], btn);
       }
     }
-    else if (act === 'rewrite') rewrite(index);
-    else if (act === 'branch') branch(index);
     else if (act === 'edit') startEdit(index, host);
-  else if (act === 'continue') continueLast();
   });
 }

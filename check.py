@@ -1847,7 +1847,14 @@ def main():
     check("只有最后一条回复能续写", "index === msgs.length - 1" in _ui70)
     check("操作条有 continue 动作", "'continue'" in _ui70)
     _mo70 = (pathlib.Path(__file__).parent / "static" / "js" / "msgops.js").read_text(encoding="utf-8")
-    check("continue 动作真的被接住", "act === 'continue'" in _mo70)
+    check("continue 动作真的被接住",
+          "await continueLast()" in _mo70 and "'continue'" in _mo70)
+    # 双击不能变成两次请求，这两处是主要入口
+    check("朗读有运行令牌", "_speakRun" in _ui70)
+    check("合成期间点暂停不重开一轮",
+          "_speakHold" in _ui70 and "if (!_sayAudio) {" in _ui70)
+    check("操作按钮有在途锁", "BUSY_ACTS" in _mo70 and "_inFlight" in _mo70)
+
     # 历史回放要把一轮里的多个气泡一起交给 buildTurn，
     # 少传 lines 就只剩第一个人的台词
     check("历史消息把 lines 也传给了",
@@ -2640,6 +2647,15 @@ def main():
           set(rp_config.SPEECH_READ_MODES) == {"stream", "manual"})
     check("默认音色是 vivian",
           rp_config.SPEECH_DEFAULTS["voice"] == "vivian")
+    check("设备只能三选一",
+          rp_config.SPEECH_DEVICES == ("auto", "gpu", "cpu"), str(rp_config.SPEECH_DEVICES))
+    check("设备填错就回退默认",
+          rp_config.save_speech_conf({"device": "cuda:0"})["device"] == "auto",
+          str(rp_config.speech_conf().get("device")))
+    check("音色填错就回退默认",
+          rp_config.save_speech_conf({"voice": "乱写"})["voice"] == "vivian")
+    check("语音语言跟正文走",
+          rp_config.SPEECH_LANGS[rp_config.language_of()] in ("chinese", "english"))
 
     # 音色表：角色名换音色，换不出就是空串（退回默认音色）
     _vt = {"voices": ".".join(["\u51db=vivian", "\u5f15\u8ff0=ryan", "*=eric"]).replace(".", chr(10))}
