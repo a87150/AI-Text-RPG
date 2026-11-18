@@ -3262,6 +3262,80 @@ def main():
     # 还原是原子写：包里的路径不许写出 data/ 外面
     check("还原不会写出数据目录", "os.replace(tmp, target)" in
           (pathlib.Path(__file__).parent / "rp" / "backup.py").read_text(encoding="utf-8"))
+
+    # 99. 设定快照回滚要把角色卡还原，同时不能抹掉聊出来的 state/history。
+    # 这条是补漏：RUNTIME_KEYS 曾经整个排掉 characters，角色卡回滚全失效，
+    # 而当时那条断言只查 messages，所以一直是绿的。
+    _cs = rp_storage.new_session("角色卡")
+    _csid = _cs["id"]
+    _cs["world"] = "旧世界"
+    _cs["characters"] = [{"name": "A", "role": "温柔", "voice": "v1",
+                          "style": "慢", "state": "", "history": []}]
+    rp_storage.save_session(_cs)
+    client.put("/api/sessions/" + _csid, json={"world": "旧世界"})
+    _snaps = client.get("/api/sessions/%s/snapshots" % _csid).get_json()
+    _tgt = [x["name"] for x in _snaps if x["name"].endswith("-settings.json")][0]
+    _cs = rp_storage.load_session(_csid)
+    _cs["world"] = "新世界"
+    _cs["characters"] = [{"name": "B", "role": "冷淡", "voice": "v2",
+                          "style": "快", "state": "在城楼", "history": ["在城楼"]}]
+    _cs["messages"] = [{"role": "user", "content": "我去城楼"}]
+    rp_storage.save_session(_cs)
+    client.post("/api/sessions/%s/snapshots/%s/restore" % (_csid, _tgt), json={})
+    _back = rp_storage.load_session(_csid)
+    _ch = (_back.get("characters") or [{}])[0]
+    check("回滚设定把角色卡还原了",
+          _ch.get("name") == "A" and _ch.get("role") == "温柔"
+          and _ch.get("voice") == "v1" and _ch.get("style") == "慢",
+          "%s/%s/%s/%s" % (_ch.get("name"), _ch.get("role"),
+                            _ch.get("voice"), _ch.get("style")))
+    check("回滚设定不抹掉聊出来的角色状态",
+          _ch.get("state") == "在城楼" and _ch.get("history") == ["在城楼"],
+          repr(_ch.get("state")))
+    check("回滚设定不吞聊天记录", len(_back.get("messages") or []) == 1,
+          str(len(_back.get("messages") or [])))
+
+    # 100. GET 不该把设置写盘失败的标记读走——原来先读先清再判断，前端冷启动
+    # 并发发的 /api/sessions 会把它吃干净，那个失败的写请求照样返回 200。
+    rp_config._persist_error = "假装失败"
+    client.get("/api/sessions")
+    check("GET 不消耗写盘失败标记", rp_config.persist_error() == "假装失败",
+          repr(rp_config.persist_error()))
+    rp_config.clear_persist_error()
+
+    # 101. 工作流出厂默认要能兜底：主文件和 .bak 都是运行时产物，不进版本库
+    check("工作流出厂默认在版本库里", os.path.isfile(rp_covers.WORKFLOW_DEFAULT
+                                              and rp_covers.WORKFLOW_DEFAULT))
+    _saved_wf = rp_covers.WORKFLOW_PATH
+    _saved_bak = rp_covers.WORKFLOW_PATH + ".bak"
+    _hold = []
+    for _p in (_saved_wf, _saved_bak):
+        if os.path.isfile(_p):
+            os.rename(_p, _p + ".hold99")
+            _hold.append(_p)
+    try:
+        check("只剩出厂默认时也能加载工作流", len(rp_covers._load_workflow()) > 0)
+    finally:
+        for _p in _hold:
+            os.rename(_p + ".hold99", _p)
+
+    # 102. 会话文件被搬走时不许清快照目录：那是删真东西，还留不下痕迹
+    _orphan99 = os.path.join(rp_config.DATA_DIR, "snapshots", "ffff0000ffff")
+    os.makedirs(_orphan99, exist_ok=True)
+    _moved99 = []
+    for _f in os.listdir(rp_config.DATA_DIR):
+        if _f.endswith(".json"):
+            os.rename(os.path.join(rp_config.DATA_DIR, _f),
+                      os.path.join(TMP_DIR, _f + ".hold99"))
+            _moved99.append(_f)
+    try:
+        rp_snapshots._orphan_at["t"] = 0
+        rp_snapshots._prune_orphans()
+        check("会话被搬走时不碰快照目录", os.path.isdir(_orphan99))
+    finally:
+        for _f in _moved99:
+            os.rename(os.path.join(TMP_DIR, _f + ".hold99"),
+                      os.path.join(rp_config.DATA_DIR, _f))
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")

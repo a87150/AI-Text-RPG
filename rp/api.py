@@ -80,8 +80,38 @@ from .snapshots import (
 # 其余键（人设、世界、规则、开局、cast、lore……）照快照还原。
 RUNTIME_KEYS = (
     "messages", "turn", "summary", "context", "status",
-    "characters", "facts", "updated_at",
+    "facts", "updated_at",
 )
+
+# 角色卡是混的：名字、身份、音色、语气是用户在设定面板里填的，state 和
+# history 是模型一路写下来的。整个键排掉等于回滚对角色卡完全失效，整个键
+# 照搬又会把聊出来的进展抹回去，所以按名字合并这两类字段。
+CHAR_RUNTIME = ("state", "history")
+CHAR_EMPTY = {"state": "", "history": []}
+
+
+def _merge_characters(saved_chars, current_chars):
+    """设定快照还原人设，不碰聊出来的 state/history。
+
+    先按名字找对应项；名字对不上（用户改了名、或者表被整个换过）就按位置
+    认——设定快照会把角色表恢复成拍快照那一版，同一位置就是同一个角色。
+    只按名字找的话，改个名就把一路聊出来的进展丢了。
+    """
+    cur = [c for c in (current_chars or []) if isinstance(c, dict)]
+    by_name = {c.get("name"): c for c in cur if c.get("name")}
+    out = []
+    for i, c in enumerate(saved_chars or []):
+        if not isinstance(c, dict):
+            continue
+        old = by_name.get(c.get("name"))
+        if old is None and i < len(cur):
+            old = cur[i]
+        old = old or {}
+        merged = dict(c)
+        for k in CHAR_RUNTIME:
+            merged[k] = old[k] if k in old else c.get(k, CHAR_EMPTY[k])
+        out.append(merged)
+    return out
 from .storage import (
     DEFAULT_TITLE, TEXT_FIELDS, StaleSession, get_session_lock, list_sessions,
     load_session, new_session, release_busy, save_session, session_path,
@@ -152,12 +182,15 @@ def _settings_persist_guard(resp):
     下次打开还是旧值。这里把那次失败的响应改成 500，让现有的错误提示接手。
     标记读一次就清掉，不会连累别的请求。
     """
+    # 先确认这是能承载错误的响应，再碰标记。原来是先读先清、后判断，
+    # 前端冷启动并发发的 GET 会在判断前把标记读走，那次失败的写请求照样 200。
+    if request.method not in ("POST", "PUT", "PATCH") or not resp.is_json:
+        return resp
     err = persist_error()
     if not err:
         return resp
     clear_persist_error()
-    if (request.method in ("POST", "PUT", "PATCH") and resp.is_json
-            and 200 <= resp.status_code < 300):
+    if 200 <= resp.status_code < 300:
         # after_request 必须回一个 Response，不能回元组——回元组 Flask
         # 会把整个响应处理砸成 TypeError，比原来那个静默失败还糟
         out = jsonify({"error": "设置没能写到磁盘：%s" % err})
@@ -861,6 +894,9 @@ def api_restore_snapshot(sid, name):
                 saved[key] = current[key]
             else:
                 saved.pop(key, None)
+        # 角色卡单独合并：设定照快照，运行态留现在的
+        saved["characters"] = _merge_characters(saved.get("characters"),
+                                               current.get("characters"))
     saved["id"] = sid
     try:
         save_session(saved, expect=current.get("updated_at"))

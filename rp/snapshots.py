@@ -33,6 +33,11 @@ def _prune_orphans():
     _orphan_at["t"] = now
     try:
         alive = {f[:-5] for f in os.listdir(DATA_DIR) if f.endswith(".json")}
+        # 数据目录突然空了，更可能是有人正把文件搬走（手动备份、资源管理器里
+        # 剪切），这时候照删就是删真东西，rmtree 还留不下痕迹。见不到至少两个
+        # 会话就当天不扫。ponytail: 单机自用够用，多实例部署要换成按目录年龄判断
+        if len(alive) < 2:
+            return
         for name in os.listdir(SNAP_DIR):
             full = os.path.join(SNAP_DIR, name)
             if name not in alive and os.path.isdir(full):

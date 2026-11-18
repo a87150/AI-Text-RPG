@@ -26,6 +26,9 @@ THUMB_SIZE = 160
 # ComfyUI 写进来的文件名前缀。与历史上那批 cover_ 开头的区开，免得把旧图当成新生成的拿走。
 SAVE_PREFIX = "gen"
 WORKFLOW_PATH = os.path.join(BASE_DIR, "moss_workflow_api.json")
+# 出厂默认：入库、只读，运行时永远不改写它。导入工作流会覆盖 WORKFLOW_PATH，
+# 并存一份 .bak（倒数第二个用过的），这两个都是运行时产物，不进版本库。
+WORKFLOW_DEFAULT = os.path.join(BASE_DIR, "moss_workflow_api.default.json")
 
 DEFAULT_COMFY = "http://127.0.0.1:8188"
 
@@ -56,9 +59,9 @@ ALLOWED_EXT = (".png", ".jpg", ".jpeg", ".webp")
 os.makedirs(COVERS_DIR, exist_ok=True)
 
 def _load_workflow():
-    # 这份文件会被导入工作流改写，所以不进版本库（.bak 才是出厂默认）。
-    # 新克隆的仓库里只有 .bak，回退到它。
-    for path in (WORKFLOW_PATH, WORKFLOW_PATH + ".bak"):
+    # 主文件是运行时副本，.bak 是上一次导入前的，两个都不进版本库。
+    # 新克隆的仓库里只有出厂默认，所以回退链要落到它。
+    for path in (WORKFLOW_PATH, WORKFLOW_PATH + ".bak", WORKFLOW_DEFAULT):
         if os.path.isfile(path):
             with open(path, encoding="utf-8") as f:
                 return json.load(f)
