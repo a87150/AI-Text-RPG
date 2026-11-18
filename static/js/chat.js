@@ -171,51 +171,6 @@ function hideStopButton() {
   if (send) send.classList.remove('hidden');
 }
 
-/** 停下来的半段内容：留下来还是扔掉，用户自己定。 */
-function showDraftActions(turnBox, shown, speaker, isPlain, originalText) {
-  const bar = document.createElement('div');
-  bar.className = 'draft-bar';
-  const tip = document.createElement('span');
-  tip.className = 'draft-tip';
-  tip.textContent = '已停止 · 这段是草稿';
-  const keep = document.createElement('button');
-  keep.type = 'button';
-  keep.className = 'draft-keep';
-  keep.textContent = '保留并继续';
-  keep.onclick = async () => {
-    keep.disabled = true;
-    try {
-      await api('/api/sessions/' + state.session.id + '/commit_partial',
-        { method: 'POST', body: { content: shown, speaker: speaker || '',
-          updated_at: state.session && state.session.updated_at } });
-      bar.remove();
-      await refreshCurrentSession();
-      renderMessages();
-      updateSub();
-      toast('草稿已存下，可以接着写', 'ok');
-    } catch (e) {
-      keep.disabled = false;
-      toast('存不下草稿：' + e.message, 'error');
-    }
-  };
-  const drop = document.createElement('button');
-  drop.type = 'button';
-  drop.className = 'draft-drop';
-  drop.textContent = '丢弃重写';
-  drop.onclick = () => {
-    bar.remove();
-    if (turnBox) turnBox.remove();
-    const input = $('#input');
-    if (input && !input.value.trim()) {
-      input.value = originalText;
-      syncComposer();
-    }
-    toast('已丢弃，内容放回输入框，改完再发', 'ok');
-  };
-  bar.append(tip, keep, drop);
-  if (turnBox) turnBox.appendChild(bar);
-}
-
 async function sendMessage(text, { isRetry, isContinue }) {
   const s = state.session;
   if (!s.ai_role && !s.world) {
@@ -283,6 +238,11 @@ async function sendMessage(text, { isRetry, isContinue }) {
   state.abortStream = stopper;
   showStopButton(async () => {
     state.stopped = true;
+    // 先告诉后端"不要了"，再断流。只断流的话后端分不清是刷新还是喊停，
+    // 半截内容也就没人替我们收着了
+    try {
+      await api('/api/chat/stop', { method: 'POST', body: { session_id: s.id } });
+    } catch (e) { /* 后端没收到也只是慢一步，断流仍然生效 */ }
     stopper.abort(new DOMException('用户停止', 'AbortError'));
   });
 
@@ -399,12 +359,11 @@ async function sendMessage(text, { isRetry, isContinue }) {
     const shown = longestAcc || acc;
     current = renderStreaming(turnBox, shown, speaker || aiLabel, 0, isPlain) || current;
     if (stopped) {
-      // 停下来的内容不当失败：留着当草稿，让用户决定要还是不要
+      // 半截内容后端已经替我们存下了（_save_partial），这里只管把说法写清楚。
+      // 以前是画一个 DOM 草稿，可 finally 里 refresh 会 renderMessages 整表重画，
+      // 草稿不在 s.messages 里，连按钮一起被抹掉——想重发都找不到地方点
       setAiStatus('已停止', 'warn');
-      if (shown.trim()) {
-        draftShown = true;
-        showDraftActions(turnBox, shown, speaker, isPlain, text);
-      }
+      if (shown.trim()) draftShown = true;
     } else {
       const msg = (e && e.message) ? e.message : String(e);
       if (current) {
@@ -434,6 +393,9 @@ async function sendMessage(text, { isRetry, isContinue }) {
     // 首次渲染已经在 done 里做完了，这里只校准差异。
     // 任何抛出都不能把已经画好的界面拖垮，所以各自包住。
     (async () => {
+      // 喊停之后后端还要把半截存下来，抢在它前面拉只会拉到"还没有回复"。
+      // 等到它不忙了再拉，那半截才会带着操作按钮出现
+      if (state.stopped) await waitNotBusy(s.id);
       try {
         const fresh = await refreshCurrentSession();
         if (fresh) {
@@ -441,12 +403,30 @@ async function sendMessage(text, { isRetry, isContinue }) {
           syncAll();
           // 本地先画的那一份可能和落盘的差一点（标题、角色、状态都会被后端再洗一遍），
           // 拿到真相后再对齐一次。正在编辑就不动，renderMessages 自己会跳过。
-          if (state.session === s) renderMessages();
+          // 这里不能再比 state.session === s：refresh 已经把 state.session 换成了
+          // 新对象，比下去永远是假，重绘这条线就白死了——停止之后没有按钮就是这么来的。
+          // refresh 内部校验过 id 没变，能返回 fresh 就是同一局。
+          renderMessages();
         }
       } catch (e) { /* 校准失败不影响已经显示的内容 */ }
       try { await loadSessions(); } catch (e) { /* 列表没刷新就等下一次 */ }
     })();
   }
+}
+
+/** 等后端把这一轮收尾（存半截、放锁）。最多等 15 秒，超时就当它已经结束。 */
+async function waitNotBusy(sid, timeoutMs = 15000) {
+  const until = Date.now() + timeoutMs;
+  while (Date.now() < until) {
+    try {
+      const sess = await api('/api/sessions/' + sid);
+      if (!sess.busy) return true;
+    } catch (e) {
+      return false;
+    }
+    await new Promise((r) => setTimeout(r, 400));
+  }
+  return false;
 }
 
 /** 顶部「重试上一条」卡片与重试事件。 */

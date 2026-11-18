@@ -51,6 +51,26 @@ def is_busy(sid):
     with _busy_guard:
         return sid in _busy_sessions
 
+
+# 用户点了停止。跟"连接断了"是两件事：断连只是浏览器那头不看了，
+# 生成该跑完还是跑完；只有这个标志才真的叫停。
+_stop_sessions = set()
+
+
+def request_stop(sid):
+    with _busy_guard:
+        _stop_sessions.add(sid)
+
+
+def stop_requested(sid):
+    with _busy_guard:
+        return sid in _stop_sessions
+
+
+def clear_stop(sid):
+    with _busy_guard:
+        _stop_sessions.discard(sid)
+
 # ============================== 存储层 ==============================
 SID_RE = re.compile(r"[0-9a-f]{12}")
 

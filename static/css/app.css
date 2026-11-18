@@ -473,6 +473,9 @@ body.story-view #btn-search { display: none; }
   transition: opacity .12s ease; align-self: flex-end;
 }
 .msg:hover .msg-tools, .turn:hover .msg-tools, .msg-tools:focus-within { opacity: 1; }
+/* 最新一条不藏：写完/停下的那一刻，鼠标都在别处 */
+.msg-tools.always { opacity: .8; }
+.msg:hover .msg-tools.always, .turn:hover .msg-tools.always { opacity: 1; }
 /* 正在念 / 暂停：没这两个状态就不知道再点一下会发生什么 */
 .msg-tools button.speaking {
   opacity: 1; border-color: var(--accent, #c98b5a);
@@ -754,19 +757,13 @@ body.story-view #btn-search { display: none; }
 }
 #btn-stop:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 12%, transparent); }
 #btn-stop:disabled { opacity: .55; cursor: default; }
-.draft-bar {
-  display: flex; align-items: center; gap: 10px;
-  margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border);
+/* 停止时留下的半截：右侧标一下，免得当成写完的一轮 */
+.turn.is-partial::after {
+  content: '未写完';
+  position: absolute; top: 8px; right: 10px;
+  font-size: .6875rem; letter-spacing: .04em;
+  color: var(--text-mute); opacity: .7;
 }
-.draft-tip { flex: 1; font-size: .75rem; color: var(--text-mute); }
-.draft-bar button {
-  padding: 5px 12px; border-radius: 8px; cursor: pointer;
-  border: 1px solid var(--border); background: transparent;
-  color: var(--text-dim); font-size: .75rem;
-}
-.draft-bar .draft-keep { border-color: var(--accent); color: var(--accent); }
-.draft-bar button:hover:not(:disabled) { filter: brightness(1.15); }
-.draft-bar button:disabled { opacity: .55; cursor: default; }
 .sub-sep { color: var(--border-strong); }
 /* 当前状态另起一行，长的话自己折，不挤在场名单 */
 .sub-state {

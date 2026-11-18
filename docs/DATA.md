@@ -187,6 +187,7 @@ totals.json 的累计费用按币种分开记（`cost_by_cur`），混着加会�
 流式生成（SSE）：
 
     POST   /api/chat                      发一条消息并生成
+    POST   /api/chat/stop                 喊停正在生成的那一轮（断流不算停）
     POST   /api/sessions/<sid>/opening    生成开场白
     POST   /api/enhance                   单项设定生成
 

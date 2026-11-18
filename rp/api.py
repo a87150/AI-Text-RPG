@@ -2,7 +2,9 @@
 """HTTP 路由。"""
 import json
 import os
+import queue
 import shutil
+import threading
 import time
 import uuid
 
@@ -71,7 +73,7 @@ from .snapshots import SNAP_DIR, list_snapshots, load_snapshot, snapshot
 from .storage import (
     DEFAULT_TITLE, TEXT_FIELDS, StaleSession, get_session_lock, list_sessions,
     load_session, new_session, release_busy, save_session, session_path,
-    try_acquire_busy, is_busy,
+    try_acquire_busy, is_busy, request_stop, stop_requested, clear_stop,
 )
 
 load_settings()
@@ -1676,10 +1678,12 @@ def api_opening(sid):
     )
 
 def _stream_model(messages, speaker, temperature, max_attempts, use_rp,
-                  min_chars=None, sid=None):
+                  min_chars=None, sid=None, sink=None):
     """把 completion_events 包成 SSE 事件流；成功时返回 (正文, 尝试次数)。
 
     用 yield from 的返回值传结果，调用方不用再写一遍同样的循环。
+    sink 给了就把增量顺手收进去：用户中途点停止时，那半截得留着，
+    不能因为没走到 final 就整段丢掉。
     """
     for ev in completion_events(
         messages, base_temp=temperature, max_attempts=max_attempts,
@@ -1689,6 +1693,8 @@ def _stream_model(messages, speaker, temperature, max_attempts, use_rp,
     ):
         if ev["type"] == "delta":
             metrics.first_token()      # 用户感知的等待到此结束
+            if sink is not None and ev.get("content"):
+                sink.append(ev["content"])
         if ev["type"] == "final":
             # 服务端报多少就记多少；报不出来就是空字典，面板显示—
             metrics.record(ev.get("usage") or {}, current_target()[1], sid=sid)
@@ -1712,6 +1718,51 @@ def _join_text(prev, extra):
             extra = extra[n:]
             break
     return prev + extra
+
+def _save_partial(sid, content, speaker="", use_rp=False, cast=None):
+    """把用户喊停时已经吐出来的半截当成正式消息存下。
+
+    和 /commit_partial 走同一套规则：已经有一条把它包含进去了就不再添，
+    否则同一轮会变成两条。存下来的这条带 partial 标记，界面上可以接着写。
+
+    半截也要过一遍 parse_turn：不然整段（连旁白带台词）会被当成同一个人
+    说的话渲染出来，看着像角色在念旁白。
+    """
+    text = (content or "").strip()
+    if not text:
+        return None
+    with get_session_lock(sid):
+        sess = load_session(sid)
+        if not sess:
+            return None
+        msgs = sess.setdefault("messages", [])
+        if not isinstance(msgs, list):
+            msgs = sess["messages"] = []
+        last = msgs[-1] if msgs else None
+        if last and last.get("role") == "assistant":
+            existing = (last.get("content") or "").strip()
+            if existing and (existing.startswith(text) or text.startswith(existing)):
+                return sess
+        msg = {"role": "assistant", "content": text, "partial": True,
+               "turn": sess.get("turn") or 0}
+        turn = parse_turn(text, speaker, cast if use_rp else None) if text else None
+        if turn:
+            if turn.get("narrator"):
+                msg["narrator"] = turn["narrator"]
+            if turn.get("lines"):
+                msg["lines"] = turn["lines"]
+            if turn.get("speaker"):
+                msg["speaker"] = turn["speaker"]
+        if speaker and not msg.get("speaker"):
+            msg["speaker"] = speaker
+        msgs.append(msg)
+        try:
+            save_session(sess)
+        except Exception as exc:
+            app.logger.exception("存半截内容失败：%s", exc)
+            return None
+        return sess
+
 
 def _commit_turn(s2, turn, use_rp, resume=False):
     """一轮生成之后要落盘的所有副作用：消息、状态、账本、角色、轮次、存档。
@@ -1796,6 +1847,21 @@ def _commit_turn(s2, turn, use_rp, resume=False):
     save_session(s2)
     return msg
 
+@app.post("/api/chat/stop")
+def api_chat_stop():
+    """喊停正在生成的那一轮。
+
+    以前"停止"只是前端把 fetch 断掉，后端只能从断连里猜，猜不出
+    "用户不看了"和"用户不要了"。现在分开：断连不算停，这个端点才算。
+    """
+    data = request.get_json(silent=True) or {}
+    sid = _str(data, "session_id")
+    if not sid:
+        return jsonify({"error": "缺少 session_id"}), 400
+    request_stop(sid)
+    return jsonify({"ok": True, "busy": is_busy(sid)})
+
+
 @app.post("/api/chat")
 def api_chat():
     data = request.get_json(silent=True) or {}
@@ -1876,77 +1942,101 @@ def api_chat():
                         if m.get("role") == "system")
     metrics.begin(sid, _prompt_chars, _system_chars, len(messages))
 
-    cancelled = {"flag": False}      # 客户端断开时置位，写盘前必须看一眼
+    # 生成和浏览器连接解绑：刷新页面只是不看了，不该把正在写的一轮掐掉。
+    # 真正叫停只有一个入口——/api/chat/stop 置位，写盘前必看一眼。
+    clear_stop(sid)
 
-    def generate():
+    def body():
         use_rp = sess_mode == "rp"
-        try:
-            # 先告诉前端这轮由谁发言，流式渲染才能丢掉别人抢话的段落
-            yield sse({"type": "speaker", "name": speaker})
-            # 硬下限会跟密度打架：thin 只要求写二十来字，却被五十字的门槛，
-            # 打回重试，重试只会往多里写
-            _floor = max(10, min(MIN_CHAT_CHARS, input_density(sess)[1][0]))
-            answer, attempts_used = yield from _stream_model(
-                messages, speaker, temperature, tier_limits()["attempts"], use_rp,
-                _floor, sid=sid)
-            if answer is None:
-                return
+        parts = []
+        # 先告诉前端这轮由谁发言，流式渲染才能丢掉别人抢话的段落
+        yield sse({"type": "speaker", "name": speaker})
+        # 硬下限会跟密度打架：thin 只要求写二十来字，却被五十字的门槛，
+        # 打回重试，重试只会往多里写
+        _floor = max(10, min(MIN_CHAT_CHARS, input_density(sess)[1][0]))
+        answer, attempts_used = yield from _stream_model(
+            messages, speaker, temperature, tier_limits()["attempts"], use_rp,
+            _floor, sid=sid, sink=parts)
 
-            turn = parse_turn(answer, speaker, cast if use_rp else None)
-            # StatusBlock 写坏了也是解析失败，不能只盯单行写法
-            if not turn.get("status") and ("[[" in answer or "【地点" in answer
-                                                 or "statusblock" in answer.lower()):
-                # 只记长度和指纹：原文是私人剧情，落进日志就是长期可 grep
-                metrics.note("status.parse_fail", sid=sid, mode="rp" if use_rp else "normal",
-                             raw_len=len(answer))
-            if use_rp and not (turn["lines"] or turn["narrator"]):
-                yield sse({"type": "error",
-                           "message": "模型这一轮没写出内容（旁白和角色发言都空），请重试。"})
-                return
-            if not use_rp and not turn["narrator"]:
-                yield sse({"type": "error", "message": "模型没有给出内容，请重试。"})
-                return
-
-            if cancelled["flag"]:
-                metrics.note("stream.cancel", sid=sid, stage="before_commit")
-                return                # 用户已经点了停止，不要把没要的东西写进去
-            with get_session_lock(sid):
-                if cancelled["flag"]:
-                    return
-                s2 = load_session(sid)
-                if s2 is not None:
-                    _commit_turn(s2, turn, use_rp, resume=bool(resume_from))
-                    context = context_tokens(s2)
-                    count = len(s2.get("messages") or [])
-                    characters = ensure_characters(s2)
-                else:
-                    context, count, characters = 0, 0, []
-
-            yield sse({
-                "type": "done",
-                "title": (s2 or {}).get("title", ""),
-                "context_tokens": context,
-                "context": context_info(s2),
-                "message_count": count,
-                "attempts": attempts_used,
-                "turn": turn,
-                "status": (s2 or {}).get("status") or {},
-                "characters": characters,
-                "pending_character": (s2 or {}).get("pending_character"),
-            })
-        except GeneratorExit:
-            # 客户端 abort：Flask 会 close 这个 generator。标记之后必须 re-raise，
-            # 否则 Python 会报 "generator ignored GeneratorExit"。
-            cancelled["flag"] = True
-            raise
-        finally:
-            release_busy(sid)
-
-        if cancelled["flag"]:
-            metrics.end(sid, ok=False, cancelled=True)
+        # 被叫停时 answer 是 None，但已经吐出来的字还留着：存成半截，
+        # 否则点了停止屏幕上什么都没有，想重发都找不到地方点
+        if answer is None:
+            if stop_requested(sid):
+                _save_partial(sid, "".join(parts), speaker, use_rp, cast)
+                metrics.note("stream.stop", sid=sid, stage="partial")
+                metrics.end(sid, ok=False, cancelled=True)
             return
+
+        turn = parse_turn(answer, speaker, cast if use_rp else None)
+        # StatusBlock 写坏了也是解析失败，不能只盯单行写法
+        if not turn.get("status") and ("[[" in answer or "【地点" in answer
+                                             or "statusblock" in answer.lower()):
+            # 只记长度和指纹：原文是私人剧情，落进日志就是长期可 grep
+            metrics.note("status.parse_fail", sid=sid, mode="rp" if use_rp else "normal",
+                         raw_len=len(answer))
+        if use_rp and not (turn["lines"] or turn["narrator"]):
+            yield sse({"type": "error",
+                       "message": "模型这一轮没写出内容（旁白和角色发言都空），请重试。"})
+            return
+        if not use_rp and not turn["narrator"]:
+            yield sse({"type": "error", "message": "模型没有给出内容，请重试。"})
+            return
+
+        if stop_requested(sid):
+            _save_partial(sid, answer, speaker, use_rp, cast)
+            metrics.note("stream.stop", sid=sid, stage="before_commit")
+            metrics.end(sid, ok=False, cancelled=True)
+            return                # 用户已经点了停止，这一轮不算完成
+        with get_session_lock(sid):
+            s2 = load_session(sid)
+            if s2 is not None:
+                _commit_turn(s2, turn, use_rp, resume=bool(resume_from))
+                context = context_tokens(s2)
+                count = len(s2.get("messages") or [])
+                characters = ensure_characters(s2)
+            else:
+                context, count, characters = 0, 0, []
+
+        yield sse({
+            "type": "done",
+            "title": (s2 or {}).get("title", ""),
+            "context_tokens": context,
+            "context": context_info(s2),
+            "message_count": count,
+            "attempts": attempts_used,
+            "turn": turn,
+            "status": (s2 or {}).get("status") or {},
+            "characters": characters,
+            "pending_character": (s2 or {}).get("pending_character"),
+        })
         metrics.end(sid, ok=True, attempts=attempts_used)
         background_compress(sid)
+
+    q = queue.Queue()
+
+    def runner():
+        # 真正跑生成的是这个线程。浏览器那头断掉只影响下面的转发，
+        # 跑完照样落盘，刷新回来就看得见。
+        try:
+            for chunk in body():
+                q.put(chunk)
+        except Exception as exc:
+            app.logger.exception("生成线程异常：%s", exc)
+            q.put(sse({"type": "error", "message": "生成中断：%s" % str(exc)[:200]}))
+        finally:
+            clear_stop(sid)
+            release_busy(sid)
+            q.put(None)
+
+    threading.Thread(target=runner, daemon=True, name="chat-" + sid).start()
+
+    def generate():
+        """只负责把线程的事件转给浏览器。断了就少一个读者，不影响生成。"""
+        while True:
+            chunk = q.get()
+            if chunk is None:
+                return
+            yield chunk
 
     return Response(
         generate(),

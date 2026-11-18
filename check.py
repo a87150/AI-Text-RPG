@@ -1247,8 +1247,11 @@ def main():
     _c = (pathlib.Path(__file__).parent / "static" / "js" / "chat.js").read_text(encoding="utf-8")
     check("生成中把发送换成停止", "showStopButton" in _c and "hideStopButton" in _c)
     check("停止走 AbortController", "stopper.abort" in _c)
-    check("草稿能保留", "commit_partial" in _c and "draft-keep" in _c)
-    check("草稿能丢弃重写", "draft-drop" in _c)
+    # 以前停止是把半截画成 DOM 草稿，可 finally 里 refresh 会整表重绘，
+    # 草稿不在 s.messages 里，连按钮一起被抹掉。现在半截由后端存下来，
+    # 前端只等它收尾后重绘，按钮自然就在
+    check("停止先通知后端", "/api/chat/stop" in _c)
+    check("停止后等后端收尾再拉", "waitNotBusy" in _c and "state.stopped" in _c)
     check("停止时不谎报模型失败", "你停止了这一轮" in
           (pathlib.Path(__file__).parent / "static" / "js" / "ui.js").read_text(encoding="utf-8"))
     _api = (pathlib.Path(__file__).parent / "static" / "js" / "api.js").read_text(encoding="utf-8")
@@ -1806,8 +1809,12 @@ def main():
     check("已存过的半截不重复插入", len(_m68b) == 1, str(len(_m68b)))
 
     _api68 = (pathlib.Path(__file__).parent / "rp" / "api.py").read_text(encoding="utf-8")
-    check("断开时会置取消标志", "except GeneratorExit" in _api68 and "cancelled[\u0022flag\u0022] = True" in _api68)
-    check("写盘前检查取消标志", _api68.count("if cancelled[\u0022flag\u0022]:") >= 2)
+    # 断连和喊停必须分开：刷新页面只是不看了，不该把正在写的一轮掐掉。
+    # 只有 /api/chat/stop 置位才算用户不要了
+    check("生成跑在独立线程里", "threading.Thread(target=runner" in _api68)
+    check("断连不再当取消", 'cancelled["flag"]' not in _api68)
+    check("写盘前检查停止标志", _api68.count("if stop_requested(sid):") >= 2)
+    check("停止时把半截存下", "_save_partial(sid" in _api68)
     _st68 = (pathlib.Path(__file__).parent / "rp" / "prompts" / "status.md").read_text(encoding="utf-8")
     check("物品与事实分工写进提示词",
           "物品只管「此刻谁手里有什么」" in _st68 and "反例" in _st68)

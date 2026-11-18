@@ -1548,7 +1548,9 @@ function toolsNode(role, isLast) {
     : [['speak', '🔊', '念这一段'], ['rewrite', '↻', '删掉这条及之后重新生成'], ['branch', '⧉', '从这里分叉']]
       .concat(isLast ? [['continue', '▶', '这条没写完，接着往下写']] : []);
   const bar = document.createElement('div');
-  bar.className = 'msg-tools';
+  // 最后一条常驻显示：点完停止、或刚写完，鼠标都在下面输入区，
+  // 全靠 hover 的话那排按钮就等于不存在，人会以为功能没了
+  bar.className = isLast ? 'msg-tools always' : 'msg-tools';
   for (const [act, icon, title] of acts) {
     const btn = document.createElement('button');
     btn.type = 'button';
@@ -1642,6 +1644,8 @@ export function renderMessages() {
       host.appendChild(narratorNode(m.narrator || m.content || '', storyName()));
     }
     host.dataset.index = index;
+    // 用户喊停留下的半截：不标出来的话，看着和写完的一轮一模一样
+    if (m.partial) host.classList.add('is-partial');
     // 只有最后一条 AI 回复能续写：往前接就不是同一轮了
     host.appendChild(toolsNode(m.role === 'user' ? 'user' : 'assistant', index === msgs.length - 1));
     box.appendChild(host);
@@ -1669,7 +1673,13 @@ export function stopBusyWatch() {
 
 export function appendBusyHint() {
   const box = $('#messages');
-  if (!box || busyTimer) return null;
+  if (!box) return null;
+  // 重绘会把提示连节点一起清掉，光看 busyTimer 就以为"还在"，
+  // 结果第二次重绘起这份提示永远挂不回来——刷新后既没有「正在写」
+  // 也没有「没答上」，屏幕上只剩一条用户消息。认节点，不认计时器。
+  const alive = box.querySelector('.retry-hint.busy');
+  if (alive) return alive;
+  stopBusyWatch();
   const wrap = document.createElement('div');
   wrap.className = 'retry-hint busy';
   wrap.innerHTML = '<span>✍ AI 正在写这一轮（页面刷新不会打断它，写完会自动出现）。</span>';
