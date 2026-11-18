@@ -105,9 +105,14 @@ POST /api/sessions/<sid>/branch {"index": n}
 
     "cover": "20261112144152-0aac75.jpg",
     "cover_prompt": "夜雨的旧城，一个黑发女人站在露台上",
-    "cover_history": ["145645-eb8997.jpg", "145857-65e521.jpg"]
+    "cover_history": [
+      {"name": "145645-eb8997.jpg", "prompt": "同一个人的另一张"},
+      {"name": "145857-65e521.jpg", "prompt": ""}
+    ]
 
-cover 只存文件名，路径由 DATA_DIR 推，换机器能跑。cover_history 最多 6 条，新的在前。
+cover 只存文件名，路径由 DATA_DIR 推，换机器能跑。cover_history 最多 6 条，新的在前；
+每一项是 **`{name, prompt}` 对象**而不是字符串——换回旧图时提示词要跟着回去，不然
+「再生成一次」就丢了当初那句。`prompt` 可能是空串（早期记录没有）。
 引用的文件不在时读出来是空串，界面上不会出现破图。
 
 ## settings.json

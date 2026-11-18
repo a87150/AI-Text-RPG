@@ -17,12 +17,17 @@ node --check static/js/ui.js
 
 ## check.py
 
-`python check.py` 是唯一的测试入口，不发网络请求，几十秒跑完，全绿才提交。它自己搭一个临时数据目录跑整套流程：
+`python check.py` 是唯一的测试入口，不发网络请求，两三秒跑完（实测 2.3 秒），全绿才提交。它自己搭一个临时数据目录跑整套流程：
 
 ```python
 TMP_DIR = tempfile.mkdtemp(prefix="lt-check-")
 os.environ["LT_DATA_DIR"] = TMP_DIR
 os.environ["LT_BACKUP_DIR"] = os.path.join(TMP_DIR, "backups")
+os.environ["LT_LOG_DIR"] = os.path.join(TMP_DIR, "logs")   # 否则假事件写进真实 logs/
+```
+
+断言尽量验行为，别只 grep 源码文本——`check("白名单已配", "TRUSTED_HOSTS" in 源码)` 这种
+在配置写错时照样是绿的。能发请求就发请求，能打桩跑一遍就跑一遍。
 ```
 
 两个环境变量都指到临时目录，**不会碰用户真实的 `data/` 和 `backups/`**。这一点是踩过坑才加的：以前每跑一次检查就往真实 `backups/` 里塞一对包，攒了 27 份。

@@ -29,6 +29,7 @@ from .config import (
     MAX_OPENING_ATTEMPTS, MIN_CHAT_CHARS, MODES, PROVIDERS,
     PRICES, REASONING_LEVELS, TIERS, TIER_LABELS, app, backup_conf, current_target,
     clear_persist_error, persist_error,
+    CURRENCY_SIGN,
     image_conf, prices, prices_text, save_image_conf, save_prices, save_speech_conf,
     SPEECH_VOICES,
     speech_conf,
@@ -203,6 +204,9 @@ def api_config():
         "creativities": CREATIVITY_LEVELS,
         "creativity_labels": CREATIVITY_LABELS,
         "creativity_temps": CREATIVITY_TEMP,
+        # 币种符号由后端给：前端硬编码 'USD' ? '$' : '¥' 的话，加第三种币
+        # 后端认得出、界面一律显示人民币符号
+        "currency_sign": CURRENCY_SIGN,
         # 单价表拍成文本给设置界面的输入框；解析在 config.save_prices
         "prices": prices_text(),
         "prices_default": PRICES,
@@ -645,7 +649,8 @@ def api_export_markdown(sid):
     text = session_to_markdown(sess)
     name = "".join(ch for ch in (sess.get("title") or "story")
                    if ch.strip() and ch not in '\\/:*?"<>|') or "story"
-    resp = app.response_class(text, mimetype="text/markdown; charset=utf-8")
+    # mimetype 只给类型：charset 由 Flask 自己补，写在这里会变成两个
+    resp = app.response_class(text, mimetype="text/markdown")
     resp.headers["Content-Disposition"] = "attachment; filename*=UTF-8''%s.md" % url_quote(name)
     return resp
 

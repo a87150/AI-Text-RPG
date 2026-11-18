@@ -159,7 +159,8 @@ def cover_prompt_from(story):
     if world:
         bits.append(world[:200])
     elif title:
-        bits.append(title)
+        # title 进提示词只当"没写世界观"时的补位，长了会把画面带偏
+        bits.append(title[:200])
     names = []
     for c in (story.get("characters") or [])[:3]:
         if isinstance(c, dict) and c.get("name"):

@@ -13,7 +13,7 @@ import requests
 from flask import Flask
 
 # ============================== 版本 ==============================
-VERSION = "1.33"
+VERSION = "1.34"
 
 # ============================== 模型配置 ==============================
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
@@ -151,7 +151,6 @@ WRITING_DEFAULTS = {
     "language": "zh",       # 正文语言：zh 中文 / en English
 }
 LANGUAGES = ("zh", "en")
-LANGUAGE_LABELS = {"zh": "中文", "en": "English"}
 WRITING_BOUNDS = {
     "narrator_min": (10, 300),
     "narrator_max": (20, 600),
@@ -220,7 +219,6 @@ SPEECH_DEFAULTS = {
 }
 # 设备只认这三个。写 cuda:0 之类的会静默退回 CPU，一句要等三十秒
 SPEECH_DEVICES = ("auto", "gpu", "cpu")
-SPEECH_DEVICE_LABELS = {"auto": "自动", "gpu": "显卡", "cpu": "CPU"}
 # 内置音色，和 vox 对上的那一批
 SPEECH_VOICES = ("aiden", "dylan", "eric", "ono_anna", "ryan",
                  "serena", "sohee", "uncle_fu", "vivian")
@@ -234,7 +232,6 @@ def language_of():
 
 
 SPEECH_READ_MODES = ("stream", "manual")
-SPEECH_READ_LABELS = {"stream": "边生成边读", "manual": "点按钮朗读"}
 _speech = dict(SPEECH_DEFAULTS)
 # 同一句话重复念很常见，开启缓存能省下重跑的时间
 _speech_cache = True
@@ -615,7 +612,6 @@ def save_reasoning(value, persist=True):
 # 回复模式：normal = 系统旁白叙述；rp = 每轮先旁白、再由在场角色各自发言
 MODES = ("normal", "rp")
 MODE_DEFAULT = "normal"
-MODE_LABELS = {"normal": "一般模式", "rp": "角色扮演"}
 _mode = MODE_DEFAULT
 
 def mode_of():

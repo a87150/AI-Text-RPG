@@ -3207,6 +3207,61 @@ def main():
     _log_dir = rp_metrics.LOG_DIR
     check("自检的日志写在临时目录里",
           os.path.abspath(_log_dir).startswith(os.path.abspath(TMP_DIR)), _log_dir)
+
+    # 97. 版本号不许漂。这版我自己就先改了 CHANGELOG 后改 VERSION，靠人记不住。
+    _root97 = pathlib.Path(__file__).parent
+    _ver97 = rp_config.VERSION
+    _readme97 = (_root97 / "README.md").read_text(encoding="utf-8")
+    _cl97 = (_root97 / "docs" / "CHANGELOG.md").read_text(encoding="utf-8")
+    check("README 版本跟上 VERSION", "当前版本 **%s**" % _ver97 in _readme97, _ver97)
+    check("CHANGELOG 首条就是当前版本",
+          _cl97.split("## ")[1].startswith(_ver97 + "："),
+          _cl97.split("## ")[1][:16])
+
+    # P3 那批的回归
+    _html97 = (_root97 / "templates" / "index.html").read_text(encoding="utf-8")
+    _o97 = len(re.findall(r"<div\b", _html97, re.I))
+    _c97 = len(re.findall(r"</div\s*>", _html97, re.I))
+    check("模板里的 div 配平", _o97 == _c97, "%d vs %d" % (_o97, _c97))
+
+    _long = rp_storage.new_session("标" * 5000)
+    _long["id"] = "cccc0003cccc"
+    rp_storage.save_session(_long)
+    _back = rp_storage.load_session("cccc0003cccc")
+    check("五千字的标题落盘就被截断", len(_back["title"]) == rp_storage.TITLE_MAX,
+          str(len(_back["title"])))
+    os.remove(os.path.join(rp_config.DATA_DIR, "cccc0003cccc.json"))
+
+    check("日志单文件有上限", rp_metrics.MAX_BYTES > 0)
+    check("币种符号由后端给",
+          client.get("/api/config").get_json().get("currency_sign", {}).get("CNY"))
+
+    # 98. 备份往返。这是唯一的数据恢复路径，之前一条断言都没有。
+    _bkid = rp_storage.new_session("备份往返")["id"]
+    _bk = rp_storage.new_session("备份往返")
+    _bk["id"] = _bkid
+    _bk["world"] = "备份时的世界"
+    rp_storage.save_session(_bk)
+
+    _pkg = client.post("/api/backups", json={})
+    check("能打出备份包", _pkg.status_code in (200, 201), str(_pkg.status_code))
+    _items = (_pkg.get_json() or {}).get("items") or []
+    _name = (_items[0] or {}).get("name") if _items else ""
+    check("备份包出现在列表里", bool(_name), str(_name)[:32])
+
+    # 备份之后改掉内容，再还原，应该回到备份那一刻
+    _bk2 = rp_storage.load_session(_bkid)
+    _bk2["world"] = "备份之后改坏的"
+    rp_storage.save_session(_bk2)
+    _res = client.post("/api/backups/%s/restore" % _name, json={})
+    check("备份能还原", _res.status_code == 200, str(_res.status_code))
+    _back = rp_storage.load_session(_bkid) or {}
+    check("还原把内容退回去了", _back.get("world") == "备份时的世界",
+          repr(_back.get("world")))
+
+    # 还原是原子写：包里的路径不许写出 data/ 外面
+    check("还原不会写出数据目录", "os.replace(tmp, target)" in
+          (pathlib.Path(__file__).parent / "rp" / "backup.py").read_text(encoding="utf-8"))
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")

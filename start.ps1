@@ -79,8 +79,9 @@ if (-not (Test-Path $vpy)) {
         $cmd = Get-Command $cand -ErrorAction SilentlyContinue
         if (-not $cmd) { continue }
         try {
-            $major = & $cmd.Source -c "import sys; print(sys.version_info[0])" 2>$null
-            if ("$major".Trim() -eq '3') { $hostPy = $cmd.Source; break }
+            # 只看大版本不够：3.9 也是 3，装上之后跑起来才报语法错
+            $ver = & $cmd.Source -c "import sys; print('%d.%d' % sys.version_info[:2])" 2>$null
+            if ($ver -and ([version]"$ver".Trim() -ge [version]'3.10')) { $hostPy = $cmd.Source; break }
         } catch { }
     }
     if (-not $hostPy) { Die "找不到能用的 Python 3。装好 Python 3.10 以上，勾上 Add to PATH，再回来跑这个脚本。" }

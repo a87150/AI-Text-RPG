@@ -23,6 +23,9 @@ mk_*.txt
 .coverage
 htmlcov/
 
+# 生图工作流是运行时会被导入覆盖的文件，出厂默认留在 .bak 里
+moss_workflow_api.json
+
 # 本地跑脚本时重定向出来的日志
 _*.log
 _*.log.*

@@ -10,7 +10,7 @@ from .llm import model_text
 from .prompts import _tokens, build_context_debug, build_summary_prompt
 from .snapshots import snapshot
 from .storage import (
-    IO_TIMING, get_session_lock, load_session, save_session,
+    io_of, get_session_lock, load_session, save_session,
 )
 
 # 到上限八成压。真等撞线才压，那一轮已经是贴着 num_ctx 在跑，
@@ -88,7 +88,7 @@ def context_info(sess):
         "debug": debug,
         "messages": len(msgs),
         # 读写一份会话 JSON 的耗时：超过 100ms 就该拆数据层了
-        "io": dict(IO_TIMING),
+        "io": io_of(sess.get("id")),
         # 只报这一局：跨局累加会把别人的用量算进来，看着像自己烧掉的
         "stream": metrics.snapshot(sess.get("id")),
         # 显示压缩真正会留下的条数，别跟实际行为对不上

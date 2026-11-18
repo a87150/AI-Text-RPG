@@ -22,6 +22,9 @@ TEXT_FIELDS = (
     "world", "rules", "opening", "summary", "user_voice", "user_style",
 )
 DEFAULT_TITLE = "未命名故事"
+# 标题只有两个去处：侧栏一行，和生图提示词里的补位。给五千字不会显示得
+# 更完整，只会把文件撑大、把提示词带偏。
+TITLE_MAX = 60
 
 def get_session_lock(sid):
     with _session_locks_guard:
@@ -100,7 +103,23 @@ def current_stamp(sid):
     return data.get("updated_at") if isinstance(data, dict) else None
 
 # 最近一次读/写耗时（毫秒），供上下文面板显示。
+# 除了全局这份，还按会话各记一份：只留全局的话，手机那边动一下别的会话，
+# 面板上显示的就是别人那次，看着像这一局读写变慢了。
 IO_TIMING = {"load_ms": 0.0, "save_ms": 0.0, "bytes": 0}
+IO_BY_SID = {}
+
+
+def io_of(sid):
+    """这一局自己的读写耗时。没记过就退回全局那份。"""
+    return dict(IO_BY_SID.get(sid or "", IO_TIMING))
+
+
+def _note_io(sid, key, ms, size):
+    IO_TIMING[key] = ms
+    IO_TIMING["bytes"] = size
+    slot = IO_BY_SID.setdefault(sid or "", {"load_ms": 0.0, "save_ms": 0.0, "bytes": 0})
+    slot[key] = ms
+    slot["bytes"] = size
 
 def save_session(sess, expect=None):
     """写盘。expect 给就是乐观锁：磁盘上的 updated_at 和它对不上就报 StaleSession。
@@ -111,6 +130,10 @@ def save_session(sess, expect=None):
     path = session_path(sid)
     if not path:
         raise ValueError("非法的会话 ID")
+    # 在这里兜底而不是逐个端点截：建会话、改设定、自动起名、分支、导入
+    # 都往 title 写过，漏一处就漏一处。
+    if isinstance(sess.get("title"), str):
+        sess["title"] = sess["title"].strip()[:TITLE_MAX]
     with get_session_lock(sid):
         if expect is not None:
             actual = current_stamp(sid)
@@ -124,8 +147,8 @@ def save_session(sess, expect=None):
             with open(tmp, "w", encoding="utf-8") as f:
                 json.dump(sess, f, ensure_ascii=False, indent=2)
             os.replace(tmp, path)
-            IO_TIMING["save_ms"] = (time.perf_counter() - _t0) * 1000
-            IO_TIMING["bytes"] = os.path.getsize(path) if os.path.isfile(path) else 0
+            _note_io(sid, "save_ms", (time.perf_counter() - _t0) * 1000,
+                     os.path.getsize(path) if os.path.isfile(path) else 0)
         finally:
             if os.path.isfile(tmp):
                 try:
@@ -142,8 +165,8 @@ def load_session(sid):
             _t0 = time.perf_counter()
             with open(path, encoding="utf-8") as f:
                 data = json.load(f)
-            IO_TIMING["load_ms"] = (time.perf_counter() - _t0) * 1000
-            IO_TIMING["bytes"] = os.path.getsize(path)
+            _note_io(sid, "load_ms", (time.perf_counter() - _t0) * 1000,
+                     os.path.getsize(path))
             return data
         except (OSError, json.JSONDecodeError):
             return None

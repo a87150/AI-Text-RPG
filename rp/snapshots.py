@@ -5,6 +5,7 @@
 """
 import json
 import os
+import shutil
 import time
 
 from . import metrics
@@ -16,6 +17,29 @@ KEEP = 10
 import threading
 _lock = threading.RLock()
 os.makedirs(SNAP_DIR, exist_ok=True)
+
+_orphan_at = {"t": 0.0}
+
+
+def _prune_orphans():
+    """会话删了，它的快照目录会永远留在原地。
+
+    一天扫一次，把没有对应会话文件的目录收掉。扫不动就跳过，
+    清垃圾不能反过来妨碍正常保存。
+    """
+    now = time.time()
+    if now - _orphan_at["t"] < 86400:
+        return
+    _orphan_at["t"] = now
+    try:
+        alive = {f[:-5] for f in os.listdir(DATA_DIR) if f.endswith(".json")}
+        for name in os.listdir(SNAP_DIR):
+            full = os.path.join(SNAP_DIR, name)
+            if name not in alive and os.path.isdir(full):
+                shutil.rmtree(full, ignore_errors=True)
+    except OSError:
+        pass
+
 
 def _dir(sid):
     safe = "".join(ch for ch in (sid or "") if ch.isalnum() or ch in "-_")
@@ -30,6 +54,7 @@ def snapshot(sess, reason="manual"):
     path = _dir((sess or {}).get("id"))
     if not path:
         return None
+    _prune_orphans()
     metrics.note("snapshot.create", sid=sess.get("id"), reason=reason)
     stamp = time.strftime("%Y%m%d-%H%M%S", time.localtime())
     tag = "".join(ch for ch in str(reason) if ch.isalnum()) or "manual"

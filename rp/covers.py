@@ -56,10 +56,13 @@ ALLOWED_EXT = (".png", ".jpg", ".jpeg", ".webp")
 os.makedirs(COVERS_DIR, exist_ok=True)
 
 def _load_workflow():
-    if not os.path.isfile(WORKFLOW_PATH):
-        raise RuntimeError("找不到工作流文件 moss_workflow_api.json")
-    with open(WORKFLOW_PATH, encoding="utf-8") as f:
-        return json.load(f)
+    # 这份文件会被导入工作流改写，所以不进版本库（.bak 才是出厂默认）。
+    # 新克隆的仓库里只有 .bak，回退到它。
+    for path in (WORKFLOW_PATH, WORKFLOW_PATH + ".bak"):
+        if os.path.isfile(path):
+            with open(path, encoding="utf-8") as f:
+                return json.load(f)
+    raise RuntimeError("找不到工作流文件 moss_workflow_api.json")
 
 
 # 换工作流时这几个节点号要跟着改，所以导入时得说清楚缺哪个

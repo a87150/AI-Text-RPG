@@ -102,32 +102,34 @@ pip install vox-tts                                     # 用 3.13 那个 pip
 python -m vox.build --model <HF 目录> --dtype bf16 --quant q8 -o models/x.tmod
 ```
 
-主程序第一次要念的时候把 `python -m vox serve` 拉起来当子进程，之后只走 HTTP。
-实测加载 2.5 秒，一句 6.3 秒的音频合成 3.2 秒，流式首包 0.18 秒。
+第一次要念的时候，主程序拉起一个常驻子进程 `rp/vox_worker.py`，之后靠 **stdin/stdout 管道**跟它说话。
+不用 vox 自带的 `serve`：它的 HTTP 接口只认预先注册的风格名，内置发音人调不动。
+实测加载 2.5 秒，一句 6.3 秒的音频合成 3.2 秒，首包 0.18 秒。
 
 ```json
 "speech": {
 "mode": "stream",
 "python": "",
 "model": "models/qwen3-custom.tmod",
-"url": "http://127.0.0.1:8190",
 "device": "auto",
 "threads": 0,
-"language": "chinese",
 "voice": "vivian",
-"voices": ""
+"idle": 120,
+"voices": "",
+"styles": ""
 }
 ```
 
 - `mode`：`stream` 边生成边读，`manual` 点消息上的按钮才念
-- `python`：装了 vox-tts 的解释器，留空自动找 3.13
+- `python`：装了 vox-tts 的解释器，留空自动找 3.13（vox 只出到 3.13 的轮子）
 - `model`：`.tmod` 路径，相对项目根
-- `url`：vox 服务的地址，主进程自己监听
-- `device` / `threads`：设备（`auto`/`cpu`/`vulkan`）和线程数，0 让引擎自己定
-- `voice` / `language`：默认音色和语言；内置音色 aiden、dylan、eric、ono_anna、ryan、serena、sohee、uncle_fu、vivian
+- `device` / `threads`：设备（只认 `auto`/`gpu`/`cpu`，写别的会静默退回 CPU）和线程数，0 让引擎自己定
+- `voice`：默认音色；内置 aiden、dylan、eric、ono_anna、ryan、serena、sohee、uncle_fu、vivian
+- `idle`：空闲多少秒把子进程收下来，0 = 不收。它占着几 GB 显存
 - `voices`：角色名 -> 音色，一行一个 `角色=vivian`，`*` 兜底
+- `styles`：风格名 -> 自然语言描述，一行一个 `害羞=说话很小声，结巴`，交给模型当 instruct
 
-改了模型或解释器，保存时会把旧服务停掉，下一句按新配置重起。
+改了模型或解释器，保存时会把旧进程停掉，下一句按新配置重起。
 
 ## 模型单价（设置 → 写作 → 模型单价）
 

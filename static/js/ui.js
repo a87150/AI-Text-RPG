@@ -541,7 +541,9 @@ export function renderContextDetail() {
   // 没配单价和"这轮是免费的"是两件事，分开说——之前一律显示横杠，
   // 于是模型名对不上价目表时会一直挂着 0，谁也不知道是没算还是没花钱
   // 每个模型自带币种：国内厂商人民币，OpenAI 这类美元原价，不做汇率折算
-  const signOf = (cur) => (cur === 'USD' ? '$' : '¥');
+  // 符号表以后端为准：写死 'USD' ? '$' : '¥' 的话，加第三种币会一律显示 ¥
+  const signOf = (cur) => ((state.conf && state.conf.currency_sign) || {})[cur]
+    || ((state.conf && state.conf.currency_sign) || {}).CNY || '';
   const money = (cost, cur) => {
     if (cost === null || cost === undefined) return '未配单价';
     const v = cost.total || 0;

@@ -74,20 +74,24 @@ def _save_totals():
 
 
 KEEP_DAYS = 14          # 一天一个文件，单日实测 400KB 左右，两周就是一个上限
-_pruned = {"done": False}
+MAX_BYTES = 8 * 1024 * 1024   # 单文件也得有个头：某天真出事，一天能写几十兆
+_prune_at = {"t": 0.0}
+_roll_at = {"t": 0.0}
 
 def _path():
     return os.path.join(LOG_DIR, time.strftime("%Y-%m-%d") + ".log")
 
 def _prune():
-    """启动后第一次写日志时清一遍过期文件。
+    """按小时清一遍过期文件。
 
-    不每次都扫：日志目录只会慢慢变。扫不到/删不掉都当没事，观测不能反过来弄排主流程。
+    原来只在进程第一次写日志时跑一次——应用开着不关，那一次之后就再也不清了。
+    扫不到/删不掉都当没事，观测不能反过来拖累主流程。
     """
-    if _pruned["done"]:
+    now = time.time()
+    if now - _prune_at["t"] < 3600:
         return
-    _pruned["done"] = True
-    cutoff = time.time() - KEEP_DAYS * 86400
+    _prune_at["t"] = now
+    cutoff = now - KEEP_DAYS * 86400
     try:
         for name in os.listdir(LOG_DIR):
             if not name.endswith(".log"):
@@ -96,6 +100,22 @@ def _prune():
             if os.path.getmtime(full) < cutoff:
                 os.remove(full)
     except Exception:
+        pass
+
+def _roll(path):
+    """单文件撞上限就滚一代，旧的留一份 .1。
+
+    一天一个文件名，但"一天"没有大小上限：真出事时能把磁盘写满。
+    日志是拿来排查的，最近这一段最有用。
+    """
+    now = time.time()
+    if now - _roll_at["t"] < 60:      # 每分钟最多看一眼大小
+        return
+    _roll_at["t"] = now
+    try:
+        if os.path.getsize(path) > MAX_BYTES:
+            os.replace(path, path + ".1")
+    except OSError:
         pass
 
 def note(event, **fields):
@@ -107,7 +127,9 @@ def note(event, **fields):
         line = json.dumps(fields, ensure_ascii=False, default=str)
         with _lock:
             os.makedirs(LOG_DIR, exist_ok=True)
-            with open(_path(), "a", encoding="utf-8") as f:
+            path = _path()
+            _roll(path)
+            with open(path, "a", encoding="utf-8") as f:
                 f.write(line + "\n")
     except Exception:
         pass
