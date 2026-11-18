@@ -1079,7 +1079,7 @@ body.story-view #btn-search { display: none; }
     padding-bottom: 2px; scrollbar-width: none;
   }
   .actions::-webkit-scrollbar { display: none; }
-  .actions button, .model-row, .model-row select { flex: 0 0 auto; white-space: nowrap; }
+  .actions button, .actions .model-row, .actions .model-row select { flex: 0 0 auto; white-space: nowrap; }
   /* 侧栏变抽屉：手机上也要能管故事和对话 */
   .sidebar {
     display: flex; position: fixed; inset: 0 auto 0 0; z-index: 60;
@@ -1104,7 +1104,7 @@ body.story-view #btn-search { display: none; }
   .story-pane { padding: 14px 14px 20px; }
   #story-pane #settings-form { max-width: none; }
   .field-head { flex-wrap: wrap; }
-  .pick-list { grid-template-columns: 1fr; height: min(56vh, 430px); min-height: 240px; grid-auto-rows: 88px; }
+  .pick-list { grid-template-columns: minmax(0, 1fr); height: min(56vh, 430px); min-height: 240px; grid-auto-rows: 88px; }
   .pick-item .pi-shot { width: 74px; height: 50px; }
   .idea-pop { left: 12px; right: 12px; width: auto; max-width: none; bottom: 12px; max-height: calc(100% - 90px); padding: 16px 16px 12px; }
   #ask-pop { left: 12px; right: 12px; top: 12px; bottom: 12px; }
@@ -1494,3 +1494,9 @@ body.story-view #btn-io { display: none; }
 .backup-inline input { text-align: center; }
 .backup-conf { flex-wrap: nowrap; }
 .backup-conf .prefs-check { white-space: nowrap; }
+
+/* 窄屏：备份那句话放不进一行，硬挤会顶出屏幕，放开折行 */
+@media (max-width: 720px) {
+  .backup-conf { flex-wrap: wrap; }
+  .backup-inline { flex-wrap: wrap; white-space: normal; row-gap: 4px; }
+}

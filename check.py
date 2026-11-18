@@ -2221,6 +2221,24 @@ def main():
           str([c["name"] for c in rp_characters.ensure_characters(_sd)]))
     check("全是虚词就剩空表",
           rp_characters.ensure_characters({"characters": [{"name": "我"}]}) == [])
+    # 模型会在名字后面写括注交代人在哪儿：【叶岩（在篮球场）】。
+    # 照抄就多出一张卡，跟「叶岩」并存，用户看到的是一人两卡
+    check("名字后面的括注被剥掉",
+          rp_characters.strip_note("叶岩（在篮球场）") == "叶岩"
+          and rp_characters.strip_note("叶岩(在篮球场)") == "叶岩"
+          and rp_characters.strip_note("叶岩") == "叶岩",
+          rp_characters.strip_note("叶岩（在篮球场）"))
+    _sn = {"characters": [{"name": "叶岩", "role": "篮球队长"},
+                          {"name": "叶岩（在篮球场）", "role": ""}]}
+    check("归一后同名的卡合并成一张",
+          [c["name"] for c in rp_characters.ensure_characters(_sn)] == ["叶岩"]
+          and _sn["characters"][0]["role"] == "篮球队长",
+          str([c["name"] for c in _sn["characters"]]))
+    _snl = rp_characters.parse_turn("【旁白】球场。\n【叶岩（在篮球场）】你来了。", "",
+                                    ["叶岩"])
+    check("带括注的标签认回本人，台词没掉",
+          [(l["speaker"], l["text"]) for l in _snl["lines"]] == [("叶岩", "你来了。")],
+          str([(l["speaker"], l["text"]) for l in _snl["lines"]]))
     check("真名字还是能建卡",
           rp_characters.upsert_character({"characters": [], "user_name": "", "ai_name": ""},
                                         {"name": "林姐"}) is not None)

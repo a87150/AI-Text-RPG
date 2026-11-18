@@ -39,8 +39,19 @@ _NOT_NAMES = {
     "吧", "呢", "吗", "啊", "呀", "了", "的", ""
 }
 
-def is_bad_name(name):
+# 名字后面跟的括号补注不是名字的一部分：模型爱写【叶岩（在篮球场）】
+# 交代人在哪儿，照抄就多出一张「叶岩（在篮球场）」的卡，跟「叶岩」并存。
+# 只剥结尾那一段，剥空了就当它本来就没名字
+_NAME_NOTE = re.compile(r"\s*[（(〔\[【][^（()）〔〕\[\]【】]{0,24}[)）〕\]】]\s*$")
+
+def strip_note(name):
+    """去掉名字尾部的括号补注，剥没了就退回原文。"""
     text = str(name or "").strip()
+    out = _NAME_NOTE.sub("", text).strip()
+    return out or text
+
+def is_bad_name(name):
+    text = strip_note(name).strip()
     return text.lower() in _BAD_NAMES or text in _NOT_NAMES
 
 # 代词和虛词不是人名。分隔符是可选的，所以「加个角色我说两句」里的「我」
@@ -60,7 +71,7 @@ def ensure_characters(sess):
         for item in chars:
             if not isinstance(item, dict):
                 continue
-            name = (item.get("name") or "").strip()[:24]
+            name = strip_note(item.get("name") or "").strip()[:24]
             # 这里是角色表唯一的归一化入口，四条写入路径（新建、更新、
             # 保存设定、兜底建卡）最后都过这儿。模型会把「我」当成角色名
             # 交上来，存进去就占掉一个位置，而且用户删了下次还会回来
@@ -79,6 +90,28 @@ def ensure_characters(sess):
                 "history": [h for h in (item.get("history") or [])
                             if isinstance(h, str)][-CHARACTER_HISTORY_KEEP:],
             })
+    # 剥完括号补注可能撞名（「叶岩」和「叶岩（在篮球场）」本来是同一个），
+    # 不合并就是两张同名卡并列，删一张另一张还在
+    merged = {}
+    order = []
+    for item in cleaned:
+        name = item["name"]
+        base = merged.get(name)
+        if base is None:
+            merged[name] = item
+            order.append(name)
+            continue
+        # 设定取长的、状态和音色取后到的非空，历史接上
+        if len(item["role"]) > len(base["role"]):
+            base["role"] = item["role"]
+        for key in ("state", "voice", "style"):
+            if item[key]:
+                base[key] = item[key]
+        for h in item["history"]:
+            if h not in base["history"]:
+                base["history"].append(h)
+    cleaned = [merged[n] for n in order]
+
     # 不再兜底造一个。角色表空就是空：以前删完下一次读取又长回来，
     # 用户永远删不掉一个没建过的角色。新建会话时由 create 那边自己准备好。
     sess["characters"] = cleaned
@@ -96,7 +129,7 @@ def advance_turn(sess):
 
 def looks_like_name(name):
     """从在场名单里捞人用：像人名才建卡，免得把整句话塞进角色列。"""
-    text = str(name or "").strip()
+    text = strip_note(name).strip()
     if not text or is_bad_name(text) or len(text) > 8:
         return False
     # 代词、虚词、通用称呼不是人。模型会把「我」写进 present，
@@ -744,7 +777,7 @@ def active_facts(sess, limit=FACTS_KEEP):
 
 def is_character_slot(tag):
     """【名字】这种两到四个汉字的短标签，才可能是角色段。"""
-    text = str(tag or "").strip()
+    text = strip_note(tag).strip()
     return bool(text) and len(text) <= 8 and not re.search(r"[，,。；;：:！？!?\s0-9]", text)
 
 def _sync_new_character(result):
@@ -865,7 +898,7 @@ def parse_turn(text, speaker="", names=None):
     narrator_parts = [head] if head else []
     for i, m in enumerate(marks):
         end = marks[i + 1].start() if i + 1 < len(marks) else len(text)
-        tag = m.group(1).strip()
+        tag = strip_note(m.group(1)).strip()
         body = text[m.end():end].strip()
         if not body:
             continue
