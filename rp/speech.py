@@ -24,7 +24,10 @@ import uuid
 
 from .config import BASE_DIR, SPEECH_LANGS, language_of, speech_conf
 
-_serve_lock = threading.Lock()
+# 可重入：_ensure_server 持着这把锁起进程，失败时调 reset() 收尾，
+# 而 reset() 自己也要这把锁。用普通 Lock 就是同一个线程把自己锁死，
+# 之后语音设置存不了、朗读不出声，只有重启才能恢复。
+_serve_lock = threading.RLock()
 _proc = None
 _ready_at = ""
 _last_used = 0.0

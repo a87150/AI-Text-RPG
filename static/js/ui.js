@@ -1209,6 +1209,9 @@ let _speakHold = false;
 // 队列串行是刻意的：几段声音叠在一起没法听。
 const TTS_QUEUE = [];
 let ttsBusy = false;
+// 队列里连着一串都念不出来是常态（配置错、显存满），只提示第一次，
+// 成功念出一句再重新武装，免得刷满一屏
+let ttsWarned = false;
 let ttsOn = false;
 let ttsBuf = '';
 // 播当前段时把后面两段先合成好，轮到时直接放。
@@ -1295,9 +1298,15 @@ async function pumpSpeech() {
       const body = TTS_QUEUE.shift();
       try {
         await playUrl(await fetchSpeech(body));
+        ttsWarned = false;
       } catch (e) {
-        // \u4e00\u53e5\u5ff5\u4e0d\u51fa\u6765\u4e0d\u8be5\u628a\u6574\u6761\u6d41\u505c\u6389
-        console.error('\u6717\u8bfb\u5931\u8d25', e);
+        // 一句念不出来不该把整条流停掉，但也不能只在控制台说一声：
+        // 用户的感受就是「点了没反应」
+        console.error('朗读失败', e);
+        if (!ttsWarned) {
+          ttsWarned = true;
+          toast('朗读失败：' + ((e && e.message) || e), 'error');
+        }
       }
     }
   } finally {

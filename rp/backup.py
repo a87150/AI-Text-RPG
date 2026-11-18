@@ -178,8 +178,19 @@ def restore(name):
             folder = os.path.dirname(target)
             if folder:
                 os.makedirs(folder, exist_ok=True)
-            with open(target, "wb") as dst:
-                dst.write(zf.read(info))
+            # 先写临时文件再原子替换：直接覆盖的话，中途崩一次就留下
+            # 半截 JSON，会话读不出来，界面上就是"这一局没了"。
+            tmp = "%s.restore.tmp" % target
+            try:
+                with open(tmp, "wb") as dst:
+                    dst.write(zf.read(info))
+                os.replace(tmp, target)
+            finally:
+                if os.path.isfile(tmp):
+                    try:
+                        os.remove(tmp)
+                    except OSError:
+                        pass
             written += 1
 
     filled = 0

@@ -615,6 +615,9 @@ def split_facts(text):
 
 FACTS_MAX = 40
 FACTS_KEEP = 12
+# 手填的事实是用户自己写下的，跟模型每轮自动记的不是一回事：
+# 自动的按 40 条滚动，手填的留到 200（和 /api/facts 里的上限一致）。
+MANUAL_FACTS_MAX = 200
 
 def _norm(text):
     # 去掉空格和全部标点。中文条目常只差一个句号或引号：
@@ -668,6 +671,25 @@ def _dedupe_book(book):
                 break
     book[:] = [f for k, f in enumerate(items) if k not in drop]
 
+def _trim_book(book):
+    """各自滚动：自动记的留 40 条，手填的留 200 条。
+
+    以前是总数一刀切 40，按先后删最老的——手填的长线设定正好是最老的
+    那批，写到第 41 条就被自己后来的自动记账挤出局，而且一句话都不说。
+    """
+    manual = [i for i, f in enumerate(book)
+              if isinstance(f, dict) and f.get("manual")]
+    auto = [i for i, f in enumerate(book)
+            if not (isinstance(f, dict) and f.get("manual"))]
+    drop = set()
+    if len(auto) > FACTS_MAX:
+        drop.update(auto[:len(auto) - FACTS_MAX])
+    if len(manual) > MANUAL_FACTS_MAX:
+        drop.update(manual[:len(manual) - MANUAL_FACTS_MAX])
+    if drop:
+        book[:] = [f for i, f in enumerate(book) if i not in drop]
+
+
 def merge_facts(sess, new_facts, turn=None):
     """把这一轮声明的事实并进账本：相似的旧事实让位，总数封顶。"""
     if not new_facts:
@@ -711,8 +733,7 @@ def merge_facts(sess, new_facts, turn=None):
         book.append(entry)
         fresh.append(entry)
     _dedupe_book(book)
-    if len(book) > FACTS_MAX:
-        del book[:len(book) - FACTS_MAX]
+    _trim_book(book)
     _active = sum(1 for x in book if isinstance(x, dict) and x.get("state") == "active")
     metrics.note("ledger.merge", added=len(fresh), total=len(book), active=_active,
                  superseded=len(fresh) and sum(1 for x in book if x.get("state") == "resolved"))

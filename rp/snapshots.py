@@ -49,6 +49,12 @@ def snapshot(sess, reason="manual"):
                 pass
     return name
 
+def reason_of(name):
+    """从文件名解析快照原因。名字里带时间和原因，排序即时间序。"""
+    fn = str(name or "")
+    return fn[:-5].split("-", 2)[-1] if fn.count("-") >= 2 else "manual"
+
+
 def list_snapshots(sid):
     path = _dir(sid)
     if not path:
@@ -60,7 +66,7 @@ def list_snapshots(sid):
             stat = os.stat(full)
         except OSError:
             continue
-        reason = fn[:-5].split("-", 2)[-1] if fn.count("-") >= 2 else "manual"
+        reason = reason_of(fn)
         items.append({"name": fn, "reason": reason, "size": stat.st_size,
                       "at": int(stat.st_mtime)})
     return items

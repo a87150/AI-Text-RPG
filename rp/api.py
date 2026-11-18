@@ -18,6 +18,7 @@ from .characters import (
     merge_facts, merge_status, next_speaker, parse_turn, role_labels,
     looks_like_name, parse_cast, parse_lore_batch, split_cast_line,
     upsert_character, add_lore, parse_add_cast, refresh_states,
+    _trim_book,
 )
 from . import backup
 from . import metrics
@@ -27,6 +28,7 @@ from .config import (
     DEFAULT_MODEL, DEFAULT_PROVIDER, MAX_CHAT_ATTEMPTS, MAX_ENHANCE_ATTEMPTS,
     MAX_OPENING_ATTEMPTS, MIN_CHAT_CHARS, MODES, PROVIDERS,
     PRICES, REASONING_LEVELS, TIERS, TIER_LABELS, app, backup_conf, current_target,
+    clear_persist_error, persist_error,
     image_conf, prices, prices_text, save_image_conf, save_prices, save_speech_conf,
     SPEECH_VOICES,
     speech_conf,
@@ -69,7 +71,16 @@ from .stories import (
     set_cover, undo_cover, cover_prompt_from,
     cover_list, pick_cover, forget_cover,
 )
-from .snapshots import SNAP_DIR, list_snapshots, load_snapshot, snapshot
+from .snapshots import (
+    SNAP_DIR, list_snapshots, load_snapshot, reason_of, snapshot,
+)
+
+# 回滚"设定"快照时保持原样的键：这些是聊出来的进度，不是设定。
+# 其余键（人设、世界、规则、开局、cast、lore……）照快照还原。
+RUNTIME_KEYS = (
+    "messages", "turn", "summary", "context", "status",
+    "characters", "facts", "updated_at",
+)
 from .storage import (
     DEFAULT_TITLE, TEXT_FIELDS, StaleSession, get_session_lock, list_sessions,
     load_session, new_session, release_busy, save_session, session_path,
@@ -131,6 +142,27 @@ def _reject_cross_site():
     if origin and not _same_origin(origin):
         return jsonify({"error": "拒绝跨站请求"}), 403
     return None
+
+@app.after_request
+def _settings_persist_guard(resp):
+    """设置没写进磁盘，就别让界面绿着。
+
+    以前 persist_settings 失败只在日志里留一句，前端照样弹「已保存」，
+    下次打开还是旧值。这里把那次失败的响应改成 500，让现有的错误提示接手。
+    标记读一次就清掉，不会连累别的请求。
+    """
+    err = persist_error()
+    if not err:
+        return resp
+    clear_persist_error()
+    if (request.method in ("POST", "PUT", "PATCH") and resp.is_json
+            and 200 <= resp.status_code < 300):
+        # after_request 必须回一个 Response，不能回元组——回元组 Flask
+        # 会把整个响应处理砸成 TypeError，比原来那个静默失败还糟
+        out = jsonify({"error": "设置没能写到磁盘：%s" % err})
+        out.status_code = 500
+        return out
+    return resp
 
 @app.after_request
 def _security_headers(resp):
@@ -816,8 +848,20 @@ def api_restore_snapshot(sid, name):
     if not saved:
         return jsonify({"error": "快照不存在"}), 404
     snapshot(current, "restore")     # 回滚前先留一份，回滚本身也能再回滚
+    # 改设定前拍的那张，只该把设定还原回去。整份覆盖等于把拍快照之后
+    # 聊的每一轮都吃掉，界面上还只说"已回滚"，事后根本发现不了。
+    if reason_of(name) == "settings":
+        for key in RUNTIME_KEYS:
+            if key in current:
+                saved[key] = current[key]
+            else:
+                saved.pop(key, None)
     saved["id"] = sid
-    save_session(saved)
+    try:
+        save_session(saved, expect=current.get("updated_at"))
+    except StaleSession:
+        return jsonify({"error": "这个对话在别处更新过，已重新读取",
+                        "conflict": True}), 409
     return jsonify(load_session(sid))
 
 @app.get("/api/sessions/<sid>")
@@ -1202,9 +1246,9 @@ def api_edit_facts(sid):
             book.append({"turn": int(sess.get("turn") or 0), "fact": text,
                          "subject": _str(data, "subject").strip()[:12] or "手动",
                          "state": "active", "manual": True})
-            # 手动添加的上限放宽：40 是给自动记账的，手填不该被那么快挤掉
-            if len(book) > 200:
-                del book[:len(book) - 200]
+            # 上限规则只有一份，在 characters._trim_book 里：
+            # 自动记账 40 条滚动，手填留到 200 条
+            _trim_book(book)
         elif action == "delete":
             turn = data.get("turn")
             text = _str(data, "fact")
@@ -1989,13 +2033,19 @@ def api_chat():
             return                # 用户已经点了停止，这一轮不算完成
         with get_session_lock(sid):
             s2 = load_session(sid)
-            if s2 is not None:
-                _commit_turn(s2, turn, use_rp, resume=bool(resume_from))
-                context = context_tokens(s2)
-                count = len(s2.get("messages") or [])
-                characters = ensure_characters(s2)
-            else:
-                context, count, characters = 0, 0, []
+            if s2 is None:
+                # 这一局在生成途中被删了（清空、导入覆盖、手动删文件）。
+                # 以前这里退回空值继续报 done，正文就这么没了，界面上
+                # 还像写成功了一样。现在明确告诉用户：写完了，但没处存。
+                metrics.note("stream.lost", sid=sid, stage="session_gone")
+                metrics.end(sid, ok=False)
+                yield sse({"type": "error",
+                           "message": "这一局在生成过程中被删掉了，刚写的内容没能存下。"})
+                return
+            _commit_turn(s2, turn, use_rp, resume=bool(resume_from))
+            context = context_tokens(s2)
+            count = len(s2.get("messages") or [])
+            characters = ensure_characters(s2)
 
         yield sse({
             "type": "done",

@@ -3038,6 +3038,84 @@ def main():
     os.unlink(_pp)
     check("真没图时不乱拿", _cov._written({"filename": "nope.jpg"}) is None)
 
+    # 95. 健康检查里「静默丢数据」那一批的回归。
+    # 这几条的共同点是出错时一句话都不说，所以断言要盯行为，不能只 grep 源码。
+    import threading as _th
+    from rp import speech as _sp
+    _reentered = {"ok": False}
+
+    def _reenter_reset():
+        # 死锁现场：持着锁起进程失败 → reset() → 再抢同一把锁
+        with _sp._serve_lock:
+            _sp.reset()
+        _reentered["ok"] = True
+
+    _t95 = _th.Thread(target=_reenter_reset, daemon=True)
+    _t95.start()
+    _t95.join(5)
+    check("语音锁可重入，vox 起不来不再把自己锁死", _reentered["ok"] and not _t95.is_alive())
+
+    from rp.characters import _trim_book, FACTS_MAX, MANUAL_FACTS_MAX
+    _book = ([{"fact": "手填设定第%d条" % i, "manual": True, "state": "active"}
+              for i in range(60)]
+             + [{"fact": "自动记账第%d条" % i, "state": "active"} for i in range(60)])
+    _trim_book(_book)
+    _man = sum(1 for f in _book if f.get("manual"))
+    _auto = sum(1 for f in _book if not f.get("manual"))
+    check("手填事实不被自动记账挤掉", _man == 60 and _auto == FACTS_MAX,
+          "手填 %d / 自动 %d" % (_man, _auto))
+    _big = [{"fact": "手填第%d条" % i, "manual": True, "state": "active"}
+            for i in range(MANUAL_FACTS_MAX + 40)]
+    _trim_book(_big)
+    check("手填也有自己的上限", len(_big) == MANUAL_FACTS_MAX, str(len(_big)))
+
+    from rp import snapshots as _sn95
+    check("快照来源能从文件名认出来",
+          _sn95.reason_of("20260101-120000-settings.json") == "settings"
+          and _sn95.reason_of("20260101-120000-restore.json") == "restore")
+
+    # 回滚「设定」快照只能还原设定，聊天记录得留着
+    _s95 = client.post("/api/sessions", json={}).get_json()
+    _sid95 = _s95["id"]
+    client.put("/api/sessions/" + _sid95, json={"world": "改过的世界设定"})
+    _names95 = [x["name"] for x in _sn95.list_snapshots(_sid95)]
+    _st95 = rp_storage.load_session(_sid95)
+    _st95["messages"] = [{"role": "user", "content": "快照之后聊的"}]
+    rp_storage.save_session(_st95)
+    _setting95 = [n for n in _names95 if _sn95.reason_of(n) == "settings"][0]
+    client.post("/api/sessions/%s/snapshots/%s/restore" % (_sid95, _setting95), json={})
+    _after95 = rp_storage.load_session(_sid95)
+    check("回滚设定快照不吃聊天记录",
+          len(_after95["messages"]) == 1 and _after95.get("world") == "",
+          "消息 %d 条，world=%r" % (len(_after95["messages"]), _after95.get("world")))
+    try:
+        os.remove(os.path.join(rp_config.DATA_DIR, _sid95 + ".json"))
+    except OSError:
+        pass
+    import shutil as _sh95
+    _sh95.rmtree(os.path.join(rp_config.DATA_DIR, "snapshots", _sid95), ignore_errors=True)
+
+    _bk95 = (pathlib.Path(__file__).parent / "rp" / "backup.py").read_text(encoding="utf-8")
+    check("备份恢复是原子写", "os.replace(tmp, target)" in _bk95)
+    _cfg95 = (pathlib.Path(__file__).parent / "rp" / "config.py").read_text(encoding="utf-8")
+    check("设置写盘失败会记下来", "_persist_error" in _cfg95 and "persist_error()" in _cfg95)
+    # 把设置文件指到不存在的目录，让写盘必然失败，看响应是不是真变成 500。
+    # 只断言"函数还在"是不够的：返回元组时 Flask 会砸成 TypeError，比原来更糟。
+    _saved_path = rp_config.SETTINGS_PATH
+    try:
+        rp_config.SETTINGS_PATH = os.path.join(TMP_DIR, "_nodir_xyz", "settings.json")
+        _bad = client.put("/api/speech-config", json={"mode": "off"})
+        check("设置写盘失败会报 500", _bad.status_code == 500,
+              "实际 %d" % _bad.status_code)
+    finally:
+        rp_config.SETTINGS_PATH = _saved_path
+    # 路径修好之后第一次请求就得恢复正常：失败标记只该用一次
+    _ok = client.put("/api/speech-config", json={"mode": "off"})
+    check("上一次失败不牵连下一个请求", _ok.status_code == 200,
+          "实际 %d" % _ok.status_code)
+    check("会话在生成途中被删会报错而非静默丢弃", "stream.lost" in _api)
+    _ui95 = (pathlib.Path(__file__).parent / "static" / "js" / "ui.js").read_text(encoding="utf-8")
+    check("朗读失败会告诉用户", "ttsWarned" in _ui95)
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")

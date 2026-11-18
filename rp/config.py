@@ -12,7 +12,7 @@ import requests
 from flask import Flask
 
 # ============================== 版本 ==============================
-VERSION = "1.31"
+VERSION = "1.32"
 
 # ============================== 模型配置 ==============================
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
@@ -708,7 +708,22 @@ def _read_disk_settings():
         return {}
     return data if isinstance(data, dict) else {}
 
+# 最近一次写设置有没有失败。以前只在日志里留一句，界面照样弹「已保存」，
+# 用户以为存住了，下次开还是旧的。api 层会拿它把响应改成 500。
+_persist_error = ""
+
+
+def persist_error():
+    return _persist_error
+
+
+def clear_persist_error():
+    global _persist_error
+    _persist_error = ""
+
+
 def persist_settings():
+    global _persist_error
     # 没跑过 load_settings 的进程（命令行小脚本、单元检查）内存里全是默认值，
     # 直接写盘会把用户真实的自定义提供方、api_key、写作参数一起抹掉。
     # 这种进程只写它真正改过的那一项，其余沿磁盘原值。
@@ -734,8 +749,11 @@ def persist_settings():
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=2)
         os.replace(tmp, SETTINGS_PATH)
+        return True
     except OSError as exc:
+        _persist_error = str(exc)
         app.logger.warning("保存设置失败：%s", exc)
+        return False
     finally:
         if os.path.isfile(tmp):
             try:
