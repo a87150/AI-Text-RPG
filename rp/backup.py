@@ -6,6 +6,7 @@ settings.json 里的 API Key 一律抹掉再写进包，备份文件因此可以
 """
 import json
 import os
+import re
 import threading
 import time
 import zipfile
@@ -50,6 +51,15 @@ def create(reason="manual"):
     tag = "".join(ch for ch in str(reason) if ch.isalnum() or ch in "-_") or "manual"
     name = "lt-data-%s-%s.zip" % (stamp, tag)
     target = os.path.join(BACKUP_DIR, name)
+    # 时间戳只到秒。同一秒里连点两次「立即备份」，第二份会把第一份截断重写，
+    # 看着存了两份实际只有一份；还原时更糟——before-restore 恰好和正在读的
+    # 那个同名，ZipFile(..., "w") 会把句柄下的文件换掉，后面 read 就抛
+    # BadZipFile。撞名就加序号，listing 按 mtime 排序，序号不影响"最新"。
+    n = 1
+    while os.path.isfile(target):
+        n += 1
+        name = "lt-data-%s-%s-%d.zip" % (stamp, tag, n)
+        target = os.path.join(BACKUP_DIR, name)
     files = 0
     skipped = 0
     try:
@@ -98,7 +108,12 @@ def listing():
         except OSError:
             continue
         items.append({"name": fn, "size": stat.st_size, "at": int(stat.st_mtime)})
-    items.sort(key=lambda x: x["at"], reverse=True)
+    # at 只到秒，同一秒打的几个包排序会飘，界面上"最新的"就可能在几个包之间
+    # 跳。名字末尾的序号（-2、-3）拆出来当次级键，同一个时间戳里序号大的更新。
+    def _seq(fn):
+        m = re.search(r"-(d+).zip$", fn)
+        return int(m.group(1)) if m else 1
+    items.sort(key=lambda x: (x["at"], _seq(x["name"])), reverse=True)
     return items
 
 def path_of(name):
@@ -148,13 +163,18 @@ def restore(name):
     full = path_of(name)
     if not full:
         return None
+    # 坏包先挡掉，别为它留一份没用的底
+    if not zipfile.is_zipfile(full):
+        return None
+
+    keys = _read_keys()
+    # 留底放在读包之前：留底要往 backups/ 里写文件，万一撞上正在读的这一个，
+    # 先开着的句柄就读到被换掉的内容。命名已经保证不撞，这里按顺序再兜一层。
+    guard = create("before-restore")
     try:
         zf = zipfile.ZipFile(full)
     except (OSError, zipfile.BadZipFile):
         return None
-
-    keys = _read_keys()
-    guard = create("before-restore")
     root = os.path.normpath(DATA_DIR)
     sep = os.sep
     written = 0

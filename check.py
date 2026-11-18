@@ -3246,8 +3246,10 @@ def main():
     _pkg = client.post("/api/backups", json={})
     check("能打出备份包", _pkg.status_code in (200, 201), str(_pkg.status_code))
     _items = (_pkg.get_json() or {}).get("items") or []
-    _name = (_items[0] or {}).get("name") if _items else ""
-    check("备份包出现在列表里", bool(_name), str(_name)[:32])
+    # 用接口回的那一份，不要 items[0]：同一秒里可能有好几个包，mtime 一样，
+    # 取"列表第一个"会飘到别的包上，断言就时绿时红。
+    _name = ((_pkg.get_json() or {}).get("item") or {}).get("name") or ""
+    check("备份包出现在列表里", any(x.get("name") == _name for x in _items), str(_name)[:40])
 
     # 备份之后改掉内容，再还原，应该回到备份那一刻
     _bk2 = rp_storage.load_session(_bkid)
@@ -3336,6 +3338,33 @@ def main():
         for _f in _moved99:
             os.rename(os.path.join(TMP_DIR, _f + ".hold99"),
                       os.path.join(rp_config.DATA_DIR, _f))
+
+    # 103. 同一秒里连打两次备份不能互相覆盖。时间戳只到秒，撞名时第二份
+    # 会把第一份截断重写——用户以为存了两份，实际只有一份。
+    import rp.backup as _bk103
+    _b1 = _bk103.create("manual")
+    _b2 = _bk103.create("manual")
+    check("同秒两次备份不互相覆盖", _b1["name"] != _b2["name"],
+          "%s / %s" % (_b1["name"], _b2["name"]))
+
+    # 104. 还原时内部会打一张 before-restore 底，如果撞上正在读的那个包，
+    # ZipFile(..., "w") 会把句柄下的文件换掉，后面 read 抛 BadZipFile。
+    # 这条以前每五次才红一次，因为只有恰好落在同一秒才触发。
+    _b3 = _bk103.create("before-restore")
+    _ok104 = 0
+    for _i104 in range(3):
+        try:
+            if _bk103.restore(_b3["name"]):
+                _ok104 += 1
+        except Exception as _e104:
+            print("      还原第%d次抛了 %s" % (_i104 + 1, _e104))
+    check("同秒连做三次还原都成", _ok104 == 3, "%d/3" % _ok104)
+
+    # 留底之后每一份都得是能打开的完整包
+    import zipfile as _zf104
+    _bad104 = [x["name"] for x in _bk103.listing()
+               if not _zf104.is_zipfile(_bk103.path_of(x["name"]) or "")]
+    check("备份包里没有半截的", not _bad104, str(_bad104[:3]))
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")

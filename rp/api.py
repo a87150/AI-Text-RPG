@@ -7,6 +7,7 @@ import shutil
 import threading
 import time
 import uuid
+import zipfile
 
 import requests
 from flask import (Response, abort, jsonify, render_template, request,
@@ -709,7 +710,12 @@ def api_backup_download(name):
 
 @app.post("/api/backups/<name>/restore")
 def api_backup_restore(name):
-    result = backup.restore(name)
+    # 包里某一项读到一半坏掉时，restore 里那层只挡住了开包阶段。不接住的话
+    # 500 走 Flask 默认 HTML 错误页，前端读不到 error 字段，界面上就是"没反应"。
+    try:
+        result = backup.restore(name)
+    except (OSError, zipfile.BadZipFile, KeyError) as exc:
+        return jsonify({"error": "这份备份有一个文件读不出来：%s" % exc}), 500
     if not result:
         return jsonify({"error": "备份不存在或已损坏"}), 404
     # 配置在启动时读进内存的，还原了 settings.json 得重新读一次才生效
