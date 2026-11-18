@@ -688,9 +688,11 @@ body.story-view #btn-search { display: none; }
 /* 上下文弹窗：用量 / 压缩 / 保留 / 角色 */
 .modal-box.narrow { width: min(520px, 100%); }
 .pick-modal { width: min(940px, 94vw); }
+/* 高度定死：列表空的时候窗口不许塌下去，翻页也不跳 */
 .pick-list {
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;
-  margin: 6px 0 8px; max-height: 58vh; overflow-y: auto;
+  margin: 6px 0 8px; height: min(62vh, 520px); min-height: 300px;
+  overflow-y: auto; align-content: start;
 }
 .pick-item {
   display: flex; align-items: center; gap: 12px; text-align: left;
@@ -1100,7 +1102,7 @@ body.story-view #btn-search { display: none; }
   .story-pane { padding: 14px 14px 20px; }
   #story-pane #settings-form { max-width: none; }
   .field-head { flex-wrap: wrap; }
-  .pick-list { grid-template-columns: 1fr; max-height: 52vh; }
+  .pick-list { grid-template-columns: 1fr; height: min(56vh, 430px); min-height: 240px; }
   .pick-item .pi-shot { width: 74px; height: 50px; }
   .idea-pop { left: 12px; right: 12px; width: auto; max-width: none; bottom: 12px; max-height: calc(100% - 90px); padding: 16px 16px 12px; }
   #ask-pop { left: 12px; right: 12px; top: 12px; bottom: 12px; }

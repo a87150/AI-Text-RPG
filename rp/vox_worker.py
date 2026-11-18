@@ -11,7 +11,12 @@ vox serve 的 /v1/tts 只认预先注册的风格名，内置发音人只有 def
 import sys, os, json, traceback
 
 def main():
+    # 两个方向都钉死 UTF-8。只配 stdout 不够：Windows 下 sys.stdin 默认按
+    # 系统代码页（简体中文是 cp936）解码，父进程写进来的 UTF-8 会被解成乱码，
+    # 拼出带孤立代理项的 str，pybind 转不成 std::string，报的却是
+    # “feed(): incompatible function arguments”，看着像 vox 的锅。
     sys.stdout.reconfigure(encoding="utf-8")
+    sys.stdin.reconfigure(encoding="utf-8")
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     model = sys.argv[1] if len(sys.argv) > 1 else os.path.join(root, "models", "qwen3-custom.tmod")
     device = sys.argv[2] if len(sys.argv) > 2 else "auto"
@@ -65,6 +70,12 @@ def main():
             print(json.dumps({"ok": True, "out": out, "frames": int(len(audio))}), flush=True)
         except Exception as e:
             tb = traceback.format_exc()
+            # stderr 被上层丢到 devnull 了，崩了得留个文件能查
+            try:
+                with open(os.path.join(root, "_vox_worker.err"), "a", encoding="utf-8") as f:
+                    f.write(tb + "\n")
+            except OSError:
+                pass
             print(json.dumps({"ok": False,
                               "error": "%s: %s" % (type(e).__name__, str(e)[:200]),
                               "trace": tb[-1200:]}), flush=True)
