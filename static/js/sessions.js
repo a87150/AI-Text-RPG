@@ -145,7 +145,7 @@ function runsOf(storyId) {
   return (state.sessions || []).filter((s) => s.story_id === storyId);
 }
 
-const PICK_PER_PAGE = 8;
+const PICK_PER_PAGE = 10;
 
 /** 对话视图的「＋」：先挑一份故事当模板，再开一局。 */
 export async function openPickStory() {

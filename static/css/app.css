@@ -692,6 +692,7 @@ body.story-view #btn-search { display: none; }
 .pick-list {
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;
   margin: 6px 0 8px; height: min(62vh, 520px); min-height: 300px;
+  grid-auto-rows: 96px;
   overflow-y: auto; align-content: start;
 }
 .pick-item {
@@ -701,6 +702,7 @@ body.story-view #btn-search { display: none; }
   transition: border-color .15s ease, background .15s ease;
 }
 /* 缩略图：固定 3:2，没封面画个虚线占位 */
+.pick-item { height: 100%; }
 .pick-item .pi-shot {
   flex: none; width: 92px; height: 62px; border-radius: 8px;
   overflow: hidden; background: var(--bg-hover);
@@ -1102,7 +1104,7 @@ body.story-view #btn-search { display: none; }
   .story-pane { padding: 14px 14px 20px; }
   #story-pane #settings-form { max-width: none; }
   .field-head { flex-wrap: wrap; }
-  .pick-list { grid-template-columns: 1fr; height: min(56vh, 430px); min-height: 240px; }
+  .pick-list { grid-template-columns: 1fr; height: min(56vh, 430px); min-height: 240px; grid-auto-rows: 88px; }
   .pick-item .pi-shot { width: 74px; height: 50px; }
   .idea-pop { left: 12px; right: 12px; width: auto; max-width: none; bottom: 12px; max-height: calc(100% - 90px); padding: 16px 16px 12px; }
   #ask-pop { left: 12px; right: 12px; top: 12px; bottom: 12px; }
