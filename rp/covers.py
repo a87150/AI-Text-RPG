@@ -77,6 +77,15 @@ def workflow_text():
     return _load_workflow()
 
 
+# 生成时会直接改写的字段。缺了不是"不好看"，是运行时抛 KeyError。
+NODE_FIELDS = {
+    NODE_PROMPT: ("text",),
+    NODE_NEG: ("text",),
+    NODE_SEED: ("seed",),
+    NODE_LATENT: ("width", "height"),
+}
+
+
 def workflow_problems(workflow):
     """导入前检查。返回问题列表，空表示能用。
 
@@ -92,6 +101,20 @@ def workflow_problems(workflow):
     missing = [("%s（%s）" % (n, r)) for n, r in NODE_ROLES.items() if n not in workflow]
     if missing:
         return ["缺少节点：" + "、".join(missing)]
+    # 生成时是往 workflow[节点]["inputs"][字段] 里直接写的。只查节点号在不在
+    # 不够：节点有 class_type 却根本没 inputs，校验通过，跑的时候才 KeyError。
+    no_inputs = [("%s（%s）" % (n, NODE_ROLES[n])) for n in NODE_ROLES
+                 if not isinstance(workflow[n].get("inputs"), dict)]
+    if no_inputs:
+        return ["这些节点没有 inputs：" + "、".join(no_inputs)]
+    lacks = []
+    for node, fields in NODE_FIELDS.items():
+        gone = [f for f in fields if f not in workflow[node]["inputs"]]
+        if gone:
+            lacks.append("%s（%s）缺 %s"
+                         % (node, NODE_ROLES[node], "、".join(gone)))
+    if lacks:
+        return ["节点字段不全：" + "；".join(lacks)]
     return []
 
 
@@ -261,18 +284,21 @@ def _run_job(story_id, prompt, negative, timeout):
     from .stories import load_story, save_story, set_cover
 
     _set_job(story_id, state="running", started=time.time(), error="")
+    # 整段都得包住，不只是 generate()。以前缩略图和写盘在 try 外面，
+    # 那一步抛个 OSError，线程就带着 state="running" 死掉，而 start_job
+    # 看到 running 直接返回旧任务——这个故事的封面从此再也生不出来。
     try:
         name = generate(prompt, negative=negative, timeout=timeout)
+        story = load_story(story_id)
+        if not story:
+            _set_job(story_id, state="error", error="故事已被删掉")
+            return
+        make_thumb(name)
+        set_cover(story, name, prompt)
+        save_story(story)
     except Exception as exc:                       # 后台线程里没人接异常
         _set_job(story_id, state="error", error=str(exc) or "生成失败")
         return
-    story = load_story(story_id)
-    if not story:
-        _set_job(story_id, state="error", error="故事已被删掉")
-        return
-    make_thumb(name)
-    set_cover(story, name, prompt)
-    save_story(story)
     _set_job(story_id, state="done", cover=name, url=url_of(name),
              thumb=url_thumb(name),
              prompt=prompt, error="",
@@ -283,7 +309,11 @@ def start_job(story_id, prompt, negative="", timeout=None):
     with _jobs_guard:
         cur = _JOBS.get(story_id)
         if cur and cur.get("state") == "running":
-            return dict(cur)
+            # 线程要是卡住不返回（不是抛异常，是真的不动了），状态会一直挂在
+            # running。等过头就当它没了，允许重新提交，别让整份故事永久报废。
+            limit = (timeout or gen_timeout()) + 120
+            if time.time() - float(cur.get("started") or 0) < limit:
+                return dict(cur)
         _JOBS[story_id] = {"state": "running", "started": time.time(),
                            "prompt": prompt, "error": "", "cover": ""}
     t = threading.Thread(target=_run_job,

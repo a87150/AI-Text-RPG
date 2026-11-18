@@ -164,6 +164,12 @@ def new_session(title=DEFAULT_TITLE, mode="normal"):
         "created_at": now, "updated_at": now,
     }
 
+# 刷一次侧栏要把每个会话整份解析一遍，只为数出消息条数。而 /api/stories
+# 为了数「每个故事开过几局」又调一次 list_sessions——同一批文件解析两遍。
+# 按 mtime+大小缓存那一行摘要：文件没动就直接用，动过才重新读。
+_list_cache = {}
+
+
 def list_sessions():
     with _file_lock:
         try:
@@ -171,14 +177,25 @@ def list_sessions():
         except OSError:
             files = []
     items = []
+    alive = set()
     for fn in files:
         sid = fn[:-5]
         if not SID_RE.fullmatch(sid):
             continue
+        alive.add(sid)
+        try:
+            st = os.stat(os.path.join(DATA_DIR, fn))
+            key = (st.st_mtime_ns, st.st_size)
+        except OSError:
+            continue
+        hit = _list_cache.get(sid)
+        if hit and hit[0] == key:
+            items.append(dict(hit[1]))
+            continue
         s = load_session(sid)
         if not s:
             continue
-        items.append({
+        item = {
             "id": s["id"],
             "title": s.get("title") or DEFAULT_TITLE,
             "updated_at": s.get("updated_at", 0),
@@ -191,6 +208,11 @@ def list_sessions():
             "char_count": len([c for c in (s.get("characters") or [])
                                if (c.get("name") or "").strip()]),
             "story_id": s.get("story_id") or "",
-        })
+        }
+        _list_cache[sid] = (key, item)
+        items.append(dict(item))
+    # 删掉的会话别一直占着缓存
+    for gone in [k for k in _list_cache if k not in alive]:
+        _list_cache.pop(gone, None)
     items.sort(key=lambda x: x["updated_at"], reverse=True)
     return items

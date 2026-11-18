@@ -8,6 +8,7 @@ import os
 import re
 import pathlib
 import shutil
+import socket
 import tempfile
 import urllib.parse
 import zipfile
@@ -16,6 +17,9 @@ TMP_DIR = tempfile.mkdtemp(prefix="lt-check-")
 os.environ["LT_DATA_DIR"] = TMP_DIR
 # 备份也别落在项目里：以前每次跑检查都往真实 backups/ 塞一对包
 os.environ["LT_BACKUP_DIR"] = os.path.join(TMP_DIR, "backups")
+# 日志同理。自检会造 gpt-4o、百万 token 这类假事件，混进真实 logs/
+# 之后出事复盘 grep 到的全是噪声。
+os.environ["LT_LOG_DIR"] = os.path.join(TMP_DIR, "logs")
 
 import lt  # noqa: E402  必须在设置数据目录之后导入
 import threading  # noqa: E402
@@ -2804,7 +2808,19 @@ def main():
     _cfg = (pathlib.Path(__file__).parent / "rp" / "config.py").read_text(encoding="utf-8")
     _req = (pathlib.Path(__file__).parent / "requirements.txt").read_text(encoding="utf-8")
     check("写请求有跨站守卫", "before_request" in _api and "拒绝跨站请求" in _api)
-    check("Host 白名单已配", "TRUSTED_HOSTS" in _cfg)
+    # 光看源码里有没有 TRUSTED_HOSTS 是假绿：配错了照样过。真发两个请求，
+    # 一个本机 Host 该通、一个陌生 Host 该被 400 挡在外面。
+    _ok_host = client.get("/api/sessions", headers={"Host": "127.0.0.1:5000"})
+    _bad_host = client.get("/api/sessions", headers={"Host": "evil.example.com"})
+    check("本机 Host 能进", _ok_host.status_code == 200,
+          "实际 %d" % _ok_host.status_code)
+    check("陌生 Host 被挡在视图之外", _bad_host.status_code == 400,
+          "实际 %d" % _bad_host.status_code)
+    # 局域网地址要能在白名单里，不然手机连进来是 400
+    _hosts = rp_config.app.config["TRUSTED_HOSTS"]
+    check("局域网地址在白名单里",
+          bool(rp_config.LAN_IP) and rp_config.LAN_IP in _hosts,
+          "LAN_IP=%r 白名单=%r" % (rp_config.LAN_IP, _hosts))
     check("请求体有上限", "MAX_CONTENT_LENGTH" in _cfg)
     check("安全响应头已注入", "X-Content-Type-Options" in _api)
     check("urllib3 下限跟上 CVE", "urllib3>=2.6.3" in _req)
@@ -3116,6 +3132,81 @@ def main():
     check("会话在生成途中被删会报错而非静默丢弃", "stream.lost" in _api)
     _ui95 = (pathlib.Path(__file__).parent / "static" / "js" / "ui.js").read_text(encoding="utf-8")
     check("朗读失败会告诉用户", "ttsWarned" in _ui95)
+
+    # 96. 剩下那批 P2 的回归。同样的规矩：认行为，别只 grep 源码。
+
+    # 生图任务不能卡在 running：收尾一步抛异常也得把状态改掉
+    _cov = pathlib.Path(__file__).parent / "rp" / "covers.py"
+    _cov_src = _cov.read_text(encoding="utf-8")
+    # 真跑一遍：让最后那步写盘抛异常，状态必须变成 error，不能停在 running
+    _job_orig = (rp_covers.generate, rp_stories.load_story,
+                 rp_covers.make_thumb, rp_stories.save_story, rp_stories.set_cover)
+
+    def _disk_full(*a, **k):
+        raise OSError("磁盘满了")
+
+    rp_covers.generate = lambda *a, **k: "fake.jpg"
+    rp_stories.load_story = lambda sid: {"id": sid, "cover_history": []}
+    rp_covers.make_thumb = lambda n: False
+    rp_stories.set_cover = lambda *a, **k: None
+    rp_stories.save_story = _disk_full
+    try:
+        rp_covers._run_job("jobtest", "p", "", 1)
+        _job = rp_covers.job_of("jobtest") or {}
+    finally:
+        (rp_covers.generate, rp_stories.load_story,
+         rp_covers.make_thumb, rp_stories.save_story,
+         rp_stories.set_cover) = _job_orig
+    check("生图收尾出错不会卡在 running", _job.get("state") == "error", str(_job))
+    check("生图僵尸任务会过期", "limit = (timeout or gen_timeout()) + 120" in _cov_src)
+
+    # 工作流校验要能拦住「节点在、但没 inputs」的那种
+    _bad_wf = {n: {"class_type": "X"} for n in rp_covers.NODE_ROLES}
+    check("没 inputs 的工作流被拦住", bool(rp_covers.workflow_problems(_bad_wf)))
+    _half_wf = {n: {"class_type": "X", "inputs": {}} for n in rp_covers.NODE_ROLES}
+    check("节点字段不全也会被拦", bool(rp_covers.workflow_problems(_half_wf)))
+    check("现有工作流仍然可用", not rp_covers.workflow_problems(rp_covers._load_workflow()))
+
+    # 会话列表缓存：文件没动就复用，动过必须重读
+    _csid = rp_storage.new_session("缓存测试")["id"]
+    _cs = rp_storage.new_session("缓存测试")
+    _cs["id"] = _csid
+    rp_storage.save_session(_cs)
+    _first = [x for x in rp_storage.list_sessions() if x["id"] == _csid][0]
+    _cs2 = rp_storage.load_session(_csid)
+    _cs2["title"] = "改过的标题"
+    _cs2["messages"] = [{"role": "user", "content": "一"}]
+    rp_storage.save_session(_cs2)
+    _third = [x for x in rp_storage.list_sessions() if x["id"] == _csid][0]
+    check("会话列表缓存会跟着文件刷新",
+          _first["title"] == "缓存测试" and _third["title"] == "改过的标题"
+          and _third["message_count"] == 1,
+          "%r -> %r" % (_first["title"], _third["title"]))
+    try:
+        os.remove(os.path.join(rp_config.DATA_DIR, _csid + ".json"))
+    except OSError:
+        pass
+    rp_storage.list_sessions()      # 让它把删掉的那条从缓存里摘掉
+    check("删掉的会话不留在缓存", _csid not in rp_storage._list_cache)
+
+    # 局域网地址：取不到时能从网卡枚举里退回来
+    _real_socket = socket.socket
+
+    class _NoSocket:
+        def __init__(self, *a, **k):
+            raise OSError("模拟网卡没就绪")
+
+    socket.socket = _NoSocket
+    try:
+        _fallback = rp_config._lan_ip()
+    finally:
+        socket.socket = _real_socket
+    check("网卡还没起来也能拿到局域网地址", bool(_fallback), repr(_fallback))
+
+    # 自检不许往真实 logs/ 里写假事件
+    _log_dir = rp_metrics.LOG_DIR
+    check("自检的日志写在临时目录里",
+          os.path.abspath(_log_dir).startswith(os.path.abspath(TMP_DIR)), _log_dir)
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """常量、路径、Flask 实例与模型提供方配置。"""
+import ipaddress
 import json
 import os
 import socket
@@ -12,7 +13,7 @@ import requests
 from flask import Flask
 
 # ============================== 版本 ==============================
-VERSION = "1.32"
+VERSION = "1.33"
 
 # ============================== 模型配置 ==============================
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
@@ -44,16 +45,58 @@ app = Flask(
 # 本地小应用：改模板不该还要重启，模板缓存会让人以为是"代码没生效"
 def _lan_ip():
     """本机的局域网地址。UDP connect 只让内核选路，不会真的发包。"""
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
-        s.connect(("8.8.8.8", 80))
-        return s.getsockname()[0]
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     except OSError:
-        return ""
-    finally:
-        s.close()
+        s = None
+    if s is not None:
+        try:
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            if ip and not ip.startswith("127."):
+                return ip
+        except OSError:
+            pass
+        finally:
+            s.close()
+    # 上面这条路在网卡没起来时会失败（开机自启、Wi-Fi 还在重连）。
+    # 退一步问系统要本机地址，挑第一个私有 IPv4——总比返回空串、
+    # 让手机永久 400 强。
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            ip = info[4][0]
+            if ipaddress.ip_address(ip).is_private:
+                return ip
+    except (OSError, UnicodeError, ValueError):
+        pass
+    return ""
 
 LAN_IP = _lan_ip()
+
+# 白名单。Flask 每次请求都会重读这个配置，所以运行时补进去是立刻生效的。
+_HOSTS = ("127.0.0.1", "localhost", "::1")
+
+def _refresh_hosts():
+    app.config["TRUSTED_HOSTS"] = [h for h in _HOSTS + (LAN_IP,) if h]
+
+def _watch_lan():
+    """网卡晚起来也能自己长回来。
+
+    地址只在导入时算一次的话，开机那会儿没网，白名单里就只有三个
+    loopback，手机从此 400 到底——而启动日志看着一切正常，根本不会
+    想到去怀疑绑定。
+    """
+    global LAN_IP
+    while True:
+        time.sleep(20)
+        try:
+            ip = _lan_ip()
+        except Exception:          # 后台线程里没人接异常
+            continue
+        if ip and ip != LAN_IP:
+            LAN_IP = ip
+            _refresh_hosts()
+            print("局域网地址变成 http://%s:5000" % ip)
 
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 app.jinja_env.auto_reload = True
@@ -62,7 +105,8 @@ app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
 # 只认本机地址。不限 Host 的话，外部域名指向 127.0.0.1 就能以
 # 同源身份读完所有会话正文。局域网 IP 也要列进来：手机用
 # http://<本机IP>:5000 打开时 Host 头就是这个 IP，不认就 400。
-app.config["TRUSTED_HOSTS"] = [h for h in ("127.0.0.1", "localhost", "::1", LAN_IP) if h]
+_refresh_hosts()
+threading.Thread(target=_watch_lan, daemon=True, name="lan-watch").start()
 # 一份会话 JSON 再大也不该碰这个数；超了直接 413，不让它整份进内存
 app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024
 
