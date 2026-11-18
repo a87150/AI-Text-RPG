@@ -182,6 +182,11 @@ def restore(name):
     keys = _read_keys()
     # 留底放在读包之前：留底要往 backups/ 里写文件，万一撞上正在读的这一个，
     # 先开着的句柄就读到被换掉的内容。命名已经保证不撞，这里按顺序再兜一层。
+    #
+    # prune_after=False：还原期间不裁，下面任何一处 return / 抛异常都不会走到
+    # 函数末尾那次 prune()。这是故意的，不是漏了 finally——还原是逐文件
+    # os.replace，中途炸掉时数据已经半新半旧，刚打的这张底是唯一能退回去的
+    # 东西，这时候裁它等于把回滚点删了。多留一份的代价，由下一次正常备份收掉。
     guard = create("before-restore", prune_after=False)
     try:
         zf = zipfile.ZipFile(full)
@@ -244,7 +249,8 @@ def restore(name):
                     json.dump(data, f, ensure_ascii=False, indent=2)
             except OSError:
                 pass
-    # 包已经读完、内容也写回去了，这时候才轮到裁剪——包括那张刚打的底
+    # 只有走到这里才算还原成功，这时候才轮到裁剪——包括那张刚打的底。
+    # 上面每条异常路径都绕开了这一行，原因见 create() 那里的注释。
     prune()
     return {"files": written, "guard": (guard or {}).get("name", ""), "keys": filled}
 
