@@ -3365,6 +3365,55 @@ def main():
     _bad104 = [x["name"] for x in _bk103.listing()
                if not _zf104.is_zipfile(_bk103.path_of(x["name"]) or "")]
     check("备份包里没有半截的", not _bad104, str(_bad104[:3]))
+
+    # 105. keep 调到 1 时，还原不能把自己要用的那个包裁掉。create() 末尾会
+    # 按份数裁剪，而还原第一步就打一张 before-restore 的底——旧包正好被裁。
+    # 顺序调整（先留底后开包）之后这条才显性化：以前文件被句柄开着删不掉，
+    # Windows 上侥幸能读；现在删得掉，ZipFile 就找不到文件。
+    _conf105 = _bk103.config.backup_conf
+    # 先把前面断言留下的包清干净：keep=1 会按"最新的一份"裁剪，残留包会把
+    # 这一份挤掉，测的就不是还原逻辑了
+    for _it105 in _bk103.listing():
+        _bk103.delete(_it105["name"])
+    _bk103.config.backup_conf = lambda: {"enabled": False, "every_minutes": 1440, "keep": 1}
+    try:
+        _d105 = os.path.join(TMP_DIR, "data105")
+        os.makedirs(_d105, exist_ok=True)
+        _f105 = os.path.join(_d105, "s105.json")
+        def _w105(v):
+            with open(_f105, "w", encoding="utf-8") as f:
+                json.dump({"id": "s105", "world": v}, f, ensure_ascii=False)
+        _w105("A")
+        _one105 = _bk103.create("manual")
+        _w105("B")
+        # 这里必须自己兜住：让它崩出去的话，check.py 整个退出，
+        # 后面几十条断言都不跑了，只剩一段 traceback 看不出是哪条
+        _r105 = None
+        _err105 = ""
+        try:
+            _r105 = _bk103.restore(_one105["name"])
+        except Exception as _e105:
+            _err105 = "%s: %s" % (type(_e105).__name__, _e105)
+        _got105 = json.load(open(_f105, encoding="utf-8"))["world"]
+        check("keep=1 时还原还能成功", bool(_r105) and _got105 == "A",
+              _err105 or repr(_got105))
+        check("还原后份数按 keep 裁到位", len(_bk103.listing()) == 1,
+              str(len(_bk103.listing())))
+    finally:
+        _bk103.config.backup_conf = _conf105
+
+    # 106. 同名包靠序号区分，_seq 必须真解析出数字。正则写错时（\d 写成 d）
+    # 恒返回 1，排序静默退化成只按秒级 mtime。
+    check("序号能从包名解析出来",
+          _bk103._seq("lt-data-x-probe-3.zip") == 3
+          and _bk103._seq("lt-data-x-probe-2.zip") == 2
+          and _bk103._seq("lt-data-x-probe.zip") == 1,
+          str([_bk103._seq("a-3.zip"), _bk103._seq("a-2.zip"), _bk103._seq("a.zip")]))
+    # 同秒里序号大的要排在前面：造两个"看起来同秒"的名字，只比排序键
+    _k106 = lambda n: (_bk103._seq(n), n)
+    check("同秒里序号大的排前面",
+          _k106("lt-data-20260101-000000-probe-9.zip")
+          > _k106("lt-data-20260101-000000-probe-2.zip"))
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")

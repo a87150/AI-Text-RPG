@@ -17,7 +17,7 @@ node --check static/js/ui.js
 
 ## check.py
 
-`python check.py` 是唯一的测试入口，不发网络请求，两三秒跑完（实测 2.3 秒），全绿才提交。它自己搭一个临时数据目录跑整套流程：
+`python check.py` 是唯一的测试入口，不发网络请求，三四秒跑完（连跑二十次的中位数 3.4 秒，偶尔 6—7 秒是文件系统抖），全绿才提交。它自己搭一个临时数据目录跑整套流程：
 
 ```python
 TMP_DIR = tempfile.mkdtemp(prefix="lt-check-")

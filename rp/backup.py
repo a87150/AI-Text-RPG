@@ -44,8 +44,13 @@ def _iter_files(root):
             full = os.path.join(here, fn)
             yield full, os.path.relpath(full, root).replace("\\", "/")
 
-def create(reason="manual"):
-    """打一个包；返回 {name, size, at, files, skipped}。"""
+def create(reason="manual", prune_after=True):
+    """打一个包；返回 {name, size, at, files, skipped}。
+
+    prune_after=False 给还原用：还原要先打一张 before-restore 的底，而裁剪
+    按份数从旧往新删——keep 调到 1 时，被删的正好是准备还原的那一份，后面
+    ZipFile 就找不到文件。还原全程不裁，做完再裁。
+    """
     ensure_dir()
     stamp = time.strftime("%Y%m%d-%H%M%S", time.localtime())
     tag = "".join(ch for ch in str(reason) if ch.isalnum() or ch in "-_") or "manual"
@@ -89,10 +94,19 @@ def create(reason="manual"):
             except OSError:
                 pass
         raise
-    prune()
+    if prune_after:
+        prune()
     stat = os.stat(target)
     return {"name": name, "size": stat.st_size, "at": int(stat.st_mtime),
             "files": files, "skipped": skipped}
+
+def _seq(fn):
+    """包名末尾的序号，没带序号算第一份。
+
+    create() 撞名时加 -2、-3，所以名字既是唯一键又能当"同秒里谁更新"的依据。
+    """
+    m = re.search(r"-(\d+)\.zip$", fn)
+    return int(m.group(1)) if m else 1
 
 def listing():
     ensure_dir()
@@ -110,10 +124,8 @@ def listing():
         items.append({"name": fn, "size": stat.st_size, "at": int(stat.st_mtime)})
     # at 只到秒，同一秒打的几个包排序会飘，界面上"最新的"就可能在几个包之间
     # 跳。名字末尾的序号（-2、-3）拆出来当次级键，同一个时间戳里序号大的更新。
-    def _seq(fn):
-        m = re.search(r"-(d+).zip$", fn)
-        return int(m.group(1)) if m else 1
-    items.sort(key=lambda x: (x["at"], _seq(x["name"])), reverse=True)
+    # 同秒同序号时再按文件名兜底：os.listdir 的返回顺序不该决定"哪个最新"。
+    items.sort(key=lambda x: (x["at"], _seq(x["name"]), x["name"]), reverse=True)
     return items
 
 def path_of(name):
@@ -170,7 +182,7 @@ def restore(name):
     keys = _read_keys()
     # 留底放在读包之前：留底要往 backups/ 里写文件，万一撞上正在读的这一个，
     # 先开着的句柄就读到被换掉的内容。命名已经保证不撞，这里按顺序再兜一层。
-    guard = create("before-restore")
+    guard = create("before-restore", prune_after=False)
     try:
         zf = zipfile.ZipFile(full)
     except (OSError, zipfile.BadZipFile):
@@ -232,7 +244,9 @@ def restore(name):
                     json.dump(data, f, ensure_ascii=False, indent=2)
             except OSError:
                 pass
-    return {"files": written, "guard": guard["name"], "keys": filled}
+    # 包已经读完、内容也写回去了，这时候才轮到裁剪——包括那张刚打的底
+    prune()
+    return {"files": written, "guard": (guard or {}).get("name", ""), "keys": filled}
 
 def due(conf, latest_at, now=None):
     """现在该不该自动备份：开了、且距上一份超过间隔。"""
