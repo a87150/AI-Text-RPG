@@ -377,12 +377,12 @@ export function renderCharacterEditor(box, list, onChange) {
     style.value = c.style || '';
     style.onchange = () => { c.style = style.value; };
 
-    // 音色和语气并排：两行下拉会把卡撑得很长
+    // 名字、音色、语气并排：各占一行会把卡撑得很长，三张卡就拉成一屏
     const says = document.createElement('div');
     says.className = 'cc-says';
-    says.append(voice, style);
+    says.append(name, voice, style);
 
-    card.append(head, name, says, role, count, stateField);
+    card.append(head, says, role, count, stateField);
     box.appendChild(card);
   });
 

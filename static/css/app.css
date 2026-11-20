@@ -1411,9 +1411,11 @@ body.story-view #btn-io { display: none; }
 .field-pair { display: flex; gap: 10px; align-items: flex-start; }
 .field-pair > .field { flex: 1; min-width: 0; }
 
-/* 角色卡上的音色和语气并排，各占一半 */
+/* 角色卡上的名字、音色、语气并排 */
 .cc-says { display: flex; gap: 8px; }
 .cc-says > .cc-input { flex: 1; min-width: 0; }
+/* 名字框比两个下拉宽一点：下拉里的选项文字短，名字要写得下 */
+.cc-says > input.cc-input { flex: 1.5; }
 
 /* ---------- 设置面板里的键值表格 ---------- */
 .tbl-wrap {

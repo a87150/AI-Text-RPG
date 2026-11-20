@@ -2717,14 +2717,24 @@ def main():
     check("分段朗读入口在", "export function segmentsOf" in _ui
           and "export async function speakSegments" in _ui)
 
-    # 跨币种的累计要分开记，面板才能写成 ¥3.2 + $0.5；混加会得到一个不对的数
+    # 跨币种的累计要分开记，面板才能写成 ¥3.2 + $0.5；混加会得到一个不对的数。
+    # 期望值不能写死成 1.0：国内厂商有峰谷价（工作日 9—12、14—18 翻倍），同一份
+    # 代码上午跑和下午跑出来的数不一样，写死等于让这条断言只在某个钟点绿。
+    # 用当前时刻算一份当期望值，另外单独压住"两个币种不能相等"——不然万一
+    # estimate_cost 退化成恒返回 0，这一条会跟着假绿。
     _mix = "zz-mix-currency"
     rp_metrics.TOTAL["by_session"].pop(_mix, None)
-    rp_metrics.record({"prompt_tokens": 1000000}, "deepseek-flash", sid=_mix)
-    rp_metrics.record({"prompt_tokens": 1000000}, "gpt-4o", sid=_mix)
+    _u = {"prompt_tokens": 1000000}
+    _want_cny = rp_config.estimate_cost("deepseek-flash", _u)["total"]
+    _want_usd = rp_config.estimate_cost("gpt-4o", _u)["total"]
+    rp_metrics.record(_u, "deepseek-flash", sid=_mix)
+    rp_metrics.record(_u, "gpt-4o", sid=_mix)
     _book = rp_metrics.snapshot(_mix)["total"]["cost_by_cur"]
     check("累计费用按币种分开记",
-          abs(_book.get("CNY", 0) - 1.0) < 1e-9 and abs(_book.get("USD", 0) - 2.5) < 1e-9, str(_book))
+          _want_cny > 0 and _want_usd > 0 and _want_cny != _want_usd
+          and abs(_book.get("CNY", 0) - _want_cny) < 1e-9
+          and abs(_book.get("USD", 0) - _want_usd) < 1e-9,
+          "%s 期望 CNY=%s USD=%s" % (_book, _want_cny, _want_usd))
     rp_metrics.TOTAL["by_session"].pop(_mix, None)
     check("未知模型不乱报价", rp_config.estimate_cost("mystery-model", {}) is None)
 
