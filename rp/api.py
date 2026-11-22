@@ -1776,12 +1776,26 @@ def _stream_model(messages, speaker, temperature, max_attempts, use_rp,
     sink 给了就把增量顺手收进去：用户中途点停止时，那半截得留着，
     不能因为没走到 final 就整段丢掉。
     """
+    def _stopped():
+        return bool(sid) and stop_requested(sid)
+
     for ev in completion_events(
         messages, base_temp=temperature, max_attempts=max_attempts,
         min_chars=min_chars or MIN_CHAT_CHARS,
         validate=lambda t: None if (not use_rp or "【" in t)
         else "缺少【旁白】/【角色名】格式",
+        should_stop=_stopped,
     ):
+        if ev["type"] == "stopped":
+            # 用户喊停：不是错误，也不是完成。把 None 交回去，调用方按
+            # "还有半截"处理——sink 里留着已经吐出来的那部分
+            return None, 0
+        if ev["type"] == "retry":
+            # 上一次尝试吐出来的半截得扔掉：那是同一个位置的重写，
+            # 和这一次接起来就是一大段重复。sink 只该装最后一次尝试，
+            # 不然用户喊停时 store 下来的"半截"能有两三遍同样的话
+            if sink is not None:
+                del sink[:]
         if ev["type"] == "delta":
             metrics.first_token()      # 用户感知的等待到此结束
             if sink is not None and ev.get("content"):
@@ -1837,7 +1851,10 @@ def _save_partial(sid, content, speaker="", use_rp=False, cast=None):
         msg = {"role": "assistant", "content": text, "partial": True,
                "turn": sess.get("turn") or 0}
         turn = parse_turn(text, speaker, cast if use_rp else None) if text else None
-        if turn:
+        # 解析得出结构就用解析结果，和 _commit_turn 存成一样的形状：
+        # 原文里带着 【旁白】 这种标记，续写时会被当成上文喂回模型
+        if turn and (turn.get("line") or turn.get("narrator") or (turn.get("lines") or [])):
+            msg["content"] = turn.get("line") or ""
             if turn.get("narrator"):
                 msg["narrator"] = turn["narrator"]
             if turn.get("lines"):

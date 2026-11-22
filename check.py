@@ -3424,6 +3424,82 @@ def main():
     check("同秒里序号大的排前面",
           _k106("lt-data-20260101-000000-probe-9.zip")
           > _k106("lt-data-20260101-000000-probe-2.zip"))
+
+    # 107. 生成中途被喊停：要立刻断掉上游。以前只在前端 abort，后端照旧把
+    # 整段读完——busy 一直挂着（刷新就显示「在后台生成」），读完还把完整一段
+    # 当半截存下来，用户点了停止反而多出一整轮。
+    import rp.llm as _llm107
+    import rp.api as _api107
+
+    class _Resp107:
+        def __init__(self, pieces):
+            self.pieces = pieces
+            self.status_code = 200
+            self.closed = False
+        def iter_lines(self, decode_unicode=True):
+            for p in self.pieces:
+                yield 'data: ' + json.dumps({'choices': [{'delta': {'content': p}}]})
+            yield 'data: [DONE]'
+        def close(self):
+            self.closed = True
+
+    _orig_call107 = _llm107.model_call
+    # 下面这两条要验的是真实现：main() 开头把 rp_api.completion_events 换成了
+    # 假流（离线自检不碰网络），不换回来就只是在测那个假函数
+    _orig_ce107 = _api107.completion_events
+    _api107.completion_events = _llm107.completion_events
+    try:
+        _holder107 = {}
+        def _call_stop(messages, temperature=0.8, stream=False, extra=None, reasoning=None):
+            r = _Resp107(['一', '二', '三', '四'])
+            _holder107['r'] = r
+            return r
+        _llm107.model_call = _call_stop
+        _seen107 = []
+        _stopped107 = False
+        for _ev107 in _llm107.completion_events(
+                [{'role': 'user', 'content': 'x'}], 0.8, 1,
+                should_stop=lambda: len(_seen107) >= 2):
+            if _ev107['type'] == 'delta':
+                _seen107.append(_ev107['content'])
+            elif _ev107['type'] == 'stopped':
+                _stopped107 = True
+        check('喊停能立刻打断生成', _stopped107 and len(_seen107) == 2, str(_seen107))
+        check('喊停后上游连接关掉', bool(_holder107.get('r') and _holder107['r'].closed))
+
+        # 重试是同一个位置重写一遍。sink 里要是留着上一次的半截，喊停时
+        # 存下来的「半截」就成了两次尝试首尾相接——用户看到一大段重复
+        _n107 = {'i': 0}
+        def _call_retry(messages, temperature=0.8, stream=False, extra=None, reasoning=None):
+            _n107['i'] += 1
+            return _Resp107(['短'] if _n107['i'] == 1 else ['完整', '答案'])
+        _llm107.model_call = _call_retry
+        _sink107 = []
+        for _chunk107 in _api107._stream_model(
+                [{'role': 'user', 'content': 'x'}], 'AI', 0.8, 3, False, 4,
+                sid=None, sink=_sink107):
+            pass
+        check('重试不把两次尝试拼起来', ''.join(_sink107) == '完整答案',
+              repr(''.join(_sink107)))
+    finally:
+        _api107.completion_events = _orig_ce107
+        _llm107.model_call = _orig_call107
+
+    # 108. 半截存下来要和正常提交一个形状：正文里不能留下 【旁白】 这种标记，
+    # 否则续写时它会被当成上一轮的台词喂回模型。
+    _s108 = rp_storage.new_session('半截形状')
+    _s108['ai_role'] = '林薇'
+    _s108['world'] = '办公室'
+    _s108['mode'] = 'rp'
+    _s108['messages'] = [{'role': 'user', 'content': '继续'}]
+    rp_storage.save_session(_s108)
+    _api107._save_partial(_s108['id'], '【旁白】她抬头。' + chr(10) + '【林薇】别说话。',
+                          '林薇', True, ['林薇'])
+    _m108 = (rp_storage.load_session(_s108['id']).get('messages') or [])[-1]
+    check('半截的正文不带格式标记', '【' not in (_m108.get('content') or ''),
+          repr((_m108.get('content') or '')[:30]))
+    check('半截的旁白解析出来了', bool(_m108.get('narrator')),
+          repr((_m108.get('narrator') or '')[:20]))
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")

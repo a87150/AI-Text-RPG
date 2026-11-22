@@ -127,7 +127,7 @@ def iter_sse_parts(resp, usage=None):
 
 def completion_events(messages, base_temp, max_attempts, min_chars=0,
                       extra=None, validate=None, with_reasoning=False,
-                      reasoning=None):
+                      reasoning=None, should_stop=None):
     """流式生成，质量不达标自动重试（chat / opening / enhance 共用）。
 
     reasoning 传 None 用全局设置，传 "none" 强制关掉。设定生成这类「照着
@@ -174,6 +174,16 @@ def completion_events(messages, base_temp, max_attempts, min_chars=0,
                 last_error = "接口返回 %s" % resp.status_code
                 continue
             for content, reasoning in iter_sse_parts(resp, usage):
+                # 用户喊停就立刻走人。不这么做的话线程会一直把整段读完，
+                # busy 挂在那儿，界面上说"在后台生成"，最后还把完整的一段
+                # 当成半截存下来——用户点了停止，回头却多出一整轮。
+                if should_stop and should_stop():
+                    try:
+                        resp.close()      # 上游还在吐，主动断掉，别等它写完
+                    except Exception:
+                        pass
+                    yield {"type": "stopped"}
+                    return
                 if reasoning:
                     reasonings.append(reasoning)
                     if with_reasoning:
