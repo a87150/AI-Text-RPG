@@ -267,6 +267,18 @@ function fillWritingForm() {
     const el = $(id);
     if (el) el.value = w[key] == null ? '' : w[key];
   }
+  const styleEl = $('#w-style');
+  if (styleEl) styleEl.value = w.style || '';
+  // 候选来自后端：描述文案留在提示词那侧，界面只要名字，改预设不用来回对两份
+  const styleList = $('#style-presets-list');
+  if (styleList) {
+    styleList.innerHTML = '';
+    for (const name of ((state.conf && state.conf.style_presets) || [])) {
+      const opt = document.createElement('option');
+      opt.value = name;
+      styleList.appendChild(opt);
+    }
+  }
   renderPricesTable((state.conf && state.conf.prices) || '');
   const font = $('#prefs-font');
   if (font) font.value = localStorage.getItem(FONT_KEY) || 'md';
@@ -741,6 +753,10 @@ async function saveWriting(quiet = false) {
     const value = Number(raw);
     if (raw !== '' && Number.isFinite(value)) body[key] = value;
   }
+  // 风格允许清空（= 不额外规定文风），所以不能跟数字那样"空着就不提交"：
+  // 不提交的话后端保留旧值，用户以为清掉了，其实每轮还在按旧风格写
+  const styleInput = $('#w-style');
+  body.style = styleInput ? String(styleInput.value || '').trim() : '';
   body.prices = pricesText();
   body.language = currentLanguage();
   body.reasoning_effort = currentReasoning();

@@ -3500,6 +3500,49 @@ def main():
           repr((_m108.get('content') or '')[:30]))
     check('半截的旁白解析出来了', bool(_m108.get('narrator')),
           repr((_m108.get('narrator') or '')[:20]))
+
+    # 109. 写作风格：选了就进提示词，留空就一个字都不加。
+    # 风格是「怎么写」的大前提，位置得在语言之后、人设和背景之前，
+    # 排到后面会被具体情节的要求盖过去。
+    import rp.prompts as _pm109
+    _old_style109 = rp_config.writing().get('style') or ''
+    try:
+        _s109 = rp_storage.new_session('风格')
+        _s109['ai_role'] = '林薇'
+        _s109['world'] = '办公室'
+        _s109['mode'] = 'rp'
+        _s109['characters'] = [{'name': '林薇', 'role': '老师', 'state': '', 'history': []}]
+
+        rp_config.save_writing({'style': ''}, persist=False)
+        check('留空就不写风格要求', '写作风格' not in _pm109.build_system_prompt(_s109))
+
+        rp_config.save_writing({'style': '言情小说'}, persist=False)
+        _p109 = _pm109.build_system_prompt(_s109)
+        check('选预设要带上具体写法，不只是类型名',
+              '【写作风格：言情小说】' in _p109 and '关系推进是主轴' in _p109)
+        check('风格排在语言之后、背景之前',
+              _p109.find('写作风格') > _p109.find('正文一律用简体中文')
+              and _p109.find('写作风格') < _p109.find('【故事背景与世界观】'))
+
+        rp_config.save_writing({'style': '赛博朋克'}, persist=False)
+        _p209 = _pm109.build_system_prompt(_s109)
+        check('自己填的类型也有约束，不是原样丢给模型',
+              '【写作风格：赛博朋克】' in _p209 and '按这个类型的通行写法来' in _p209)
+
+        # 存的时候就截断：太长会把字数规则挤到看不见的地方
+        rp_config.save_writing({'style': '长' * 200}, persist=False)
+        check('风格长度有上限',
+              len(rp_config.writing()['style']) == rp_config.STYLE_MAX_CHARS,
+              str(len(rp_config.writing()['style'])))
+
+        rp_config.save_writing({'style': ''}, persist=False)
+        check('清空后回到不规定', '写作风格' not in _pm109.build_system_prompt(_s109))
+
+        _cfg109 = client.get('/api/config').get_json() or {}
+        check('设置接口给出风格候选', len(_cfg109.get('style_presets') or []) >= 5,
+              str(len(_cfg109.get('style_presets') or [])))
+    finally:
+        rp_config.save_writing({'style': _old_style109}, persist=False)
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")

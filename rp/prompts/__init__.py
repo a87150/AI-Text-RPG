@@ -10,7 +10,8 @@ from difflib import SequenceMatcher
 from string import Template
 
 from ..characters import ensure_characters, guess_name, role_labels, scene_split
-from ..config import creativity, gen_defaults, mode_for, tier, tier_limits, writing
+from ..config import (STYLE_PRESETS, creativity, gen_defaults, mode_for, tier,
+                      tier_limits, writing)
 from ..llm import strip_status_leaks, strip_thinking
 from ..stories import PLACEHOLDER, fill_names
 
@@ -226,6 +227,22 @@ LANGUAGE_LINES = {
            "original spelling."),
 }
 
+def style_line(name):
+    """把设定里的写作风格翻成一句给模型看的话。
+
+    预设按类型给的是"怎么写"，不是"像什么"；用户自己填的照原样带过去，
+    再补一句通用要求——不然「赛博朋克」四个字对模型不构成任何约束。
+    """
+    name = (name or "").strip()
+    if not name:
+        return ""
+    preset = STYLE_PRESETS.get(name)
+    if preset:
+        return "【写作风格：%s】" % name + chr(10) + preset
+    return ("【写作风格：%s】" % name + chr(10)
+            + "按这个类型的通行写法来：该有的桥段和节奏要有，术语和腔调要像，"
+              "不要写成四不像，也不要把类型名写进正文。")
+
 def build_system_prompt(sess, speaker=None, parts_out=None):
     """拼这一轮的 system prompt。parts_out 传字典就顺手告一段落各占多少字，
     面板要画占比条，分段统计只能在这儿做——拼完再切开就认不回来了。"""
@@ -261,6 +278,12 @@ def build_system_prompt(sess, speaker=None, parts_out=None):
 
     # 语言必须钉死。只靠用户输入带动的话，一遇上糊涂就开始夹英文句子。
     add("language", LANGUAGE_LINES.get(writing().get("language"), LANGUAGE_LINES["zh"]))
+
+    # 文风紧跟在语言后面：这两条是"怎么写"的大前提，摆在人设和背景
+    # 之前才不会被后面的情节要求盖过去
+    _style = style_line(writing().get("style"))
+    if _style:
+        add("style", _style)
 
     # 主角 = 用户扮演的角色。不是角色表第一位（那是 AI 扮演的人）
     lead = (sess.get("user_name") or "").strip()
