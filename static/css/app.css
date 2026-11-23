@@ -600,6 +600,10 @@ body.story-view #btn-search { display: none; }
 }
 .seg button.active { border-color: var(--accent); color: var(--text); background: var(--accent-soft); }
 .seg button:hover { border-color: var(--accent); }
+/* 选项多的组（写作风格十来个）让它们按内容宽度排、自动换行，
+   等分的话每个按钮会被压成两个字宽，看不全名字 */
+.seg-wrap { flex-wrap: wrap; }
+.seg-wrap button { flex: 0 0 auto; }
 
 .summary-card {
   align-self: stretch; background: var(--bg-elev); border: 1px dashed var(--border-strong);

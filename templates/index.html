@@ -562,11 +562,11 @@ window.addEventListener('unhandledrejection', function (e) {
                 </div>
               </div>
               <div class="field">
-                <label for="w-style">写作风格（可以选，也可以自己写一句；留空就是不额外规定）</label>
-                <input id="w-style" type="text" list="style-presets-list" maxlength="60"
-                       placeholder="言情小说 / 轻小说 / 武侠 / 悬疑推理…" spellcheck="false">
-                <datalist id="style-presets-list"></datalist>
-                <div class="hint">选定后每一轮都会把这类文风的具体写法写进提示词——多写对白、线索摆在明面上、性场面写足过程之类。留空就只按下面的人数和字数规则走。</div>
+                <label for="w-style">写作风格（点一个，或者自己写一句；点「不指定」就不额外规定）</label>
+                <div class="seg seg-wrap" id="style-seg"></div>
+                <input id="w-style" type="text" maxlength="60"
+                       placeholder="也可以自己写，比如「日系轻小说」「民国谍战」" spellcheck="false">
+                <div class="hint">选中后每一轮都会把这类文风的具体写法写进提示词——多写对白、线索摆在明面上、性场面写足过程之类。不指定就只按下面的人数和字数规则走。</div>
               </div>
               <div class="grid2">
                 <div class="field"><label for="w-narrator-min">旁白最少字数（每轮场景描写）</label><input id="w-narrator-min" type="number" min="10" max="300"></div>

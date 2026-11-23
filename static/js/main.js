@@ -253,6 +253,40 @@ function currentMode() {
 
 const FONT_KEY = 'rp-font';
 
+/** 写作风格的候选按钮。名字来自后端，写法描述留在提示词那一侧。 */
+function buildStyleSeg() {
+  const seg = $('#style-seg');
+  if (!seg) return;
+  seg.innerHTML = '';
+  // 空串表示「不指定」，放第一个：想取消的时候不用去把输入框清空
+  for (const name of ['', ...((state.conf && state.conf.style_presets) || [])]) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.dataset.style = name;
+    btn.textContent = name || '不指定';
+    btn.onclick = () => {
+      const input = $('#w-style');
+      if (input) input.value = name;
+      syncStyleSeg();
+    };
+    seg.appendChild(btn);
+  }
+  const input = $('#w-style');
+  // 自己写的词也要让按钮跟着变：正好撞上某个预设就高亮它，否则一个都不亮
+  if (input) input.oninput = syncStyleSeg;
+  syncStyleSeg();
+}
+
+function syncStyleSeg() {
+  const seg = $('#style-seg');
+  if (!seg) return;
+  const input = $('#w-style');
+  const cur = input ? String(input.value || '').trim() : '';
+  for (const btn of seg.querySelectorAll('button')) {
+    btn.classList.toggle('active', (btn.dataset.style || '') === cur);
+  }
+}
+
 function fillWritingForm() {
   const w = (state.conf && state.conf.writing) || {};
   for (const [id, key] of [
@@ -269,16 +303,7 @@ function fillWritingForm() {
   }
   const styleEl = $('#w-style');
   if (styleEl) styleEl.value = w.style || '';
-  // 候选来自后端：描述文案留在提示词那侧，界面只要名字，改预设不用来回对两份
-  const styleList = $('#style-presets-list');
-  if (styleList) {
-    styleList.innerHTML = '';
-    for (const name of ((state.conf && state.conf.style_presets) || [])) {
-      const opt = document.createElement('option');
-      opt.value = name;
-      styleList.appendChild(opt);
-    }
-  }
+  buildStyleSeg();
   renderPricesTable((state.conf && state.conf.prices) || '');
   const font = $('#prefs-font');
   if (font) font.value = localStorage.getItem(FONT_KEY) || 'md';
