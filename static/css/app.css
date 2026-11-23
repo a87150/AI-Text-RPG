@@ -30,18 +30,19 @@
        m = 侧栏、按钮、表单、弹窗正文
        l = 消息正文、标题
      全部按 rem 走，改根字号就整体缩放——设置里的「字号」调的就是根字号 */
-  /* 三组绝对值，不跟着根字号同比走：小 13/15/17、中 15/17/19、大 18/20/23 */
-  --fs-s: 15px;
-  --fs-m: 17px;
-  --fs-l: 19px;
+  /* 三档按 rem 同比缩放，比例固定：s/m/l = .75 / .8125 / .9375。
+     各档的实际 px 由下面的根字号决定，改根字号就整体放大 */
+  --fs-s: .75rem;
+  --fs-m: .8125rem;
+  --fs-l: .9375rem;
 }
 
-/* 字号三档：直接给绝对值，不靠根字号同比推。根字号仍固定 16px，
-   留给间距、宽度那些 rem 用——字号变了不该把布局尺寸一起拽走 */
+/* 根字号就是这三档的旋钮，三档字号和间距一起缩放。
+   实际值：小 12 / 13 / 15，中 13.5 / 14.625 / 16.875，大 15.75 / 17.06 / 19.69 */
 html { font-size: 16px; }
-html[data-font="sm"] { --fs-s: 13px; --fs-m: 15px; --fs-l: 17px; }
-html[data-font="md"] { --fs-s: 15px; --fs-m: 17px; --fs-l: 19px; }
-html[data-font="lg"] { --fs-s: 18px; --fs-m: 20px; --fs-l: 23px; }
+html[data-font="sm"] { font-size: 16px; }
+html[data-font="md"] { font-size: 18px; }
+html[data-font="lg"] { font-size: 21px; }
 
 [data-theme="light"] {
   --bg: #f5f6fb;

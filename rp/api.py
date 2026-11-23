@@ -64,8 +64,8 @@ _THINK_SOFT = ("我需要", "等等，", "让我再想", "从上下文来看", "
                "内容：", "可以。", "不行，", "要求说", "注意格式")
 
 from .prompts import (
-    FIELD_TASKS, build_field_prompt, build_messages, build_system_prompt,
-    clean_generated, ensure_original_kept, input_density,
+    FIELD_TASKS, build_context_debug, build_field_prompt, build_messages,
+    build_system_prompt, clean_generated, ensure_original_kept, input_density,
 )
 from . import covers as cover_store
 from .stories import (
@@ -1110,6 +1110,8 @@ def api_import_session():
         sess["lore"] = [e for e in data["lore"] if isinstance(e, dict)][:40]
     if isinstance(data.get("summary"), str):
         sess["summary"] = data["summary"]
+    # 上面这些字段都会进 system prompt，快照跟着重算，否则面板显示的还是旧的
+    _refresh_context_debug(sess)
     sess["messages"] = clean
     sess["turn"] = len([m for m in clean if m["role"] == "assistant"])
     save_session(sess)
@@ -1281,6 +1283,23 @@ def _rewind_to(sess, index):
     _restore_snapshot(sess, snap)
     return sess
 
+def _refresh_context_debug(sess):
+    """重算「上下文」面板里那份 system prompt 快照。
+
+    改了会进提示词的数据（事实账本、角色、状态、设定）之后必须调：
+    那份快照是上一轮生成时算的，不重算的话面板会一直显示旧内容，
+    看着像删不掉。真正发给模型的是每次现算的，不受这份快照影响。
+    """
+    try:
+        debug = build_context_debug(sess)
+    except Exception:
+        return
+    ctx = sess.get("context")
+    if not isinstance(ctx, dict):
+        ctx = sess["context"] = {}
+    ctx["debug"] = debug
+
+
 @app.post("/api/sessions/<sid>/facts")
 def api_edit_facts(sid):
     """手动增删事实账本。
@@ -1318,6 +1337,7 @@ def api_edit_facts(sid):
                     break
         else:
             return jsonify({"error": "动作不对"}), 400
+        _refresh_context_debug(sess)
         save_session(sess)
         return jsonify({"facts": book})
 

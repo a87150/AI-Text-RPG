@@ -3622,6 +3622,21 @@ def main():
           all(('value="%s"' % k) in _html112 for k in ('sm', 'md', 'lg'))
           and 'value="xl"' not in _html112)
 
+    # 113. 事实账本删掉之后，上下文面板那份快照必须跟着变——
+    # 不重算的话面板还显示删掉的那条，用户以为没删掉。
+    # 真正发给模型的是每次现算的，所以这条只关面板，但面板骗人一样要修。
+    _s113 = {'id': 'x', 'turn': 7, 'user_name': '谭谈',
+             'facts': [{'turn': 7, 'fact': '存在的事实甲', 'state': 'active'},
+                       {'turn': 6, 'fact': '要被删掉的事实乙', 'state': 'active'}]}
+    rp_api._refresh_context_debug(_s113)
+    _sys113a = ((_s113.get('context') or {}).get('debug') or {}).get('system') or ''
+    check('重算前的快照里有两条事实', '存在的事实甲' in _sys113a and '要被删掉的事实乙' in _sys113a)
+    _s113['facts'] = [f for f in _s113['facts'] if '乙' not in f['fact']]
+    rp_api._refresh_context_debug(_s113)
+    _sys113b = ((_s113.get('context') or {}).get('debug') or {}).get('system') or ''
+    check('删完重算后快照里没有那条',
+          '要被删掉的事实乙' not in _sys113b and '存在的事实甲' in _sys113b, _sys113b[-80:])
+
     # 111. 格子是按人分的：一人一行，主角也有自己那一份。
     # 混成全场一行就没法说清「谁的好感度」，这条压住那个退化。
     _t111 = ('她抬头看你。' + chr(10) + '[[地点：天台|时间：下午]]' + chr(10)
