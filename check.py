@@ -1604,7 +1604,7 @@ def main():
     _ui4 = (pathlib.Path(__file__).parent / "static" / "js" / "ui.js").read_text(encoding="utf-8")
     _narr_css = _css3[_css3.index(".narrator {"):][:400]
     check("旁白不用灰字", "--text-dim" not in _narr_css and "color: var(--text)" in _narr_css, _narr_css[:120])
-    check("旁白用正文那一档字号", "font-size: var(--fs-l)" in _narr_css and "calc(var(--fs-l)" not in _narr_css)
+    check("旁白跟正文同一档字号", "font-size: var(--fs-m)" in _narr_css and "calc(" not in _narr_css.split("font-size")[1][:40])
     check("旁白留一道左边线做区分", "border-left: 2px solid" in _narr_css)
     check("旁白标签的样式还在", ".narr-tag" in _css3)
     check("标签内容来自故事名", "storyName()" in _ui4 and "label.textContent = tag" in _ui4)

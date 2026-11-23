@@ -71,6 +71,8 @@ html[data-font="lg"] { font-size: 21px; }
 html, body { height: 100%; margin: 0; }
 body {
   font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  /* 没单独指定的地方一律跟中档走，不然会继承根字号（那是布局基准，比中档大） */
+  font-size: var(--fs-m);
   background: var(--bg); color: var(--text); overflow: hidden;
   transition: background .2s ease, color .2s ease;
 }
@@ -189,7 +191,7 @@ button:disabled { cursor: not-allowed; }
   background: var(--bg-elev);
   border-radius: 0 10px 10px 0;
   color: var(--text);
-  font-size: var(--fs-l);
+  font-size: var(--fs-m);
   line-height: 1.8;
 }
 .narrator p:last-child { margin-bottom: 0; }
@@ -538,7 +540,7 @@ body.story-view #btn-search { display: none; }
   display: flex; align-items: center; gap: 8px;
 }
 .bubble {
-  padding: 12px 16px; border-radius: 14px; font-size: var(--fs-l);
+  padding: 12px 16px; border-radius: 14px; font-size: var(--fs-m);
   line-height: 1.8; word-break: break-word;
 }
 .msg.user .bubble {
