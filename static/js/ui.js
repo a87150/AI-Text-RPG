@@ -303,12 +303,19 @@ export function renderCharacterEditor(box, list, onChange) {
     role.oninput = () => { c.role = role.value; paint(); };
     paint();
 
-    // 别叫 state：会遮蔽从 state.js 导入的全局状态，上面读档位时正好落在死区
-    const stateField = document.createElement('input');
-    stateField.className = 'cc-input';
-    stateField.placeholder = '当前状态（可留空，AI 会随剧情更新）';
+    // 别叫 state：会遮蔽从 state.js 导入的全局状态，上面读档位时正好落在死区。
+    // 多行：这一格常常要写一整段（涨奶、难受、想让他留下），单行看不全
+    const stateField = document.createElement('textarea');
+    stateField.className = 'cc-input cc-area cc-state';
+    stateField.rows = 5;
+    stateField.placeholder = '当前状态：一行一项，写成「键：值」就行，比如' + String.fromCharCode(10)
+      + '当前好感度：75/100' + String.fromCharCode(10)
+      + '当前性欲值：30/100' + String.fromCharCode(10)
+      + '内心想法：……（AI 每轮会在此基础上更新）';
     stateField.value = c.state || '';
     stateField.oninput = () => { c.state = stateField.value; };
+
+
 
     // 音色跟着角色卡走：留空就退回设置里的音色表，不用为了换个声音去改全局
     const voice = document.createElement('select');
@@ -348,7 +355,15 @@ export function renderCharacterEditor(box, list, onChange) {
     says.className = 'cc-says';
     says.append(name, voice, style);
 
-    card.append(head, says, role, count, stateField);
+    // 这一档最多记几项：写超了模型看不到，不能让人白写
+    const capCells = (state.conf && state.conf.tier_limits || {}).cells || 0;
+    const cellHint = document.createElement('div');
+    cellHint.className = 'cc-count';
+    cellHint.textContent = capCells
+      ? '这一档每个角色最多记 ' + capCells + ' 项状态格，超出的模型看不到'
+      : '当前档位不限制状态格数量';
+
+    card.append(head, says, role, count, stateField, cellHint);
     box.appendChild(card);
   });
 
@@ -815,46 +830,9 @@ export function updateSub() {
     const value = flat(status[key]);
     if (value) facts.push([label, value]);
   }
-  // 自己加的格子是按人分的：好感度是谁的好感度、子宫状态是谁的，混在一行就分不清。
-  // 一人一小块，名字在上、格子在下；主角那块的钩子跟别人不一样，方便一眼认出来
-  const cellsOf = (cells) => (Array.isArray(cells) ? cells : [])
-    .filter((pair) => Array.isArray(pair) && pair[0] && pair[1]);
-  const boxFor = (cls) => {
-    const box = document.createElement('div');
-    box.className = cls;
-    return box;
-  };
-  const rowFor = (k, v) => {
-    const row = document.createElement('div');
-    row.className = 'sub-extra-row';
-    const key = document.createElement('span');
-    key.className = 'sr-k';
-    key.textContent = k;
-    const val = document.createElement('span');
-    val.className = 'sr-v';
-    val.textContent = v;
-    row.append(key, val);
-    return row;
-  };
-  const charCells = (status.chars && typeof status.chars === 'object') ? status.chars : {};
-  const groups = Object.entries(charCells).filter(([, cells]) => cellsOf(cells).length);
-  const legacy = cellsOf(status.extra);
-  if (!facts.length && !groups.length && !legacy.length) return;
-  for (const [who, cells] of groups) {
-    const box = boxFor('sub-char' + (who === me ? ' me' : ''));
-    const name = document.createElement('div');
-    name.className = 'sc-name';
-    name.textContent = who;
-    box.appendChild(name);
-    for (const [k, v] of cellsOf(cells)) box.appendChild(rowFor(k, v));
-    el.appendChild(box);
-  }
-  // 老数据 / 模型写成全场共用那一行时的兜底，没写名字就只能整块列出来
-  if (legacy.length && !groups.length) {
-    const box = boxFor('sub-extra');
-    for (const [k, v] of legacy) box.appendChild(rowFor(k, v));
-    el.appendChild(box);
-  }
+  // 每个角色自己的那几格不在这里显示：顶栏只放全场共用的处境，
+  // 谁的好感度、谁的子宫状态点谁的名字去看，混成一竖排只会把顶栏撑高
+  if (!facts.length) return;
   if (!facts.length) return;
   const line = document.createElement('div');
   line.className = 'sub-state';
@@ -918,6 +896,22 @@ export function askCharacterPick(pending, chars) {
   });
 }
 
+/** 把「［键：值］」一行一项的状态拆成 [[键, 值]]。认全角方括号和无括号两种写法。 */
+function parseCells(text) {
+  const out = [];
+  for (const raw of String(text || '').split('\n')) {
+    const s = raw.trim().replace(/^[［\[]+/, '').replace(/[］\]]+$/, '').trim();
+    if (!s) continue;
+    let at = s.indexOf('：');
+    if (at <= 0) at = s.indexOf(':');
+    if (at <= 0) continue;
+    const k = s.slice(0, at).trim().slice(0, 24);
+    const v = s.slice(at + 1).trim().slice(0, 200);
+    if (k && v) out.push([k, v]);
+  }
+  return out;
+}
+
 /** 点顶栏的角色名，看这个角色此刻是什么状态。 */
 export function toggleCharPop(name, anchor) {
   const pop = $('#char-pop');
@@ -930,7 +924,7 @@ export function toggleCharPop(name, anchor) {
   const me = s.user_name || '我';
   let c = (s.characters || []).find((x) => x.name === name);
   // 主角不在角色表里，但他也有状态要看
-  if (!c && name === me) c = { name: me, role: '', state: '', history: [] };
+  if (!c && name === me) c = { name: me, role: '', state: s.user_state || '', history: [] };
   if (!c) return;
 
   const status = s.status || {};
@@ -949,11 +943,22 @@ export function toggleCharPop(name, anchor) {
   // 不能叫 state：模块顶部导入了 state（当前会话），同名会在 TDZ 里把上面的 state.session 弄崩
   const nowText = String(c.state || '').trim()
     || String((c.history || []).slice(-1)[0] || '').trim();
-  rows.push(['状况', nowText || '还没记下来，模型写了【变化】之后这里会有内容']);
-  // 这个角色自己的那些格子（好感度、性欲值…）。主角不在角色表里也能有：
-  // 模型是按名字写行的，名字对上就取得到
-  for (const pair of (Array.isArray(status.chars && status.chars[name]) ? status.chars[name] : [])) {
-    if (Array.isArray(pair) && pair[0] && pair[1]) rows.push([pair[0], pair[1]]);
+  // 卡上那份状态如果是一组「键：值」，就地展开成一行一项：模型这一轮更新过的
+  // 用新值，没提到的沿用卡上写的。男女记的东西本来就不一样，各看各的
+  const own = parseCells(c.state);
+  if (!own.length) {
+    rows.push(['状况', nowText || '还没记下来，模型写了【变化】之后这里会有内容']);
+  } else {
+    const live = new Map(((status.chars && status.chars[name]) || [])
+      .filter((p) => Array.isArray(p) && p[0] && p[1]));
+    const used = new Set();
+    for (const [k, v] of own) {
+      rows.push([k, live.has(k) ? live.get(k) : v]);
+      used.add(k);
+    }
+    for (const [k, v] of live) {
+      if (!used.has(k)) rows.push([k, v]);
+    }
   }
   if (name === me) rows.unshift(['身份', '你这一局演的就是 TA']);
 

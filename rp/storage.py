@@ -20,7 +20,9 @@ _busy_guard = threading.Lock()
 TEXT_FIELDS = (
     "title", "user_name", "ai_name", "user_role", "ai_role",
     "world", "rules", "opening", "summary", "user_voice", "user_style",
-    # 状态栏里自己加的格子，一行一个或逗号分隔
+    # 主角自己要记的状态格与当前状态
+    "user_fields", "user_state",
+    # 1.45 的全局格子清单，界面已经撤掉，留着只是为了老会话还能读出来
     "status_fields",
 )
 DEFAULT_TITLE = "未命名故事"

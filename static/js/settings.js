@@ -222,7 +222,7 @@ export async function openSettings(opts = {}) {
   $('#f-world').value = s.world || '';
   $('#f-rules').value = s.rules || '';
   $('#f-opening').value = s.opening || '';
-  $('#f-status-fields').value = s.status_fields || '';
+  $('#f-user-state').value = s.user_state || '';
   const limit = (state.conf && state.conf.writing && state.conf.writing.max_characters) || 4;
   const meta = $('#story-meta');
   if (meta) {
@@ -334,7 +334,7 @@ export async function runAsk() {
       user_name: val('#f-user-name'),
       user_role: val('#f-user-role'),
       world: val('#f-world'),
-      status_fields: val('#f-status-fields'),
+      user_state: val('#f-user-state'),
       characters: draftChars
         .map((c) => ({ name: (c.name || '').trim(), role: (c.role || '').trim(),
                        state: (c.state || '').trim() }))
@@ -493,7 +493,7 @@ export async function saveSettings() {
     world: val('#f-world'),
     rules: val('#f-rules'),
     opening: val('#f-opening'),
-    status_fields: val('#f-status-fields'),   // 故事存一份，之后开的每一局都继承
+    user_state: val('#f-user-state'),   // 故事存一份，之后开的每一局都继承
     characters,
     lore: draftLore
       .map((e) => ({ keys: (e.keys || '').trim(), content: (e.content || '').trim() }))
@@ -559,7 +559,7 @@ function enhanceContext() {
     world: val('#f-world'),
     rules: val('#f-rules'),
     opening: val('#f-opening'),
-    status_fields: val('#f-status-fields'),
+    user_state: val('#f-user-state'),
     mode: draftMode,
     lore: draftLore.map((e) => ({ keys: e.keys || '', content: e.content || '' })),
     characters: draftChars

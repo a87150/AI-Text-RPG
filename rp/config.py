@@ -13,7 +13,7 @@ import requests
 from flask import Flask
 
 # ============================== 版本 ==============================
-VERSION = "1.47"
+VERSION = "1.48"
 
 # ============================== 模型配置 ==============================
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
@@ -212,13 +212,18 @@ _writing = dict(WRITING_DEFAULTS)
 # summary：每次压缩要把一大段剧情压成一段提要。上下文越大，
 # 触发得越晚、一次压掉的量越多，提要还是 400 字就装不下了。
 # 按上下文的 5% 取：3% 在高级档上是 800 字压三万，37:1，细节会掉。
+# cells：一个角色最多维护几个状态格。这些格每轮都要重抄一遍，给多了
+# 小模型会漏项、或者干脆缩成一句话交差；档位越高越吃得下，才放开。
 TIER_LIMITS = {
     "basic": {"context": 8000, "history_msgs": 16, "role_chars": 200,
-              "facts": 6, "anchor_every": 8, "attempts": 3, "summary": 400},
+              "facts": 6, "anchor_every": 8, "attempts": 3, "summary": 400,
+              "cells": 8},
     "standard": {"context": 16000, "history_msgs": 40, "role_chars": 400,
-                 "facts": 12, "anchor_every": 15, "attempts": 3, "summary": 800},
+                 "facts": 12, "anchor_every": 15, "attempts": 3, "summary": 800,
+                 "cells": 14},
     "advanced": {"context": 32000, "history_msgs": 0, "role_chars": 0,
-                 "facts": 24, "anchor_every": 24, "attempts": 2, "summary": 1600},
+                 "facts": 24, "anchor_every": 24, "attempts": 2, "summary": 1600,
+                 "cells": 20},
 }
 TIER_CONTEXT = {k: v["context"] for k, v in TIER_LIMITS.items()}
 

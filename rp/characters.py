@@ -53,6 +53,31 @@ _VERB_LEAD = "说想要会能是在就也都还又只走去来问看让给拿放
 # 剥掉开头的连接词，和开头的代词
 _LEAD_STRIP = "叫做是为把让给么这那以及和跟"
 
+def state_cells(text):
+    """把「［当前好感度：75/100］」一行一项的状态拆成 [(键, 值)]。
+
+    用户会直接给某个角色写这么一组，模型每轮在此基础上更新。
+    """
+    out = []
+    for line in str(text or "").splitlines():
+        s = line.strip().strip("［］[]【】").strip()
+        if not s:
+            continue
+        for sep in ("：", ":"):
+            if sep in s:
+                k, v = s.split(sep, 1)
+                k, v = k.strip()[:24], v.strip()[:200]
+                if k and v:
+                    out.append((k, v))
+                break
+    return out
+
+
+def has_cells(text):
+    """是不是用户手写的那组键值对（至少两项）。"""
+    return len(state_cells(text)) >= 2
+
+
 def ensure_characters(sess):
     """归一化角色表；老会话没有角色表时用 ai_name/ai_role 兜底成一个。"""
     chars = sess.get("characters")
@@ -73,7 +98,9 @@ def ensure_characters(sess):
                 # 不是存储上限——在这里截等于把用户写的设定真删掉，
                 # 而且截完还写回文件，救不回来
                 "role": (item.get("role") or "").strip(),
-                "state": (item.get("state") or "").strip()[:200],
+                # 不截 200 字：用户会把整组键值对（十好几行）粘进来，
+                # 截断等于把他写的状态真删掉一半，而且截完还写回文件
+                "state": (item.get("state") or "").strip()[:2000],
                 # 这个角色朗读时用哪个音色。空 = 走设置里的音色表 / 默认音色
                 "voice": (item.get("voice") or "").strip()[:40],
                 "style": (item.get("style") or "").strip()[:60],
@@ -340,6 +367,11 @@ def refresh_states(sess, text):
         c = book.get(nm)
         if not c or not st or st == (c.get("state") or "").strip():
             continue
+        # 用户给这个角色写了一组键值对，一句话的「变化」盖上去整块就没了。
+        # 这类角色的状态由主回复里「按人那几行」维护，这里只留历史
+        if has_cells(c.get("state")):
+            c["history"] = ((c.get("history") or []) + [st])[-CHARACTER_HISTORY_KEEP:]
+            continue
         c["state"] = st
         c["history"] = ((c.get("history") or []) + [st])[-CHARACTER_HISTORY_KEEP:]
         n += 1
@@ -356,7 +388,8 @@ def apply_change(sess, data):
     for c in chars:
         if c["name"] == name:
             c["history"] = (c["history"] + [change[:120]])[-CHARACTER_HISTORY_KEEP:]
-            c["state"] = change[:120]
+            if not has_cells(c.get("state")):
+                c["state"] = change[:120]
             return name
     return None
 

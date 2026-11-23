@@ -9,7 +9,8 @@ import re
 from difflib import SequenceMatcher
 from string import Template
 
-from ..characters import ensure_characters, guess_name, role_labels, scene_split
+from ..characters import (ensure_characters, guess_name, role_labels, scene_split,
+                          state_cells)
 from ..config import (RATING_LINES, STYLE_PRESETS, creativity, gen_defaults, mode_for,
                       tier, tier_limits, writing)
 from ..llm import strip_status_leaks, strip_thinking
@@ -119,10 +120,9 @@ STATUS_FILE = {
     "advanced": "status_advanced.md",
 }
 
-def status_field_names(sess=None):
-    """设定里自己加的状态格。一行一个，也认逗号和顿号。"""
-    raw = (sess or {}).get("status_fields") or ""
-    items = raw if isinstance(raw, (list, tuple)) else re.split(r"[,，、\n\r]+", str(raw))
+def split_fields(raw):
+    """一行一个，也认逗号和顿号。"""
+    items = raw if isinstance(raw, (list, tuple)) else re.split(r"[,，、\n\r]+", str(raw or ""))
     out = []
     for it in items:
         name = str(it).strip()[:20]
@@ -130,30 +130,59 @@ def status_field_names(sess=None):
             out.append(name)
     return out[:16]
 
-def status_prompt(sess=None):
-    base = render(STATUS_FILE.get(tier(), "status.md"))
-    names = status_field_names(sess)
-    if not names:
-        return base
+def status_owner_fields(sess):
+    """每个人各自要记哪几格：[(名字, [格名])]，主角排第一个。
+
+    格子跟着角色卡走——孙雨晴记子宫状态，「我」未必记；混成一张全局清单
+    就等于逼所有人套一个模板。
+    """
+    sess = sess or {}
     me = ""
     try:
         me = (role_labels(sess)[0] or "").strip()
     except Exception:
         me = ""
-    me = me or "我"
+    me = me or (sess.get("user_name") or "").strip() or "我"
+    out = []
+    # 一个角色最多维护几格，看档位：这些格每轮都要重抄，给多了小模型会漏项
+    cap = tier_limits().get("cells") or 0
+    # 键来自他自己那份状态：用户给某个角色写了「［好感度：75/100］…」，
+    # 那一组就是这个角色要维护的格。男女各写各的，不逼所有人套一个模板
+    mine = [k for k, _ in state_cells(sess.get("user_state"))]
+    if not mine:
+        mine = split_fields(sess.get("status_fields"))    # 1.45 的旧数据
+    if mine:
+        out.append((me, mine[:cap] if cap else mine))
+    for c in (sess.get("characters") or []):
+        if not isinstance(c, dict):
+            continue
+        name = (c.get("name") or "").strip()
+        keys = [k for k, _ in state_cells(c.get("state"))]
+        if name and keys:
+            out.append((name, keys[:cap] if cap else keys))
+    return out
+
+def status_prompt(sess=None):
+    base = render(STATUS_FILE.get(tier(), "status.md"))
+    owners = status_owner_fields(sess)
+    if not owners:
+        return base
+    me = owners[0][0]
+    sample = "[[%s|%s]]" % (me, "|".join("%s：…" % f for f in owners[0][1][:6]))
     # 文件里那句「其余字段名只用这几个」「只写一行」都是给默认玩法定的。
     # 这一局要盖掉它们，否则模型会把这些格子当成非法字段：要么不写，要么写进正文。
-    # 而且这些格子是各自的——好感度是谁的好感度，混在一行里就分不清了。
-    sample = "[[%s|%s]]" % (me, "|".join("%s：…" % n for n in names[:3]))
     return base + (
-        "\n\n【按人分开写的格】上面那句「其余字段名只用这几个」只管场景那一行；"
-        "下面这些格是**每个人各自的**，不是全场的：\n"
-        + "、".join(names) + "\n"
-        "每个在场的人单独占一行：第一段写这个人的名字，后面接他自己的值。"
-        "主角也要写，名字就用「%s」。比如：\n" % me
+        "\n\n【按人分开写的格】上面那句「其余字段名只用这几个」只管场景那一行。"
+        "这一局每个人记的东西不一样，各按各自那组来：\n"
+        + "\n".join("%s：%s" % (n, "、".join(f)) for n, f in owners) + "\n"
+        "每个人最多维护 %d 格。按上面的顺序来，多出来的这档吃不消，模型也维护不住。\n" % (tier_limits().get("cells") or 99)
+        + "每个在场的人单独占一行：第一段写这个人的名字，后面接他自己的值。"
+        "主角也要写，名字就用「" + me + "」。比如：\n"
         + sample + "\n"
-        "只写这一幕真正在场的人。某个格这一轮跟上一轮一样，也要给出当前值，别空着；"
-        "确实没有内容的那一格就省略。值要具体——数字档位照写、状态写到位。\n"
+        "这些格就是他卡上那份状态里写的那组，每一轮在原来的值上改：变了的换成新值，"
+        "没变也照抄一遍，别空着；确实没有内容的那一格就省略。值要具体——"
+        "数字档位照写、状态写到位。\n"
+        "只写这一幕真正在场的人。\n"
         "这几行跟上面那个场景行是分开的，各占一行：上面那句「只写一行」只针对场景那行。"
     )
 

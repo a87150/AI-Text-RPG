@@ -3568,34 +3568,40 @@ def main():
     finally:
         rp_config.save_writing({'style': _old_style109}, persist=False)
 
-    # 110. 状态栏的自定义格子：设定里写什么，提示词就得要求写什么，
-    # 出回来的那一行也得解析得出来。以前解析器只认固定几个键，其余整格丢弃。
-    _s110 = {'turn': 1, 'status_fields': '好感度\n当前性欲值,子宫状态'}
+    # 110. 状态格就是用户给某个角色写的那组键值对：键从卡上认出来，提示词按人列，
+    # 一句话的「变化」不许把整组盖掉。以前只能在全局填一份，男女被迫套同一个模板。
+    _st110 = chr(10).join(['［当前好感度：75/100］', '［当前性欲值：30/100］', '［子宫状态：未开发］'])
+    _s110 = {'user_name': '谭谈', 'user_state': '内心想法：想留下她',
+             'characters': [{'name': '孙雨晴', 'state': _st110}]}
+    _own110 = dict(rp_prompts.status_owner_fields(_s110))
+    check('格子从角色卡的状态里认出来',
+          _own110.get('孙雨晴') == ['当前好感度', '当前性欲值', '子宫状态'], str(_own110))
+    check('主角那份也算', _own110.get('谭谈') == ['内心想法'], str(_own110))
     _p110 = rp_prompts.status_prompt(_s110)
-    check('自定义格子写进了提示词',
-          '好感度：' in _p110 and '当前性欲值：' in _p110 and '子宫状态：' in _p110)
-    check('只写逗号和换行都能拆开', rp_prompts.status_field_names(_s110) == ['好感度', '当前性欲值', '子宫状态'],
-          str(rp_prompts.status_field_names(_s110)))
-    check('没填就不加这一段', '这一局还要写的格' not in rp_prompts.status_prompt({}))
+    check('提示词按人列出各自的格',
+          '孙雨晴：当前好感度、当前性欲值、子宫状态' in _p110)
+    check('没写状态就不加这一段', '按人分开写的格' not in rp_prompts.status_prompt({}))
     check('自定义格子盖过文件里那句字段限制',
           '上面那句「其余字段名只用这几个」只管场景那一行' in _p110)
+    check('键值对状态认得出来', rp_characters.has_cells(_st110))
+    check('一句话的状态不算键值对', not rp_characters.has_cells('涨奶，难受'))
 
-    _body110, _st110 = rp_characters.extract_status(
-        '她抬头看你。' + chr(10) + '[[地点：天台|好感度：75/100|子宫状态：未开发]]')
-    _ex110 = (_st110 or {}).get('extra') or []
-    check('整行写法里的自定义格子解析得出来',
-          _body110 == '她抬头看你。' and [x[0] for x in _ex110] == ['好感度', '子宫状态'],
-          str(_ex110))
-    _body111, _st111 = rp_characters.extract_status(
-        '夕阳落在她身上。[[地点：天台|好感度：75/100]]')
-    check('行内写法里的自定义格子也认',
-          ((_st111 or {}).get('extra') or []) == [['好感度', '75/100']], str(_st111))
+    # 档位上限：这些格每轮都要重抄，小模型给多了就漏项或缩成一句话
+    _caps110 = {k: v['cells'] for k, v in rp_config.TIER_LIMITS.items()}
+    check('每档都有状态格上限',
+          _caps110 == {'basic': 8, 'standard': 14, 'advanced': 20}, str(_caps110))
+    _many110 = {'characters': [{'name': '甲', 'state': chr(10).join(
+        '第%d项：值' % i for i in range(30))}]}
+    _got110 = rp_prompts.status_owner_fields(_many110)[0][1]
+    _cap110 = rp_config.tier_limits()['cells']
+    check('超出这一档的格被截掉', len(_got110) == _cap110, str(len(_got110)))
+
     _body112, _st112 = rp_characters.extract_status('这不是状态行 [[随便说点什么]] 继续。')
     check('不是状态行不会被当成格子吃掉',
           '随便说点什么' in _body112 and not (_st112 or {}).get('extra'), str(_st112))
-    # 状态栏字段要能存进会话，也要能从故事继承过来，否则用户设一次只管一局
-    check('状态栏字段在会话可存字段里', 'status_fields' in rp_storage.TEXT_FIELDS)
-    check('状态栏字段在故事继承字段里', 'status_fields' in rp_stories.STORY_FIELDS)
+    # 主角状态要能存进会话，也要能从故事继承，否则设一次只管一局
+    check('主角状态在会话可存字段里', 'user_state' in rp_storage.TEXT_FIELDS)
+    check('主角状态在故事继承字段里', 'user_state' in rp_stories.STORY_FIELDS)
 
     # 111. 格子是按人分的：一人一行，主角也有自己那一份。
     # 混成全场一行就没法说清「谁的好感度」，这条压住那个退化。
@@ -3612,7 +3618,7 @@ def main():
     check('主角那一份也收得到', _chars111.get('谭谈') == [['好感度', '40/100']],
           str(_chars111.get('谭谈')))
     check('场景行没被当成角色行', (_s111 or {}).get('location') == '天台', str(_s111))
-    _p111 = rp_prompts.status_prompt({'status_fields': '好感度', 'user_name': '谭谈'})
+    _p111 = rp_prompts.status_prompt({'user_state': '好感度：1/100', 'user_name': '谭谈'})
     check('提示词点名主角也要写', '主角也要写' in _p111 and '谭谈' in _p111)
     check('提示词要求每人一行', '单独占一行' in _p111)
     shutil.rmtree(TMP_DIR, ignore_errors=True)

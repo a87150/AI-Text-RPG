@@ -11,7 +11,7 @@ from .storage import DEFAULT_TITLE, SID_RE
 
 STORY_DIR = os.path.join(DATA_DIR, "stories")
 STORY_FIELDS = ("title", "user_name", "user_role", "world", "rules", "opening",
-                "user_voice", "user_style", "status_fields")
+                "user_voice", "user_style", "user_fields", "user_state")
 
 _lock = threading.RLock()
 os.makedirs(STORY_DIR, exist_ok=True)
