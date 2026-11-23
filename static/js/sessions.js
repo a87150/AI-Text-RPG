@@ -1,7 +1,10 @@
 /** 侧栏故事列表与故事级操作（打开 / 删除 / 清空 / 压缩 / 同步）。 */
 import { api } from './api.js';
 import { state } from './state.js';
-import { $, toast, renderMessages, syncAll, focusComposer, syncHeader, closeNav, loadDraft } from './ui.js';
+import {
+  $, toast, renderMessages, syncAll, focusComposer, syncHeader, closeNav, loadDraft,
+  stopSpeaking, stopBusyWatch,
+} from './ui.js';
 // 循环引用（settings 也用 sessions 的函数）：函数声明会被提升，运行期调用没问题
 import { openSettings } from './settings.js';
 import { syncCoverThumb } from './cover.js';
@@ -453,10 +456,22 @@ export async function selectStory(storyId) {
   syncCoverThumb();
 }
 
+// 连点两个会话时，先发出去的那个可能后回来，把 state.session 覆盖成上一个
+// 会话——标题、消息、侧栏高亮、记住的那一局全指向别人。序号对不上就丢弃。
+let openEpoch = 0;
+
 export async function openSession(id) {
   if (state.busy) { toast('正在生成回复，稍后再切换故事', 'error'); return; }
+  const mine = ++openEpoch;
+  // 换一局就先把上一局的尾巴收掉：朗读是模块级单例，不停会接着念上一个
+  // 会话的内容，而那个"暂停"按钮已经随 DOM 重建消失了，用户没法叫停；
+  // 轮询也一样，留着会每 2.5 秒去问一个你已经不看的会话写完没有
+  stopSpeaking();
+  stopBusyWatch();
   try {
-    state.session = await api('/api/sessions/' + id);
+    const sess = await api('/api/sessions/' + id);
+    if (mine !== openEpoch) return;
+    state.session = sess;
     state.aiStatus = { text: '', kind: '' };
     remember(SESSION_KEY, state.session.id);
     $('#settings-modal').classList.add('hidden');
@@ -468,6 +483,7 @@ export async function openSession(id) {
     syncAll();
     focusComposer({ force: true });
   } catch (e) {
+    if (mine !== openEpoch) return;      // 已经被更晚的一次点击取代了
     toast('打开失败：' + e.message, 'error');
   }
 }

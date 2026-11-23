@@ -18,16 +18,6 @@ def guess_name(text):
 
 CHARACTER_HISTORY_KEEP = 4    # 每个角色保留的最近变化条数
 
-def default_character(sess):
-    name = (sess.get("ai_name") or "").strip() \
-        or guess_name(sess.get("ai_role", "")) or "AI 角色"
-    return {
-        "name": name,
-        "role": (sess.get("ai_role") or "").strip(),
-        "state": "",
-        "history": [],
-    }
-
 # 模型会把「无」「暂无」当成名字写出来，这些不是人
 _BAD_NAMES = {"无", "没有", "暂无", "未知", "不详", "空", "none", "null",
               "-", "—", "（无）", "无。", "无人物", "路人", "众人"}
@@ -614,7 +604,6 @@ def split_facts(text):
 
 
 FACTS_MAX = 40
-FACTS_KEEP = 12
 # 手填的事实是用户自己写下的，跟模型每轮自动记的不是一回事：
 # 自动的按 40 条滚动，手填的留到 200（和 /api/facts 里的上限一致）。
 MANUAL_FACTS_MAX = 200
@@ -791,10 +780,8 @@ def _fact_subject(text):
     head = re.split(r"[，,。；;：:！？!?\s]", text.strip(), maxsplit=1)[0]
     return head[:12]
 
-def active_facts(sess, limit=FACTS_KEEP):
-    book = sess.get("facts") or []
-    live = [f for f in book if isinstance(f, dict) and f.get("state") == "active"]
-    return live[-limit:]
+# 账本取几条属于"这一轮给模型看多少"，和档位有关，实现在 prompts.active_facts。
+# 这里原来还有一份固定取 12 条的，两处口径会分叉，自检测的又正好是这份没人用的。
 
 def is_character_slot(tag):
     """【名字】这种两到四个汉字的短标签，才可能是角色段。"""

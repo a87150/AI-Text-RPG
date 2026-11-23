@@ -1210,10 +1210,13 @@ function bindUI() {
   $('#p-del').onclick = removeProvider;
   $('#p-clear-key').onclick = clearProviderKey;
 
-  // 点按钮时不让它抢走输入框焦点 —— 这是「发完消息要重新点输入框」的根源
-  for (const btn of document.querySelectorAll('button')) {
-    btn.addEventListener('mousedown', (e) => e.preventDefault());
-  }
+  // 点按钮时不让它抢走输入框焦点 —— 这是「发完消息要重新点输入框」的根源。
+  // 必须挂在 document 上做成委托：消息工具条、侧栏条目、搜索结果、分页按钮
+  // 全是运行期才创建的，启动时同步遍历一遍只看得到那会儿已经存在的那些，
+  // 点完照样丢焦点，之后按 Enter 就不再发送了
+  document.addEventListener('mousedown', (e) => {
+    if (e.target.closest('button')) e.preventDefault();
+  });
 
   $('#jump-latest').onclick = () => scrollToBottom(true);
 $('#input').addEventListener('input', () => { syncComposer(); saveDraftSoon(); });

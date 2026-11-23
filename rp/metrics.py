@@ -136,9 +136,10 @@ def note(event, **fields):
 
 def begin(session_id, prompt_chars, system_chars, messages):
     """一轮请求开始：记下起点，首 token 的耗时从这一刻算。"""
-    slot = _pending.setdefault(session_id or "", {})
-    slot["t0"] = time.perf_counter()
-    slot["first"] = None
+    with _lock:
+        slot = _pending.setdefault(session_id or "", {})
+        slot["t0"] = time.perf_counter()
+        slot["first"] = None
     LAST.update({
         "prompt_chars": prompt_chars,
         "system_chars": system_chars,
@@ -149,16 +150,27 @@ def begin(session_id, prompt_chars, system_chars, messages):
     note("chat.request", sid=session_id, prompt_chars=prompt_chars,
          system_chars=system_chars, messages=messages)
 
-def first_token():
-    """第一个正文增量到了——用户真正感觉到的那段等待到此结束。"""
-    for sid, slot in _pending.items():
-        if slot.get("first") is not None or slot.get("t0") is None:
-            continue
-        ms = int((time.perf_counter() - slot["t0"]) * 1000)
-        slot["first"] = ms
-        LAST["first_token_ms"] = ms
-        note("chat.first_token", sid=sid, ms=ms, prompt_chars=LAST["prompt_chars"])
-        return
+def first_token(session_id=None):
+    """第一个正文增量到了——用户真正感觉到的那段等待到此结束。
+
+    两个会话同时跑的时候不能挑"第一条还没记过的"：那可能是别人那一局，
+    首字耗时记到它头上，而自己这局永远是 0。传了 session_id 就只认这一个。
+    遍历也得在锁里做，不然另一个线程 begin() 往里插会把字典改坏。
+    """
+    with _lock:
+        if session_id is not None:
+            slot = _pending.get(session_id)
+            slots = [(session_id, slot)] if slot else []
+        else:
+            slots = list(_pending.items())
+        for sid, slot in slots:
+            if slot.get("first") is not None or slot.get("t0") is None:
+                continue
+            ms = int((time.perf_counter() - slot["t0"]) * 1000)
+            slot["first"] = ms
+            LAST["first_token_ms"] = ms
+            note("chat.first_token", sid=sid, ms=ms, prompt_chars=LAST["prompt_chars"])
+            return
 
 def end(session_id, ok=True, **extra):
     """一轮结束：总耗时、首字节、prompt 大小一起记，方便算 prefill 占比。"""

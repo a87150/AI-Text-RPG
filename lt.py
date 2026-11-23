@@ -1,24 +1,19 @@
 # -*- coding: utf-8 -*-
 """入口：python lt.py 启动；应用本体在 rp/ 包里。
 
-兼容旧引用：常用名字仍然可以从 lt 直接取到。
+这里只保留 check.py 打补丁和取常量时真要用到的名字。以前是「常用名字都
+从 lt 取一份」的兼容层，三十来个 re-export 里有二十多个已经没人引用——
+留着会让人以为改了 rp/ 之后还要同步改这里。
+新代码请直接从 rp.xxx 导入。
 """
 import os
 
-from rp.api import app  # noqa: F401
-from rp.characters import (  # noqa: F401
-    apply_change, ensure_characters, next_speaker, parse_turn,
-    role_labels, upsert_character,
-)
+from rp.api import app  # noqa: F401  自检里 lt.app.test_client()
+from rp.characters import next_speaker, parse_turn, upsert_character  # noqa: F401
 from rp.config import (  # noqa: F401
-    DATA_DIR, DEFAULT_MODEL, KEEP_RECENT_MESSAGES, MAX_CHAT_ATTEMPTS,
-    MAX_CONTEXT_TOKENS, MAX_ENHANCE_ATTEMPTS, MAX_OPENING_ATTEMPTS,
-    MIN_CHAT_CHARS, OLLAMA_HOST, PROVIDERS, SETTINGS_PATH,
+    KEEP_RECENT_MESSAGES, MAX_CONTEXT_TOKENS, OLLAMA_HOST,
 )
-from rp.context import background_compress, compress_session, context_tokens, context_info  # noqa: F401
-from rp.llm import completion_events, model_call  # noqa: F401
-from rp.prompts import build_messages, build_system_prompt  # noqa: F401
-from rp.storage import load_session, save_session  # noqa: F401
+from rp.llm import completion_events  # noqa: F401  自检要把它换成假流
 
 if __name__ == "__main__":
     from rp.backup import start_auto

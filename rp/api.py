@@ -714,6 +714,14 @@ def api_backup_download(name):
 
 @app.post("/api/backups/<name>/restore")
 def api_backup_restore(name):
+    # 还原是把整个数据目录覆写一遍。要是这时候有会话正在生成，它结束时会在
+    # 收尾里把自己那份写回去，刚还原的内容就被盖掉一半（反过来也一样）。
+    # 其它写接口都拦了 is_busy，唯独这个全库覆写的没拦。
+    _busy = [s.get("title") or s.get("id") for s in list_sessions()
+             if is_busy(s.get("id"))]
+    if _busy:
+        return jsonify({"error": "有会话正在生成，等它跑完再还原：%s"
+                                 % "、".join(_busy[:3])}), 409
     # 包里某一项读到一半坏掉时，restore 里那层只挡住了开包阶段。不接住的话
     # 500 走 Flask 默认 HTML 错误页，前端读不到 error 字段，界面上就是"没反应"。
     try:
@@ -1519,6 +1527,9 @@ def api_clear_session(sid):
         sess["messages"] = []
         sess["summary"] = ""
         sess.pop("compress", None)  # 清空对话后压缩统计也归零
+        # 游标必须一起归零：它还指着旧消息的下标，之后拼上下文会从那个位置
+        # 开始算，清空后的头 N 条新消息静默不进上下文，压缩也永远返回"不用压"
+        sess["compressed_upto"] = 0
         save_session(sess)
     return jsonify({"ok": True, "context_tokens": context_tokens(sess),
                     "context": context_info(sess)})
@@ -1801,7 +1812,7 @@ def _stream_model(messages, speaker, temperature, max_attempts, use_rp,
             if sink is not None:
                 del sink[:]
         if ev["type"] == "delta":
-            metrics.first_token()      # 用户感知的等待到此结束
+            metrics.first_token(sid)   # 用户感知的等待到此结束；带上 sid，并发时别记错人
             if sink is not None and ev.get("content"):
                 sink.append(ev["content"])
         if ev["type"] == "final":

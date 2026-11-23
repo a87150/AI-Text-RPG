@@ -227,40 +227,6 @@ function paintAiStatus(hasSession) {
 }
 
 /** 角色卡片列表：设定弹窗与上下文弹窗共用。 */
-export function renderCharacterCards(box, chars, emptyText) {
-  if (!box) return;
-  box.innerHTML = '';
-  if (!chars || !chars.length) {
-    const tip = document.createElement('div');
-    tip.className = 'char-empty';
-    tip.textContent = emptyText || '还没有角色。';
-    box.appendChild(tip);
-    return;
-  }
-  for (const c of chars) {
-    const card = document.createElement('div');
-    card.className = 'char-card';
-    card.style.setProperty('--char-hue', hueOf(c.name));
-    const name = document.createElement('div');
-    name.className = 'cc-name';
-    name.textContent = c.name || '（无名）';
-    card.appendChild(name);
-    if (c.role) {
-      const role = document.createElement('div');
-      role.className = 'cc-role';
-      role.textContent = c.role;
-      card.appendChild(role);
-    }
-    if (c.state) {
-      const st = document.createElement('div');
-      st.className = 'cc-state';
-      st.textContent = '当前：' + c.state;
-      card.appendChild(st);
-    }
-    box.appendChild(card);
-  }
-}
-
 /** 可编辑的角色表：改名、改设定、清状态、删除、新增，都由用户决定。 */
 export function renderCharacterEditor(box, list, onChange) {
   if (!box) return;
@@ -1513,12 +1479,6 @@ export async function speakSegments(segments, btn) {
   }
 }
 
-export async function speakText(text, btn, role) {
-  const body = speakable(text);
-  if (!body) { toast('\u8fd9\u6bb5\u6ca1\u4ec0\u4e48\u53ef\u4ee5\u5ff5\u7684\u3002'); return; }
-  await speakSegments([{ role: role || '\u65c1\u767d', text: body }], btn);
-}
-
 export function buildMessage(role, content, name, edited) {
   const el = document.createElement('div');
   el.className = 'msg ' + role;
@@ -1619,6 +1579,9 @@ export function renderMessages() {
   if (editing && editing.dataset.sid === ((state.session && state.session.id) || '')) return;
   // 用户往上翻着看时不抢滚动；只有本来就贴底才跟着底。
   const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+  // 位置要先记下来：下面这行清空会把 scrollTop 归零，之后再去问"滚没滚过"
+  // 答案永远是"没有"，那层守卫就等于不存在——每轮写完都把你从历史里拽回底部
+  const keepTop = atBottom ? 0 : box.scrollTop;
   box.innerHTML = '';
 
   const s = state.session;
@@ -1669,7 +1632,8 @@ export function renderMessages() {
     if (state.session && state.session.busy) appendBusyHint();
     else appendRetryHint(last.content || '');
   }
-  if (atBottom || !box.scrollTop) scrollToBottom(true);
+  if (atBottom) scrollToBottom(true);
+  else if (keepTop) box.scrollTop = keepTop;      // 正在翻历史，位置原样还回去
 }
 
 /** 刷新打断的是浏览器这头的流，后端照旧在生成，盯着会话等它落盘。 */

@@ -174,6 +174,9 @@ function setStatus(text, kind = '') {
  */
 export async function openSettings(opts = {}) {
   if (busySave || busyEnhance || busyOpening) { toast('正在处理，请稍候', 'error'); return; }
+  // 上一份设定里「重生成」留下的撤销点要作废：切到另一份之后那个「↺ 撤销」
+  // 还亮着，点一下就把上一个故事的旧值写进这次的表单，一保存就落盘
+  fieldUndo.clear();
   let s;
   if (opts.storyId) {
     try {

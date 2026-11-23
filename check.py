@@ -636,7 +636,7 @@ def main():
     book_sess = {"turn": 3}
     rp_characters.merge_facts(book_sess, ["甲拿走了钥匙"], turn=3)
     rp_characters.merge_facts(book_sess, ["钥匙被甲拿走了"], turn=4)
-    live = rp_characters.active_facts(book_sess)
+    live = rp_prompts.active_facts(book_sess)
     check("账本只留最新一条", len(live) == 1 and live[0]["turn"] == 4, str(live))
     check("旧事实标记为已失效",
           any(f["state"] == "resolved" for f in book_sess["facts"]))
@@ -668,7 +668,7 @@ def main():
     sub = {"turn": 0, "facts": []}
     rp_characters.merge_facts(sub, ["丈夫出差第7天，还有23天"], turn=1)
     rp_characters.merge_facts(sub, ["丈夫出差第7天"], turn=15)
-    live_sub = rp_characters.active_facts(sub)
+    live_sub = rp_prompts.active_facts(sub)
     check("简写并进长的那条",
           len(live_sub) == 1 and live_sub[0]["fact"] == "丈夫出差第7天，还有23天",
           str(live_sub))
@@ -676,11 +676,11 @@ def main():
     rp_characters.merge_facts(later, ["丈夫出差第7天"], turn=1)
     rp_characters.merge_facts(later, ["丈夫出差第7天，还有23天"], turn=15)
     check("后来的长版本升级掉简写",
-          len(rp_characters.active_facts(later)) == 1, str(later["facts"]))
+          len(rp_prompts.active_facts(later)) == 1, str(later["facts"]))
     apart = {"turn": 0, "facts": []}
     rp_characters.merge_facts(apart, ["甲拿到了钥匙"], turn=1)
     rp_characters.merge_facts(apart, ["甲拿到了地图"], turn=2)
-    check("不同的事不合并", len(rp_characters.active_facts(apart)) == 2,
+    check("不同的事不合并", len(rp_prompts.active_facts(apart)) == 2,
           str(apart["facts"]))
 
     # 22. 快照：能存能列能回滚

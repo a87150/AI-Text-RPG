@@ -92,10 +92,6 @@ def model_path(conf):
     return raw if os.path.isabs(raw) else os.path.join(BASE_DIR, raw)
 
 
-def _base_url(conf):
-    return (conf.get("url") or "http://127.0.0.1:8190").rstrip("/")
-
-
 def _find_python(conf):
     """找能 import vox 的解释器。设置里填了就用它，否则按常见位置挨个试。"""
     want = (conf.get("python") or "").strip()

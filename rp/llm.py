@@ -162,6 +162,7 @@ def completion_events(messages, base_temp, max_attempts, min_chars=0,
                                      + chr(10) + chr(10) + "（上一次没通过：%s。"
                                      "这次直接写正文，不要复述任务要求，不要自问自答。）" % last_error)
                     break
+        resp = None
         try:
             resp = model_call(
                 msgs,
@@ -173,7 +174,10 @@ def completion_events(messages, base_temp, max_attempts, min_chars=0,
             if resp.status_code != 200:
                 last_error = "接口返回 %s" % resp.status_code
                 continue
-            for content, reasoning in iter_sse_parts(resp, usage):
+            # 循环变量不能叫 reasoning：那会盖掉同名的函数参数（调用方指定的
+            # 思考档位 low/none）。盖掉之后重试时就把上一段的思考正文当成档位
+            # 发出去，模型不吐思考时又退化成空串，档位就此丢失
+            for content, rea in iter_sse_parts(resp, usage):
                 # 用户喊停就立刻走人。不这么做的话线程会一直把整段读完，
                 # busy 挂在那儿，界面上说"在后台生成"，最后还把完整的一段
                 # 当成半截存下来——用户点了停止，回头却多出一整轮。
@@ -184,10 +188,10 @@ def completion_events(messages, base_temp, max_attempts, min_chars=0,
                         pass
                     yield {"type": "stopped"}
                     return
-                if reasoning:
-                    reasonings.append(reasoning)
+                if rea:
+                    reasonings.append(rea)
                     if with_reasoning:
-                        think_chars += len(reasoning)
+                        think_chars += len(rea)
                         yield {"type": "thinking", "chars": think_chars}
                 if content:
                     collected.append(content)
@@ -201,6 +205,14 @@ def completion_events(messages, base_temp, max_attempts, min_chars=0,
         except requests.exceptions.RequestException as exc:
             last_error = "连接失败：%s" % exc
             continue
+        finally:
+            # 不管这轮是成功、失败还是继续重试，连接都得还回去。stream=True
+            # 的响应读到一半就弃掉不会自己关，连接池和句柄会一路涨
+            if resp is not None:
+                try:
+                    resp.close()
+                except Exception:
+                    pass
 
         last_raw = strip_thinking("".join(collected)).strip()
         # 不能拿 reasoning 顶替正文。推理模型的 reasoning 是草稿——
