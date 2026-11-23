@@ -1604,7 +1604,7 @@ def main():
     _ui4 = (pathlib.Path(__file__).parent / "static" / "js" / "ui.js").read_text(encoding="utf-8")
     _narr_css = _css3[_css3.index(".narrator {"):][:400]
     check("旁白不用灰字", "--text-dim" not in _narr_css and "color: var(--text)" in _narr_css, _narr_css[:120])
-    check("旁白不用小字号", "font-size: var(--msg-fs)" in _narr_css and "msg-fs) - 1px" not in _narr_css)
+    check("旁白用正文那一档字号", "font-size: var(--fs-l)" in _narr_css and "calc(var(--fs-l)" not in _narr_css)
     check("旁白留一道左边线做区分", "border-left: 2px solid" in _narr_css)
     check("旁白标签的样式还在", ".narr-tag" in _css3)
     check("标签内容来自故事名", "storyName()" in _ui4 and "label.textContent = tag" in _ui4)
@@ -3602,6 +3602,25 @@ def main():
     # 主角状态要能存进会话，也要能从故事继承，否则设一次只管一局
     check('主角状态在会话可存字段里', 'user_state' in rp_storage.TEXT_FIELDS)
     check('主角状态在故事继承字段里', 'user_state' in rp_stories.STORY_FIELDS)
+
+    # 112. 字号只有三档，且都挂在根字号上。写死的 px 会绕过设置里的缩放，
+    # 散落的七八种 rem 会让同一屏出现肉眼可见的层级混乱。
+    _css112 = (pathlib.Path(__file__).parent / 'static' / 'css' / 'app.css').read_text(encoding='utf-8')
+    check('三档字号变量都在',
+          all(('--fs-' + k + ':') in _css112 for k in ('s', 'm', 'l')))
+    check('旧的 msg-fs / ui-fs 已经并掉',
+          '--msg-fs' not in _css112 and '--ui-fs' not in _css112)
+    # 根字号那几行（html 开头）和相对父级的 .72em 是例外，别的都得走三档
+    _bare112 = [ln.strip() for ln in _css112.splitlines()
+                if 'font-size:' in ln and 'var(--fs-' not in ln
+                and 'calc(var(--fs-' not in ln
+                and not ln.strip().startswith('html')
+                and 'font-size: .72em' not in ln]
+    check('没有绕过三档的字号', not _bare112, str(_bare112[:3]))
+    _html112 = (pathlib.Path(__file__).parent / 'templates' / 'index.html').read_text(encoding='utf-8')
+    check('设置里只有三档可选',
+          all(('value="%s"' % k) in _html112 for k in ('sm', 'md', 'lg'))
+          and 'value="xl"' not in _html112)
 
     # 111. 格子是按人分的：一人一行，主角也有自己那一份。
     # 混成全场一行就没法说清「谁的好感度」，这条压住那个退化。
