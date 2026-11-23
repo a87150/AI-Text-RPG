@@ -815,6 +815,28 @@ export function updateSub() {
     const value = flat(status[key]);
     if (value) facts.push([label, value]);
   }
+  // 设定里自己加的格子（好感度、性欲值、子宫状态…）。模型是按顺序一行写全的，
+  // 这里也一行一项照原样排下来：塞进上面那行会被挤成一条看不清的长串
+  const extra = (Array.isArray(status.extra) ? status.extra : [])
+    .filter((pair) => Array.isArray(pair) && pair[0] && pair[1]);
+  if (!facts.length && !extra.length) return;
+  if (extra.length) {
+    const box = document.createElement('div');
+    box.className = 'sub-extra';
+    for (const [k, v] of extra) {
+      const row = document.createElement('div');
+      row.className = 'sub-extra-row';
+      const key = document.createElement('span');
+      key.className = 'sr-k';
+      key.textContent = k;
+      const val = document.createElement('span');
+      val.className = 'sr-v';
+      val.textContent = v;
+      row.append(key, val);
+      box.appendChild(row);
+    }
+    el.appendChild(box);
+  }
   if (!facts.length) return;
   const line = document.createElement('div');
   line.className = 'sub-state';

@@ -200,6 +200,13 @@ window.addEventListener('unhandledrejection', function (e) {
       <textarea id="f-opening" placeholder="可以让 AI 完善设定时自动生成，也可以自己写"></textarea>
     </div>
 
+    <div class="field">
+      <label for="f-status-fields">状态栏里额外要记的格子（一行一个，留空就只用默认那几项）</label>
+      <textarea id="f-status-fields" rows="3"
+                placeholder="好感度&#10;当前性欲值&#10;内衣/内裤/丝袜&#10;子宫状态&#10;内心想法&#10;内心渴望"></textarea>
+      <div class="hint">默认只记在场/离场、地点、时间、关系、物品、目标、事实。这里写的会每轮都要求模型给出当前值，写在正文之外那一行里，界面上单独列出来。名字自己起，越具体越好写（「当前性欲值」比「状态」好）。</div>
+    </div>
+
     <div class="modal-actions">
       <button id="btn-new-run" type="button">＋ 用这份设定再开一局</button>
       <button id="btn-enhance" type="button">✨ AI 帮我完善设定</button>

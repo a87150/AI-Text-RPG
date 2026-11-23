@@ -3563,6 +3563,34 @@ def main():
               str(_cfg109.get('ratings')))
     finally:
         rp_config.save_writing({'style': _old_style109}, persist=False)
+
+    # 110. 状态栏的自定义格子：设定里写什么，提示词就得要求写什么，
+    # 出回来的那一行也得解析得出来。以前解析器只认固定几个键，其余整格丢弃。
+    _s110 = {'turn': 1, 'status_fields': '好感度\n当前性欲值,子宫状态'}
+    _p110 = rp_prompts.status_prompt(_s110)
+    check('自定义格子写进了提示词',
+          '好感度：' in _p110 and '当前性欲值：' in _p110 and '子宫状态：' in _p110)
+    check('只写逗号和换行都能拆开', rp_prompts.status_field_names(_s110) == ['好感度', '当前性欲值', '子宫状态'],
+          str(rp_prompts.status_field_names(_s110)))
+    check('没填就不加这一段', '这一局还要写的格' not in rp_prompts.status_prompt({}))
+    check('自定义格子盖过文件里那句字段限制', '这一局不适用' in _p110)
+
+    _body110, _st110 = rp_characters.extract_status(
+        '她抬头看你。' + chr(10) + '[[地点：天台|好感度：75/100|子宫状态：未开发]]')
+    _ex110 = (_st110 or {}).get('extra') or []
+    check('整行写法里的自定义格子解析得出来',
+          _body110 == '她抬头看你。' and [x[0] for x in _ex110] == ['好感度', '子宫状态'],
+          str(_ex110))
+    _body111, _st111 = rp_characters.extract_status(
+        '夕阳落在她身上。[[地点：天台|好感度：75/100]]')
+    check('行内写法里的自定义格子也认',
+          ((_st111 or {}).get('extra') or []) == [['好感度', '75/100']], str(_st111))
+    _body112, _st112 = rp_characters.extract_status('这不是状态行 [[随便说点什么]] 继续。')
+    check('不是状态行不会被当成格子吃掉',
+          '随便说点什么' in _body112 and not (_st112 or {}).get('extra'), str(_st112))
+    # 状态栏字段要能存进会话，也要能从故事继承过来，否则用户设一次只管一局
+    check('状态栏字段在会话可存字段里', 'status_fields' in rp_storage.TEXT_FIELDS)
+    check('状态栏字段在故事继承字段里', 'status_fields' in rp_stories.STORY_FIELDS)
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")

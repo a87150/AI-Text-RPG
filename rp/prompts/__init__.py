@@ -119,13 +119,36 @@ STATUS_FILE = {
     "advanced": "status_advanced.md",
 }
 
-def status_prompt():
-    return render(STATUS_FILE.get(tier(), "status.md"))
+def status_field_names(sess=None):
+    """设定里自己加的状态格。一行一个，也认逗号和顿号。"""
+    raw = (sess or {}).get("status_fields") or ""
+    items = raw if isinstance(raw, (list, tuple)) else re.split(r"[,，、\n\r]+", str(raw))
+    out = []
+    for it in items:
+        name = str(it).strip()[:20]
+        if name and name not in out:
+            out.append(name)
+    return out[:16]
+
+def status_prompt(sess=None):
+    base = render(STATUS_FILE.get(tier(), "status.md"))
+    names = status_field_names(sess)
+    if not names:
+        return base
+    # 文件里那句「其余字段名只用这几个」是给默认玩法定的。这一局要盖掉它，
+    # 否则模型会把这些格子当成非法字段：要么不写，要么写进正文里
+    return base + (
+        "\n\n【这一局还要写的格】上面那句「其余字段名只用这几个」这一局不适用。"
+        "除了那几个默认字段，同一行里还必须把下面这些也写出来，格式一样是「名字：内容」，顺序照给：\n"
+        + "|".join("%s：" % n for n in names) + "\n"
+        "每一轮都要给，值要具体——数字档位照写、状态写到位。"
+        "不要因为跟上一轮一样就省掉，也不要单独展开成多行或小标题。"
+    )
 
 def build_rules(user_name, mode=None, names="", sess=None):
     w = writing()
     mode = mode or mode_for({})
-    status_block = status_prompt()
+    status_block = status_prompt(sess)
     # 四个字数设置合成一轮的总量：旁白那份 + 台词那份。
     # 一般模式整段都是叙述，用总量；rp 模式拆开写，但也要给出合计上限
     # 总量要按在场人数算：只算一个人的话，旁白一长模型就把其他角色段砍了

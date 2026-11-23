@@ -20,6 +20,8 @@ _busy_guard = threading.Lock()
 TEXT_FIELDS = (
     "title", "user_name", "ai_name", "user_role", "ai_role",
     "world", "rules", "opening", "summary", "user_voice", "user_style",
+    # 状态栏里自己加的格子，一行一个或逗号分隔
+    "status_fields",
 )
 DEFAULT_TITLE = "未命名故事"
 # 标题只有两个去处：侧栏一行，和生图提示词里的补位。给五千字不会显示得

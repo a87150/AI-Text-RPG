@@ -373,8 +373,10 @@ MARK_KEYS_RX = "在场|离场|退场|地点|位置|场景|时间|关系|人物|�
 # 模型常常把 [[…]] 写成【…】，两个竖线还在；不认这种写法的话整行状态就丢了
 # 模型常把状态跟正文挤在一行：「她笑了。[[地点：某酒馆|时间：深夜]]」
 # 整行锚定的规则吃不到这种，状态就整段漏进正文。下面这条只认带状态键的方括号。
+# 先行断言只要求整块里**至少有一个**已知状态键（说明这确实是状态行），
+# 块内其余键可以是用户在设定里自己加的格子：好感度、性欲值、子宫状态……
 INLINE_MARK_RE = re.compile(
-    r"\[\[((?:" + MARK_KEYS_RX + r")[:：][^\[\]]{0,400})\]\]"
+    r"\[\[(?=(?:[^\[\]]*)(?:" + MARK_KEYS_RX + r")[:：])([^\[\]]{2,400})\]\]"
 )
 MARK_RE = re.compile(
     r"^[ \t]*\[\[([^\[\]]{2,400})\]\][ \t]*$"
@@ -392,6 +394,8 @@ MARK_KEYS = {
     "在场": "present", "离场": "away", "退场": "away",
 }
 NAME_SPLIT_RE = re.compile(r"[,，、/]")
+# 用户自己加的格子存在这里：[[标签, 值], …]，顺序就是模型写的顺序
+EXTRA_KEY = "extra"
 
 def _take_mark_line(text):
     """剥掉 [[…]] 状态行并解析成 status；格式不对就整行丢弃。"""
@@ -414,9 +418,15 @@ def _take_mark_line(text):
             key, value = chunk.split(":", 1)
         else:
             continue
-        key = MARK_KEYS.get(key.strip())
+        raw_key = key.strip()
+        key = MARK_KEYS.get(raw_key)
         value = value.strip()
-        if not key or not value:
+        if not value:
+            continue
+        if not key:
+            # 白名单外的格子照原样留下：设定里自己加的「好感度」「性欲值」
+            # 「子宫状态」全靠这一条才露得出来。以前这里是 continue，整格丢掉
+            status.setdefault(EXTRA_KEY, []).append([raw_key[:20], value[:160]])
             continue
         if key == FACT_KEY:
             got = split_facts(value)
@@ -576,6 +586,8 @@ def extract_status(text):
                     status[key] = names
             elif key == "items":
                 status[key] = value          # {人名: 东西}，别按字符串切
+            elif key == EXTRA_KEY:
+                status[key] = value          # [[标签, 值], …]，原样带过去
             else:
                 status[key] = str(value)[:160]
     line = FACT_LINE_RE.search(cleaned)
