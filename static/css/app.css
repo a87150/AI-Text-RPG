@@ -655,12 +655,13 @@ body.story-view #btn-search { display: none; }
 }
 .char-pop.hidden { display: none; }
 .cp-head { font-size: .875rem; font-weight: 600; color: var(--text); margin-bottom: 8px; }
-.cp-row { display: flex; gap: 8px; margin-bottom: 6px; align-items: flex-start; }
-/* 键列按内容走：以前写死 32px，「当前好感度」这种五个字塞不进去，
-   被压成一字一行竖排，看着像坏了 */
-.cp-row b { flex: 0 0 auto; max-width: 45%; color: var(--text-mute); font-weight: 500;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cp-row span { flex: 1; min-width: 0; white-space: pre-wrap; word-break: break-word; }
+/* 两列对齐：键这一列取全表最长的那个（max-content 按所有行算，不是按行），
+   所以值一律从同一条竖线开始。行距交给 gap，行自己用 display:contents 进网格。
+   以前是每行一个 flex，键宽各走各的，值那列就参差不齐 */
+.cp-body { display: grid; grid-template-columns: max-content 1fr; gap: 5px 10px; }
+.cp-row { display: contents; }
+.cp-row b { color: var(--text-mute); font-weight: 500; white-space: nowrap; }
+.cp-row span { min-width: 0; white-space: pre-wrap; word-break: break-word; line-height: 1.55; }
 .cc-count { font-size: .6875rem; color: var(--text-mute); margin: -4px 0 6px; }
 .cc-count.over { color: var(--danger); }
 

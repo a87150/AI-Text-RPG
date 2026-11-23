@@ -968,6 +968,10 @@ export function toggleCharPop(name, anchor) {
   head.className = 'cp-head';
   head.textContent = c.name;
   pop.appendChild(head);
+  // 整块放进一个网格里，第一列宽度取全表最长的那个键：
+  // 每行各自撑宽的话，值那一列的起点就会参差不齐
+  const body = document.createElement('div');
+  body.className = 'cp-body';
   for (const [label, value] of rows) {
     const row = document.createElement('div');
     row.className = 'cp-row';
@@ -976,8 +980,9 @@ export function toggleCharPop(name, anchor) {
     const v = document.createElement('span');
     v.textContent = value;
     row.append(k, v);
-    pop.appendChild(row);
+    body.appendChild(row);
   }
+  pop.appendChild(body);
   const status2 = s.status || {};
   const isMe = name === (s.user_name || '我');
   const left = isMe ? false
