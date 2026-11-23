@@ -167,8 +167,16 @@ def status_prompt(sess=None):
     owners = status_owner_fields(sess)
     if not owners:
         return base
-    me = owners[0][0]
-    sample = "[[%s|%s]]" % (me, "|".join("%s：…" % f for f in owners[0][1][:6]))
+    # 主角名必须单独取：没填自己状态时 owners 里第一个是 AI 角色，
+    # 拿它当主角名就会在提示词里写「主角的名字就用孙雨晴」，
+    # 模型于是分不清谁是玩家
+    me = ""
+    try:
+        me = (role_labels(sess)[0] or "").strip()
+    except Exception:
+        me = ""
+    me = me or ((sess or {}).get("user_name") or "").strip() or "我"
+    sample = "[[%s|%s]]" % (owners[0][0], "|".join("%s：…" % f for f in owners[0][1][:6]))
     # 文件里那句「其余字段名只用这几个」「只写一行」都是给默认玩法定的。
     # 这一局要盖掉它们，否则模型会把这些格子当成非法字段：要么不写，要么写进正文。
     return base + (
@@ -177,8 +185,9 @@ def status_prompt(sess=None):
         + "\n".join("%s：%s" % (n, "、".join(f)) for n, f in owners) + "\n"
         "每个人最多维护 %d 格。按上面的顺序来，多出来的这档吃不消，模型也维护不住。\n" % (tier_limits().get("cells") or 99)
         + "每个在场的人单独占一行：第一段写这个人的名字，后面接他自己的值。"
-        "主角也要写，名字就用「" + me + "」。比如：\n"
-        + sample + "\n"
+        "主角也要写，名字就用「" + me + "」。"
+        + ("" if owners[0][0] == me else "下面这行是同格式的示例（这个是 %s 的）：" % owners[0][0])
+        + "\n" + sample + "\n"
         "这些格就是他卡上那份状态里写的那组，每一轮在原来的值上改：变了的换成新值，"
         "没变也照抄一遍，别空着；确实没有内容的那一格就省略。值要具体——"
         "数字档位照写、状态写到位。\n"

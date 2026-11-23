@@ -3589,7 +3589,7 @@ def main():
     # 档位上限：这些格每轮都要重抄，小模型给多了就漏项或缩成一句话
     _caps110 = {k: v['cells'] for k, v in rp_config.TIER_LIMITS.items()}
     check('每档都有状态格上限',
-          _caps110 == {'basic': 8, 'standard': 14, 'advanced': 20}, str(_caps110))
+          _caps110 == {'basic': 12, 'standard': 18, 'advanced': 24}, str(_caps110))
     _many110 = {'characters': [{'name': '甲', 'state': chr(10).join(
         '第%d项：值' % i for i in range(30))}]}
     _got110 = rp_prompts.status_owner_fields(_many110)[0][1]

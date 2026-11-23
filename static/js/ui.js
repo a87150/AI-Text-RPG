@@ -913,11 +913,11 @@ function parseCells(text) {
 }
 
 /** 点顶栏的角色名，看这个角色此刻是什么状态。 */
-export function toggleCharPop(name, anchor) {
+export function toggleCharPop(name, anchor, repaint = false) {
   const pop = $('#char-pop');
   const s = state.session;
   if (!pop || !s) return;
-  if (!pop.classList.contains('hidden') && pop.dataset.for === name) {
+  if (!repaint && !pop.classList.contains('hidden') && pop.dataset.for === name) {
     pop.classList.add('hidden');
     return;
   }
@@ -998,7 +998,8 @@ export function toggleCharPop(name, anchor) {
   if (!isMe) pop.appendChild(toggle);   // 主角没有「离场」这回事
   pop.classList.remove('hidden');
 
-  const box = anchor ? anchor.getBoundingClientRect() : null;
+  // 重画时不动位置：位置是点开时按角色按钮算好的，重算会跳
+  const box = (!repaint && anchor) ? anchor.getBoundingClientRect() : null;
   if (box) {
     const left = Math.min(box.left, window.innerWidth - 320);
     pop.style.left = Math.max(12, left) + 'px';
@@ -1048,6 +1049,12 @@ export function syncAll() {
   renderContextDetail();
   const select = $('#model-select');
   if (select) select.disabled = state.busy;
+  // 弹窗开着就按新数据重画一遍：模型每轮会更新角色状态，不重画的话
+  // 里面一直是上一轮的数字，看着就像「没自动更新」
+  const pop = $('#char-pop');
+  if (pop && !pop.classList.contains('hidden') && pop.dataset.for) {
+    toggleCharPop(pop.dataset.for, null, true);
+  }
 }
 
 /* ------------------------------ 消息渲染 ------------------------------ */

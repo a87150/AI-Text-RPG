@@ -13,7 +13,7 @@ import requests
 from flask import Flask
 
 # ============================== 版本 ==============================
-VERSION = "1.50"
+VERSION = "1.51"
 
 # ============================== 模型配置 ==============================
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
@@ -217,13 +217,13 @@ _writing = dict(WRITING_DEFAULTS)
 TIER_LIMITS = {
     "basic": {"context": 8000, "history_msgs": 16, "role_chars": 200,
               "facts": 6, "anchor_every": 8, "attempts": 3, "summary": 400,
-              "cells": 8},
+              "cells": 12},
     "standard": {"context": 16000, "history_msgs": 40, "role_chars": 400,
                  "facts": 12, "anchor_every": 15, "attempts": 3, "summary": 800,
-                 "cells": 14},
+                 "cells": 18},
     "advanced": {"context": 32000, "history_msgs": 0, "role_chars": 0,
                  "facts": 24, "anchor_every": 24, "attempts": 2, "summary": 1600,
-                 "cells": 20},
+                 "cells": 24},
 }
 TIER_CONTEXT = {k: v["context"] for k, v in TIER_LIMITS.items()}
 
