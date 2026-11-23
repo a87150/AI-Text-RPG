@@ -3577,7 +3577,8 @@ def main():
     check('只写逗号和换行都能拆开', rp_prompts.status_field_names(_s110) == ['好感度', '当前性欲值', '子宫状态'],
           str(rp_prompts.status_field_names(_s110)))
     check('没填就不加这一段', '这一局还要写的格' not in rp_prompts.status_prompt({}))
-    check('自定义格子盖过文件里那句字段限制', '这一局不适用' in _p110)
+    check('自定义格子盖过文件里那句字段限制',
+          '上面那句「其余字段名只用这几个」只管场景那一行' in _p110)
 
     _body110, _st110 = rp_characters.extract_status(
         '她抬头看你。' + chr(10) + '[[地点：天台|好感度：75/100|子宫状态：未开发]]')
@@ -3595,6 +3596,25 @@ def main():
     # 状态栏字段要能存进会话，也要能从故事继承过来，否则用户设一次只管一局
     check('状态栏字段在会话可存字段里', 'status_fields' in rp_storage.TEXT_FIELDS)
     check('状态栏字段在故事继承字段里', 'status_fields' in rp_stories.STORY_FIELDS)
+
+    # 111. 格子是按人分的：一人一行，主角也有自己那一份。
+    # 混成全场一行就没法说清「谁的好感度」，这条压住那个退化。
+    _t111 = ('她抬头看你。' + chr(10) + '[[地点：天台|时间：下午]]' + chr(10)
+             + '[[孙雨晴|好感度：75/100|子宫状态：未开发]]' + chr(10)
+             + '[[谭谈|好感度：40/100]]')
+    _b111, _s111 = rp_characters.extract_status(_t111)
+    _chars111 = (_s111 or {}).get('chars') or {}
+    check('每人一行的状态解析得出来',
+          _b111 == '她抬头看你。' and set(_chars111) == {'孙雨晴', '谭谈'}, str(_chars111))
+    check('格子的值按人归位',
+          _chars111.get('孙雨晴') == [['好感度', '75/100'], ['子宫状态', '未开发']],
+          str(_chars111.get('孙雨晴')))
+    check('主角那一份也收得到', _chars111.get('谭谈') == [['好感度', '40/100']],
+          str(_chars111.get('谭谈')))
+    check('场景行没被当成角色行', (_s111 or {}).get('location') == '天台', str(_s111))
+    _p111 = rp_prompts.status_prompt({'status_fields': '好感度', 'user_name': '谭谈'})
+    check('提示词点名主角也要写', '主角也要写' in _p111 and '谭谈' in _p111)
+    check('提示词要求每人一行', '单独占一行' in _p111)
     shutil.rmtree(TMP_DIR, ignore_errors=True)
     if FAILED:
         print("")

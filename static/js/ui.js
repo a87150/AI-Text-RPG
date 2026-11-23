@@ -815,26 +815,44 @@ export function updateSub() {
     const value = flat(status[key]);
     if (value) facts.push([label, value]);
   }
-  // 设定里自己加的格子（好感度、性欲值、子宫状态…）。模型是按顺序一行写全的，
-  // 这里也一行一项照原样排下来：塞进上面那行会被挤成一条看不清的长串
-  const extra = (Array.isArray(status.extra) ? status.extra : [])
+  // 自己加的格子是按人分的：好感度是谁的好感度、子宫状态是谁的，混在一行就分不清。
+  // 一人一小块，名字在上、格子在下；主角那块的钩子跟别人不一样，方便一眼认出来
+  const cellsOf = (cells) => (Array.isArray(cells) ? cells : [])
     .filter((pair) => Array.isArray(pair) && pair[0] && pair[1]);
-  if (!facts.length && !extra.length) return;
-  if (extra.length) {
+  const boxFor = (cls) => {
     const box = document.createElement('div');
-    box.className = 'sub-extra';
-    for (const [k, v] of extra) {
-      const row = document.createElement('div');
-      row.className = 'sub-extra-row';
-      const key = document.createElement('span');
-      key.className = 'sr-k';
-      key.textContent = k;
-      const val = document.createElement('span');
-      val.className = 'sr-v';
-      val.textContent = v;
-      row.append(key, val);
-      box.appendChild(row);
-    }
+    box.className = cls;
+    return box;
+  };
+  const rowFor = (k, v) => {
+    const row = document.createElement('div');
+    row.className = 'sub-extra-row';
+    const key = document.createElement('span');
+    key.className = 'sr-k';
+    key.textContent = k;
+    const val = document.createElement('span');
+    val.className = 'sr-v';
+    val.textContent = v;
+    row.append(key, val);
+    return row;
+  };
+  const charCells = (status.chars && typeof status.chars === 'object') ? status.chars : {};
+  const groups = Object.entries(charCells).filter(([, cells]) => cellsOf(cells).length);
+  const legacy = cellsOf(status.extra);
+  if (!facts.length && !groups.length && !legacy.length) return;
+  for (const [who, cells] of groups) {
+    const box = boxFor('sub-char' + (who === me ? ' me' : ''));
+    const name = document.createElement('div');
+    name.className = 'sc-name';
+    name.textContent = who;
+    box.appendChild(name);
+    for (const [k, v] of cellsOf(cells)) box.appendChild(rowFor(k, v));
+    el.appendChild(box);
+  }
+  // 老数据 / 模型写成全场共用那一行时的兜底，没写名字就只能整块列出来
+  if (legacy.length && !groups.length) {
+    const box = boxFor('sub-extra');
+    for (const [k, v] of legacy) box.appendChild(rowFor(k, v));
     el.appendChild(box);
   }
   if (!facts.length) return;
@@ -932,6 +950,11 @@ export function toggleCharPop(name, anchor) {
   const nowText = String(c.state || '').trim()
     || String((c.history || []).slice(-1)[0] || '').trim();
   rows.push(['状况', nowText || '还没记下来，模型写了【变化】之后这里会有内容']);
+  // 这个角色自己的那些格子（好感度、性欲值…）。主角不在角色表里也能有：
+  // 模型是按名字写行的，名字对上就取得到
+  for (const pair of (Array.isArray(status.chars && status.chars[name]) ? status.chars[name] : [])) {
+    if (Array.isArray(pair) && pair[0] && pair[1]) rows.push([pair[0], pair[1]]);
+  }
   if (name === me) rows.unshift(['身份', '你这一局演的就是 TA']);
 
   pop.textContent = '';

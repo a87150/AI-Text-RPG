@@ -607,6 +607,10 @@ body.story-view #btn-search { display: none; }
 
 /* 状态栏里自己加的格子：一行一项，左标签右内容，长内容自己折行 */
 .sub-extra { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
+/* 按人分组的那一块：一个人一小节，名字在上 */
+.sub-char { margin-top: 8px; }
+.sub-char.me .sc-name { color: var(--accent); }
+.sc-name { font-size: .75rem; color: var(--accent-2); font-weight: 600; margin-bottom: 2px; }
 .sub-extra-row { display: flex; gap: 8px; font-size: .75rem; line-height: 1.7; }
 .sub-extra-row .sr-k { flex: 0 0 auto; color: var(--text-dim); }
 .sub-extra-row .sr-k::after { content: '：'; }

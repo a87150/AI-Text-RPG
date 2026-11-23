@@ -396,6 +396,37 @@ MARK_KEYS = {
 NAME_SPLIT_RE = re.compile(r"[,，、/]")
 # 用户自己加的格子存在这里：[[标签, 值], …]，顺序就是模型写的顺序
 EXTRA_KEY = "extra"
+# 按角色分的状态行：[[孙雨晴|好感度：75/100|性欲值：30/100]]。
+# 第一段没有人名冒号是场景行（[[地点：…|时间：…]]），靠这个区分，两者不会互吃
+CHAR_LINE_RE = re.compile(
+    r"^[ \t]*\[\[([^\[\]|｜：:]{1,24})((?:\|[^\[\]]*)+)\]\][ \t]*$", re.M)
+
+
+def _take_char_lines(text):
+    """剥掉「每人一行」的状态行，按名字收成 {名字: [[格子, 值], …]}。
+
+    这些格子是各自的：孙雨晴的好感度是她自己的，主角那份也是他自己的。
+    混进场景那行就没法区分谁是谁了。
+    """
+    got = {}
+    for m in CHAR_LINE_RE.finditer(text or ""):
+        name = m.group(1).strip()
+        cells = []
+        for chunk in re.split(r"[|｜]", (m.group(2) or "").lstrip("|｜")):
+            if "：" in chunk:
+                k, v = chunk.split("：", 1)
+            elif ":" in chunk:
+                k, v = chunk.split(":", 1)
+            else:
+                continue
+            k, v = k.strip()[:20], v.strip()[:160]
+            if k and v:
+                cells.append([k, v])
+        if name and cells:
+            got.setdefault(name, []).extend(cells)
+    if not got:
+        return text or "", {}
+    return CHAR_LINE_RE.sub("", text or "").strip(), got
 
 def _take_mark_line(text):
     """剥掉 [[…]] 状态行并解析成 status；格式不对就整行丢弃。"""
@@ -541,7 +572,9 @@ def extract_status(text):
     「【事实】甲；乙」。小模型维护 JSON 数组会犹豫，纯文本行反而稳定。
     """
     src = text or ""
-    # 先认新的单行写法：[[地点：X|时间：Y|…]]，小模型写这个比写 XML 稳
+    # 先摘掉「每人一行」的分角色状态行，它们跟场景行是两回事
+    src, char_cells = _take_char_lines(src)
+    # 再认场景的单行写法：[[地点：X|时间：Y|…]]，小模型写这个比写 XML 稳
     src, mark_status = _take_mark_line(src)
     match = STATUS_RE.search(src)
     if match:
@@ -597,6 +630,16 @@ def extract_status(text):
         if extra:
             status[FACT_KEY] = (status.get(FACT_KEY) or []) + extra
             status[FACT_KEY] = status[FACT_KEY][:3]
+    # 分角色的格子：这一轮写了谁就更新谁，没提到的人保留上一轮的
+    if char_cells:
+        if not status:
+            status = {}
+        chars_map = status.get("chars")
+        if not isinstance(chars_map, dict):
+            chars_map = {}
+        for nm, cells in char_cells.items():
+            chars_map[nm] = cells
+        status["chars"] = chars_map
     # 兜底：模型常把状态写成裸 JSON 或半截标签，别让它们留在正文里
     cleaned = strip_status_leaks(cleaned)
     return cleaned, (status or None)
