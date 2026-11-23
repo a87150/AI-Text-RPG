@@ -339,6 +339,32 @@ def extract_json_all(text):
         i = start + end
     return out
 
+def escape_inner_newlines(raw):
+    """把 JSON 字符串里的裸换行、裸制表符转成转义写法。
+
+    模型交多行状态时不做转义，整段 JSON 因此不合法：内容明明答对了，
+    一条也读不出来。只动引号内的字符，引号外的结构保持原样。
+    """
+    out, in_str, esc = [], False, False
+    for ch in raw or "":
+        if esc:
+            out.append(ch)
+            esc = False
+        elif ch == "\\":
+            out.append(ch)
+            esc = True
+        elif ch == '"':
+            in_str = not in_str
+            out.append(ch)
+        elif in_str and ch in "\r\n":
+            out.append("\\n")
+        elif in_str and ch == "\t":
+            out.append("\\t")
+        else:
+            out.append(ch)
+    return "".join(out)
+
+
 def extract_json(text):
     if not text:
         return None
@@ -349,7 +375,11 @@ def extract_json(text):
     if start < 0 or end <= start:
         return None
     raw = t[start:end + 1]
-    for candidate in (raw, re.sub(r",\s*([}\]])", r"\1", raw)):
+    # 裸换行的版本先补一份：多行状态是常态，不是异常
+    fixed = escape_inner_newlines(raw)
+    for candidate in (raw, fixed,
+                      re.sub(r",\s*([}\]])", r"\1", raw),
+                      re.sub(r",\s*([}\]])", r"\1", fixed)):
         try:
             obj = json.loads(candidate)
             if isinstance(obj, dict):

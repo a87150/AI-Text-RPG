@@ -259,31 +259,81 @@ def upsert_character(sess, data):
 
 
 STATE_SYSTEM = (
-    '你在给一段故事做状态更新。读正文，只输出 JSON，不要任何解释：'
-    '{"changes":[{"name":"名字","state":"40 字以内"}],'    
-    '"present":["现在和主角在同一个地方的角色"],'    
-    '"away":["已经分开、不在这个场景里的角色"],'    
-    '"place":"此刻的地点，6 字以内"}'
-    '规则：present 和 away 只写【角色】名单里的名字。名单外的人一律不写——'
-    '跑堂的、路过的、只露一面的，都不是角色，写进来会占掉名额。'
-    'present 和 away 必须把所有人分完，一个不能漏：不在 present 就在 away。'
-    '有人走开、跟上、分头行动、换了地点，就要照实改。'
-    '不要把不在现场的人写进 present——他们不在这里，不该发言。'
-    'changes 只写状态真变了的人；没变化的人不要写；一条都没有就写 []。'
+    '你在给一段故事做状态更新。只输出下面这种格式，不要 JSON、不要代码块、不要任何解释。\n'
+    '第一行是场景，固定这么写：\n'
+    '场景：地点=天台边缘｜在场=谭谈,孙雨晴｜离场=\n'
+    '然后每个状态有变化的角色各写一段：第一行只写名字，下面一行一项「键：值」。\n'
+    '孙雨晴\n'
+    '当前好感度：75/100\n'
+    '当前性欲值：35/100\n'
+    '规则：'
+    '地点 6 字以内。在场、离场只写角色名单里的名字，名单外的人一律不写——'
+    '跑堂的、路过的、只露一面的都不是角色，写进来会占掉名额。'
+    '所有人必须分完，不重不漏；有人走开、跟上、分头行动、换了地点，就照实改。'
+    '角色的状态本来是一组「键：值」的，就把整组照抄一遍：变了的换新值，没变的照抄原值，'
+    '别只写变动的那几项，也别压成一句话。状态是一句话的角色，写一行「状态：那句话」。'
+    '没有任何变化的角色不要写。'
 )
 
 # 状态里的中文也要跟随语言设置，否则英文剧情里冒出中文状态
 STATE_SYSTEM_EN = (
-    'You are updating the state of a story. Read the text and output JSON only: '
-    '{"changes":[{"name":"name","state":"under 40 characters"}],'
-    '"present":["characters in the same place as the protagonist right now"],'
-    '"away":["characters who have left this scene"],'
-    '"place":"where this is happening, under 6 characters"}'
-    'Rules: only use names from the character list. '
-    'Passers-by with no name are not characters; listing them wastes a slot. '
+    'You are updating the state of a story. Output only this format: no JSON, no code fence, '
+    'no explanation.\n'
+    'First line is the scene, exactly like this:\n'
+    'Scene: place=rooftop|present=Tan,Sun|away=\n'
+    'Then one block per character whose state changed: the name alone on the first line, '
+    'then one "key: value" per line.\n'
+    'Rules: only use names from the character list; passers-by are not characters. '
     'present and away must cover everyone exactly once. '
-    'If someone leaves, follows, splits off, or the location changes, say so.'
+    'If a character state is a list of "key: value" lines, copy the whole list back - '
+    'new value for what changed, old value for what did not. '
+    'Do not write characters that did not change.'
 )
+
+_SCENE_KEYS = {
+    "地点": "place", "位置": "place", "place": "place", "location": "place",
+    "在场": "present", "present": "present",
+    "离场": "away", "away": "away",
+}
+
+
+def parse_state_reply(raw):
+    """解析状态更新的纯文本回复：首行场景，之后每个角色一段。
+
+    不用 JSON 是踩出来的：模型会把十几行状态塞进字符串、写到一半改成对象数组，
+    整段就成了非法 JSON，一条都读不出来——内容明明是对的。纯文本它写得稳。
+    """
+    scene, blocks, cur = {}, {}, None
+    for line in (raw or "").splitlines():
+        s = line.strip().strip("`").strip()
+        if not s:
+            continue
+        if s.startswith("场景") or s.lower().startswith("scene"):
+            body = re.split(r"[：:]", s, 1)[-1]
+            for part in re.split(r"[｜|]", body):
+                if "=" in part:
+                    k, v = part.split("=", 1)
+                    key = _SCENE_KEYS.get(k.strip()) or _SCENE_KEYS.get(k.strip().lower())
+                    if key:
+                        scene[key] = v.strip()
+            cur = None
+            continue
+        # 不带冒号的一行就是这一段的名字
+        if "：" not in s and ":" not in s:
+            name = s.strip(" 　［］[]【】#*-")[:24]
+            if name and not name.startswith("规则"):
+                cur = name
+                blocks.setdefault(cur, [])
+            continue
+        if not cur:
+            continue
+        k, v = re.split(r"[：:]", s, 1)
+        k = k.strip().strip(" 　［］[]")[:24]
+        v = v.strip().strip(" 　［］[]")[:200]
+        if k and v:
+            blocks[cur].append((k, v))
+    return scene, blocks
+
 
 def refresh_states(sess, text):
     """正文写完之后再过一遍角色状态。
@@ -297,7 +347,12 @@ def refresh_states(sess, text):
     if not chars or not body:
         return 0
     names = [c["name"] for c in chars]
-    now = chr(10).join("%s：%s" % (c["name"], (c.get("state") or "（未记录）")[:120])
+    # 键值对状态整组交给模型：截断之后它只看得见前两项，
+    # 后面十几项永远轮不到被更新，表现就是「状态一直不变」
+    def _brief(c):
+        raw = (c.get("state") or "").strip()
+        return raw if has_cells(raw) else raw[:120]
+    now = chr(10).join("%s：%s" % (c["name"], _brief(c) or "（未记录）")
                        for c in chars)
     # 把上一轮的场景也给它：没有基准它就会把所有人都算在现场
     st0 = sess.get("status") or {}
@@ -314,67 +369,72 @@ def refresh_states(sess, text):
         ], temperature=0.2, reasoning="low")   # 这是判断活，不需要深度思考
     except Exception:
         return 0
-    obj = extract_json(raw) or {}
-    if not isinstance(obj, dict):
-        return 0
+    got, blocks = parse_state_reply(raw)
+    st = sess.get("status")
+    if not isinstance(st, dict):
+        st = sess["status"] = {}
     book = {c["name"]: c for c in chars}
     n = 0
-    # 在场名单：模型不填 present 就不动，别把已经对的名单清空
     me = (role_labels(sess)[0] or "").strip()
-    st = sess.setdefault("status", {})
-    if isinstance(st, dict):
-        def _clean(value):
-            if not isinstance(value, list):
-                return None
-            out = []
-            for x in value:
-                nm = str(x or "").strip()[:24]
-                if nm and (nm in book or nm == me) and nm not in out:
-                    out.append(nm)
-            return out
-        on = _clean(obj.get("present"))
-        off = _clean(obj.get("away"))
-        # 主角永远在场：他去哪儿由自己定，不能被这份名单判离场。
-        # 只在真填了名字时才补，不把「用户角色」这种占位词写进去
-        _me_name = (sess.get("user_name") or "").strip()
-        if on is not None and _me_name and _me_name not in on:
-            on = [_me_name] + on
-        if off is not None and _me_name and _me_name in off:
-            off = [x for x in off if x != _me_name]
-        if on is not None:
-            if (st.get("present") or []) != on:
-                st["present"] = on
-                n += 1
-        if off is not None:
-            if (st.get("away") or []) != off:
-                st["away"] = off
-                n += 1
-        # 写 location，不写 place：界面、导出、下一轮 prompt 全都只认 location，
-        # 写进 place 等于把地点丢到一个无人读的键里。
-        # 已有 location 就不覆盖：[[地点：X]] 是模型直接标的，比这一步更可信。
-        place = (obj.get("place") or "").strip()[:12]
-        if place and not (st.get("location") or "").strip():
-            st["location"] = place
-            n += 1
-    rows = obj.get("changes")
-    if not isinstance(rows, list):
-        return n
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        nm = (row.get("name") or "").strip()
-        st = (row.get("state") or "").strip()[:120]
-        c = book.get(nm)
-        if not c or not st or st == (c.get("state") or "").strip():
-            continue
-        # 用户给这个角色写了一组键值对，一句话的「变化」盖上去整块就没了。
-        # 这类角色的状态由主回复里「按人那几行」维护，这里只留历史
-        if has_cells(c.get("state")):
-            c["history"] = ((c.get("history") or []) + [st])[-CHARACTER_HISTORY_KEEP:]
-            continue
-        c["state"] = st
-        c["history"] = ((c.get("history") or []) + [st])[-CHARACTER_HISTORY_KEEP:]
+
+    def _names(value):
+        out = []
+        for x in re.split(r"[,，、\s]+", value or ""):
+            nm = x.strip()[:24]
+            if nm and nm not in ("无", "-", "空", "none") and (nm in book or nm == me) and nm not in out:
+                out.append(nm)
+        return out
+
+    # 模型没给这个键就别动：已经对的名单不能被清空
+    on = _names(got.get("present")) if "present" in got else None
+    off = _names(got.get("away")) if "away" in got else None
+    # 主角永远在场：他去哪儿由自己定，不能被这份名单判离场。
+    # 只在真填了名字时才补，不把「用户角色」这种占位词写进去
+    _me_name = (sess.get("user_name") or "").strip()
+    if on is not None and _me_name and _me_name not in on:
+        on = [_me_name] + on
+    if off is not None and _me_name and _me_name in off:
+        off = [x for x in off if x != _me_name]
+    if on is not None and (st.get("present") or []) != on:
+        st["present"] = on
         n += 1
+    if off is not None and (st.get("away") or []) != off:
+        st["away"] = off
+        n += 1
+    # 写 location，不写 place：界面、导出、下一轮 prompt 全都只认 location，
+    # 写进 place 等于把地点丢到一个无人读的键里。
+    # 已有 location 就不覆盖：[[地点：X]] 是模型直接标的，比这一步更可信。
+    place = (got.get("place") or "").strip()[:12]
+    if place and not (st.get("location") or "").strip():
+        st["location"] = place
+        n += 1
+    chars_book = st.get("chars")
+    if not isinstance(chars_book, dict):
+        chars_book = {}
+    for nm, cells in blocks.items():
+        c = book.get(nm)
+        if not c or not cells:
+            continue
+        # 一整组「键：值」：整组换掉，并同步进 status.chars（弹窗读这个）
+        if len(cells) >= 2:
+            text2 = chr(10).join("［%s：%s］" % (k, v) for k, v in cells)
+            if text2 != (c.get("state") or "").strip():
+                c["state"] = text2
+                c["history"] = ((c.get("history") or []) + [text2[:120]])[-CHARACTER_HISTORY_KEEP:]
+                n += 1
+            chars_book[nm] = [[k, v] for k, v in cells]
+            st["chars"] = chars_book
+            continue
+        k, v = cells[0]
+        if k not in ("状态", "state") or not v:
+            continue
+        if v == (c.get("state") or "").strip():
+            continue
+        # 卡上本来是键值对，这次只回了一句：只记历史，别把整块盖掉
+        if not has_cells(c.get("state")):
+            c["state"] = v[:120]
+            n += 1
+        c["history"] = ((c.get("history") or []) + [v[:120]])[-CHARACTER_HISTORY_KEEP:]
     return n
 
 def apply_change(sess, data):

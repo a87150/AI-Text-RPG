@@ -2314,15 +2314,23 @@ def main():
     # 81. 状态补全：独立一次调用把正文里的处境写回角色卡
     _orig_text = rp_characters.model_text
     def _fake(messages, temperature=0.8, **kw):
-        return '{"changes":[{"name":"甲","state":"被按在椅子上"},' \
-               '{"name":"不存在的人","state":"x"}]}'
+        # 纯文本协议：场景行 + 每个角色一段
+        return chr(10).join([
+            '场景：地点=椅子旁｜在场=甲｜离场=',
+            '',
+            '甲',
+            '状态：被按在椅子上',
+            '',
+            '不存在的人',
+            '状态：x'])
     _s81 = {"characters": [{"name": "甲", "role": "", "state": "", "history": []}]}
     try:
         rp_characters.model_text = _fake
         _n81 = rp_characters.refresh_states(_s81, "甲被按在椅子上。")
+        # n 是「更新了几处」，场景名单变化也算一处，所以只要求至少动了
         check("状态补全写进角色卡",
-              _n81 == 1 and _s81["characters"][0]["state"] == "被按在椅子上",
-              repr(_s81["characters"][0]["state"]))
+              _n81 >= 1 and _s81["characters"][0]["state"] == "被按在椅子上",
+              repr(_s81["characters"][0]["state"]) + ' n=' + str(_n81))
         check("名单外的人不会被建卡",
               len(_s81["characters"]) == 1, str(len(_s81["characters"])))
         check("状态变化记进履历",
@@ -2338,8 +2346,7 @@ def main():
 
         # 在场名单要跟着改，不能一直全员在场
         def _scene(messages, temperature=0.8, **kw):
-            return ('{"changes":[],"present":["甲","不存在的人"],'
-                    '"away":["乙"],"place":"某城·酒馆"}')
+            return '场景：地点=某城·酒馆｜在场=甲,不存在的人｜离场=乙'
         _s81b = {"characters": [{"name": "甲", "state": "", "history": []},
                                 {"name": "乙", "state": "", "history": []}],
                  "status": {"present": ["甲", "乙"], "away": [], "place": ""},
@@ -3636,6 +3643,30 @@ def main():
     _sys113b = ((_s113.get('context') or {}).get('debug') or {}).get('system') or ''
     check('删完重算后快照里没有那条',
           '要被删掉的事实乙' not in _sys113b and '存在的事实甲' in _sys113b, _sys113b[-80:])
+
+    # 114. 状态更新走纯文本协议。以前让模型在 JSON 里塞整组状态，
+    # 它会把十几行写进字符串、中途又改成对象数组，整段不是合法 JSON，
+    # 内容全对却一条读不出来。纯文本它写得稳。
+    _raw114 = chr(10).join([
+        '场景：地点=天台边缘｜在场=谭谈,孙雨晴｜离场=',
+        '',
+        '孙雨晴',
+        '当前好感度：75/100',
+        '当前性欲值：35/100',
+        '子宫状态：未被开发'])
+    _scene114, _blocks114 = rp_characters.parse_state_reply(_raw114)
+    check('场景行解析得出来',
+          _scene114.get('place') == '天台边缘'
+          and _scene114.get('present') == '谭谈,孙雨晴', str(_scene114))
+    check('角色块按人归位',
+          _blocks114.get('孙雨晴') == [('当前好感度', '75/100'),
+                                    ('当前性欲值', '35/100'),
+                                    ('子宫状态', '未被开发')], str(_blocks114))
+    check('英文场景行也认',
+          rp_characters.parse_state_reply('Scene: place=rooftop|present=Tan,Sun|away=')[0].get('place')
+          == 'rooftop')
+    check('状态提示词不再要求 JSON',
+          'JSON' in rp_characters.STATE_SYSTEM and '"changes"' not in rp_characters.STATE_SYSTEM)
 
     # 111. 格子是按人分的：一人一行，主角也有自己那一份。
     # 混成全场一行就没法说清「谁的好感度」，这条压住那个退化。
