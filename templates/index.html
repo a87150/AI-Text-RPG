@@ -562,11 +562,17 @@ window.addEventListener('unhandledrejection', function (e) {
                 </div>
               </div>
               <div class="field">
-                <label for="w-style">写作风格（点一个，或者自己写一句；点「不指定」就不额外规定）</label>
+                <label for="w-style">叙事风格（决定语气和排版节奏）</label>
                 <div class="seg seg-wrap" id="style-seg"></div>
                 <input id="w-style" type="text" maxlength="60"
                        placeholder="也可以自己写，比如「日系轻小说」「民国谍战」" spellcheck="false">
-                <div class="hint">选中后每一轮都会把这类文风的具体写法写进提示词——多写对白、线索摆在明面上、性场面写足过程之类。不指定就只按下面的人数和字数规则走。</div>
+                <div class="hint">选中后每一轮都会把这类文风的具体手法写进提示词——对白占多大比重、句子长短、铺不铺环境。点「不指定」就只按下面的人数和字数规则走。</div>
+              </div>
+              <div class="field">
+                <label>内容尺度（决定能写到哪）</label>
+                <div class="seg" id="rating-seg"></div>
+                <input type="hidden" id="w-rating">
+                <div class="hint">全年龄：亲密场面靠留白和气氛带过，不写具体过程。成人向：性场面写足过程和身体反应，暴力和粗口按剧情需要写、不磨平。这一项只管尺度，不改文风。</div>
               </div>
               <div class="grid2">
                 <div class="field"><label for="w-narrator-min">旁白最少字数（每轮场景描写）</label><input id="w-narrator-min" type="number" min="10" max="300"></div>

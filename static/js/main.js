@@ -287,6 +287,38 @@ function syncStyleSeg() {
   }
 }
 
+/** 内容尺度。选项固定，不像风格那样允许自己写——这是两档，不是连续量。 */
+function buildRatingSeg() {
+  const seg = $('#rating-seg');
+  if (!seg) return;
+  const hidden = $('#w-rating');
+  const cur = (hidden && hidden.value) || '全年龄';
+  seg.innerHTML = '';
+  for (const name of ((state.conf && state.conf.ratings) || ['全年龄', '成人向'])) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.dataset.rating = name;
+    btn.textContent = name;
+    btn.onclick = () => {
+      if (hidden) hidden.value = name;
+      syncRatingSeg();
+    };
+    seg.appendChild(btn);
+  }
+  if (hidden && !hidden.value) hidden.value = cur;
+  syncRatingSeg();
+}
+
+function syncRatingSeg() {
+  const seg = $('#rating-seg');
+  if (!seg) return;
+  const hidden = $('#w-rating');
+  const cur = hidden ? String(hidden.value || '') : '';
+  for (const btn of seg.querySelectorAll('button')) {
+    btn.classList.toggle('active', (btn.dataset.rating || '') === cur);
+  }
+}
+
 function fillWritingForm() {
   const w = (state.conf && state.conf.writing) || {};
   for (const [id, key] of [
@@ -303,7 +335,10 @@ function fillWritingForm() {
   }
   const styleEl = $('#w-style');
   if (styleEl) styleEl.value = w.style || '';
+  const ratingEl = $('#w-rating');
+  if (ratingEl) ratingEl.value = w.rating || '全年龄';
   buildStyleSeg();
+  buildRatingSeg();
   renderPricesTable((state.conf && state.conf.prices) || '');
   const font = $('#prefs-font');
   if (font) font.value = localStorage.getItem(FONT_KEY) || 'md';
@@ -782,6 +817,8 @@ async function saveWriting(quiet = false) {
   // 不提交的话后端保留旧值，用户以为清掉了，其实每轮还在按旧风格写
   const styleInput = $('#w-style');
   body.style = styleInput ? String(styleInput.value || '').trim() : '';
+  const ratingInput = $('#w-rating');
+  body.rating = ratingInput ? String(ratingInput.value || '') : '';
   body.prices = pricesText();
   body.language = currentLanguage();
   body.reasoning_effort = currentReasoning();

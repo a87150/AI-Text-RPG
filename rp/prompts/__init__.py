@@ -10,8 +10,8 @@ from difflib import SequenceMatcher
 from string import Template
 
 from ..characters import ensure_characters, guess_name, role_labels, scene_split
-from ..config import (STYLE_PRESETS, creativity, gen_defaults, mode_for, tier,
-                      tier_limits, writing)
+from ..config import (RATING_LINES, STYLE_PRESETS, creativity, gen_defaults, mode_for,
+                      tier, tier_limits, writing)
 from ..llm import strip_status_leaks, strip_thinking
 from ..stories import PLACEHOLDER, fill_names
 
@@ -238,10 +238,18 @@ def style_line(name):
         return ""
     preset = STYLE_PRESETS.get(name)
     if preset:
-        return "【写作风格：%s】" % name + chr(10) + preset
-    return ("【写作风格：%s】" % name + chr(10)
+        return "【叙事风格：%s】" % name + chr(10) + preset
+    return ("【叙事风格：%s】" % name + chr(10)
             + "按这个类型的通行写法来：该有的桥段和节奏要有，术语和腔调要像，"
               "不要写成四不像，也不要把类型名写进正文。")
+
+def rating_line(name):
+    """内容尺度。和叙事风格正交：一个管怎么写，一个管能写到哪。"""
+    name = (name or "").strip()
+    body = RATING_LINES.get(name)
+    if not body:
+        return ""
+    return "【内容尺度：%s】" % name + chr(10) + body
 
 def build_system_prompt(sess, speaker=None, parts_out=None):
     """拼这一轮的 system prompt。parts_out 传字典就顺手告一段落各占多少字，
@@ -284,6 +292,11 @@ def build_system_prompt(sess, speaker=None, parts_out=None):
     _style = style_line(writing().get("style"))
     if _style:
         add("style", _style)
+    # 尺度紧跟在风格后面：先定"怎么写"，再定"能写到哪"，
+    # 两条都排在剧情之前，才不会被人设里的具体要求盖过去
+    _rating = rating_line(writing().get("rating"))
+    if _rating:
+        add("rating", _rating)
 
     # 主角 = 用户扮演的角色。不是角色表第一位（那是 AI 扮演的人）
     lead = (sess.get("user_name") or "").strip()

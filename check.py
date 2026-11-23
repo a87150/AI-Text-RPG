@@ -3516,18 +3516,34 @@ def main():
         rp_config.save_writing({'style': ''}, persist=False)
         check('留空就不写风格要求', '写作风格' not in _pm109.build_system_prompt(_s109))
 
-        rp_config.save_writing({'style': '言情小说'}, persist=False)
+        rp_config.save_writing({'style': '轻小说', 'rating': '成人向'}, persist=False)
         _p109 = _pm109.build_system_prompt(_s109)
         check('选预设要带上具体写法，不只是类型名',
-              '【写作风格：言情小说】' in _p109 and '关系推进是主轴' in _p109)
+              '【叙事风格：轻小说】' in _p109 and '对白占大头' in _p109)
+        # 风格和尺度是两回事：一个管怎么写，一个管能写到哪，两条都得进提示词
+        check('尺度也进提示词，和风格分开写',
+              '【内容尺度：成人向】' in _p109 and '成人内容写足' in _p109)
         check('风格排在语言之后、背景之前',
-              _p109.find('写作风格') > _p109.find('正文一律用简体中文')
-              and _p109.find('写作风格') < _p109.find('【故事背景与世界观】'))
+              _p109.find('叙事风格') > _p109.find('正文一律用简体中文')
+              and _p109.find('叙事风格') < _p109.find('【故事背景与世界观】'))
+        check('尺度跟在风格后面、背景之前',
+              _p109.find('内容尺度') > _p109.find('叙事风格')
+              and _p109.find('内容尺度') < _p109.find('【故事背景与世界观】'))
 
-        rp_config.save_writing({'style': '赛博朋克'}, persist=False)
+        rp_config.save_writing({'style': '赛博朋克', 'rating': '全年龄'}, persist=False)
         _p209 = _pm109.build_system_prompt(_s109)
         check('自己填的类型也有约束，不是原样丢给模型',
-              '【写作风格：赛博朋克】' in _p209 and '按这个类型的通行写法来' in _p209)
+              '【叙事风格：赛博朋克】' in _p209 and '按这个类型的通行写法来' in _p209)
+        # 来回切一次才验得出保存是否生效：只查「全年龄」的话，它本来就是默认值，
+        # 保存那一步坏了也照样绿
+        rp_config.save_writing({'rating': '成人向'}, persist=False)
+        _pa109 = _pm109.build_system_prompt(_s109)
+        rp_config.save_writing({'rating': '全年龄'}, persist=False)
+        _pb109 = _pm109.build_system_prompt(_s109)
+        check('尺度能在两档之间来回切',
+              '【内容尺度：成人向】' in _pa109 and '【内容尺度：全年龄】' in _pb109
+              and '点到为止' in _pb109,
+              '成人向=%s 全年龄=%s' % ('成人向' in _pa109, '全年龄' in _pb109))
 
         # 存的时候就截断：太长会把字数规则挤到看不见的地方
         rp_config.save_writing({'style': '长' * 200}, persist=False)
@@ -3539,8 +3555,11 @@ def main():
         check('清空后回到不规定', '写作风格' not in _pm109.build_system_prompt(_s109))
 
         _cfg109 = client.get('/api/config').get_json() or {}
-        check('设置接口给出风格候选', len(_cfg109.get('style_presets') or []) >= 5,
+        check('设置接口给出风格候选', len(_cfg109.get('style_presets') or []) >= 4,
               str(len(_cfg109.get('style_presets') or [])))
+        check('设置接口给出尺度候选',
+              (_cfg109.get('ratings') or []) == ['全年龄', '成人向'],
+              str(_cfg109.get('ratings')))
     finally:
         rp_config.save_writing({'style': _old_style109}, persist=False)
     shutil.rmtree(TMP_DIR, ignore_errors=True)

@@ -28,8 +28,8 @@ from . import speech
 from .config import (
     DEFAULT_MODEL, DEFAULT_PROVIDER, MAX_CHAT_ATTEMPTS, MAX_ENHANCE_ATTEMPTS,
     MAX_OPENING_ATTEMPTS, MIN_CHAT_CHARS, MODES, PROVIDERS,
-    PRICES, REASONING_LEVELS, STYLE_PRESETS, TIERS, TIER_LABELS, app, backup_conf,
-    current_target,
+    PRICES, RATINGS, REASONING_LEVELS, STYLE_PRESETS, TIERS, TIER_LABELS, app,
+    backup_conf, current_target,
     clear_persist_error, persist_error,
     CURRENCY_SIGN,
     image_conf, prices, prices_text, save_image_conf, save_prices, save_speech_conf,
@@ -238,6 +238,7 @@ def api_config():
         "creativity": creativity(),
         # 只给名字，描述留在后端：界面要的是下拉候选，不是提示词
         "style_presets": list(STYLE_PRESETS),
+        "ratings": list(RATINGS),
         "creativities": CREATIVITY_LEVELS,
         "creativity_labels": CREATIVITY_LABELS,
         "creativity_temps": CREATIVITY_TEMP,
