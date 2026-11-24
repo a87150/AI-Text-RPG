@@ -3667,6 +3667,8 @@ def main():
           == 'rooftop')
     check('状态提示词不再要求 JSON',
           'JSON' in rp_characters.STATE_SYSTEM and '"changes"' not in rp_characters.STATE_SYSTEM)
+    check('没写明的格子也要填，不许留空',
+          '别空着' in rp_characters.STATE_SYSTEM and '留空' not in rp_characters.STATE_SYSTEM)
     check('状态值不许复述台词',
           '不要复述角色说过的话' in rp_characters.STATE_SYSTEM
           and '不要复述角色说过的话' in rp_prompts.status_prompt(
