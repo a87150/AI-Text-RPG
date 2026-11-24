@@ -276,8 +276,9 @@ STATE_SYSTEM = (
     '不要复述角色说过的话，不要把动作场景写成一段叙述：状态栏是让人扫一眼的，不是正文。'
     '卡上写了键的，就按那个键的意思来填：写着「当前好感度」就填数值，'
     '写着「当前胸部状态」就填胸部的状况，各自归各自的项，不要串。'
-    '卡上那几格都要填。键值里没写明的部分——表情、动作、情绪——也别空着，'
-    '简单写一句就够，不用展开。'
+    '卡上那几格每一格都要填满，不许空着。某一格从正文里看不出具体内容，'
+    '就把当时的表情、动作或情绪简单填进去，别留空。'
+    '不要自己另开键：卡上有的就是全部，多出来的行下次就对不上了。'
     '没有任何变化的角色不要写。'
 )
 
@@ -423,6 +424,16 @@ def refresh_states(sess, text):
             continue
         # 一整组「键：值」：整组换掉，并同步进 status.chars（弹窗读这个）
         if len(cells) >= 2:
+            # 以卡上的键为准：模型多开的行丢掉（弹窗里会凭空多一行，下次又对不上），
+            # 漏填的格子用原值兜住，别整块被削
+            allowed = [k for k, _ in state_cells(c.get("state"))]
+            if allowed:
+                got_map = {k: v for k, v in cells}
+                old_map = dict(state_cells(c.get("state")))
+                cells = [(k, got_map.get(k) or old_map.get(k) or "") for k in allowed]
+                cells = [(k, v) for k, v in cells if v]
+                if len(cells) < 2:
+                    continue
             text2 = chr(10).join("［%s：%s］" % (k, v) for k, v in cells)
             if text2 != (c.get("state") or "").strip():
                 c["state"] = text2

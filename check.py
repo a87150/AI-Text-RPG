@@ -3665,10 +3665,39 @@ def main():
     check('英文场景行也认',
           rp_characters.parse_state_reply('Scene: place=rooftop|present=Tan,Sun|away=')[0].get('place')
           == 'rooftop')
+
+    # 115. 状态键以角色卡为准：模型偶尔自己加一行，弹窗里会凭空多出来、
+    # 下次又对不上；漏填的格子则要用原值兜住，别整块被削。
+    _orig115 = rp_characters.model_text
+    def _fake115(messages, temperature=0.8, **kw):
+        return chr(10).join([
+            '场景：地点=屋里｜在场=甲｜离场=',
+            '',
+            '甲',
+            '好感度：80/100',
+            '内心想法：她想留下',
+            '额外心情：模型自己加的'])
+    _s115 = {'characters': [{'name': '甲', 'history': []}], 'status': {}, 'user_name': '我'}
+    _s115['characters'][0]['state'] = chr(10).join(
+        ['［好感度：75/100］', '［内心想法：……］', '［子宫状态：未开发］'])
+    try:
+        rp_characters.model_text = _fake115
+        rp_characters.refresh_states(_s115, '她低下头。')
+        _keys115 = [k for k, _ in rp_characters.state_cells(_s115['characters'][0]['state'])]
+        check('状态键以卡上为准，不多开一行',
+              _keys115 == ['好感度', '内心想法', '子宫状态'], str(_keys115))
+        check('模型漏填的格子用原值兜住',
+              '未开发' in _s115['characters'][0]['state'])
+    finally:
+        rp_characters.model_text = _orig115
     check('状态提示词不再要求 JSON',
           'JSON' in rp_characters.STATE_SYSTEM and '"changes"' not in rp_characters.STATE_SYSTEM)
-    check('没写明的格子也要填，不许留空',
-          '别空着' in rp_characters.STATE_SYSTEM and '留空' not in rp_characters.STATE_SYSTEM)
+    check('每一格都要填满，不许留空',
+          '不许空着' in rp_characters.STATE_SYSTEM)
+    check('不许自己另开键',
+          '不要自己另开键' in rp_characters.STATE_SYSTEM
+          and '不要自己另开键' in rp_prompts.status_prompt(
+              {'characters': [{'name': '甲', 'state': '好感度：1/100'}]}))
     check('状态值不许复述台词',
           '不要复述角色说过的话' in rp_characters.STATE_SYSTEM
           and '不要复述角色说过的话' in rp_prompts.status_prompt(
