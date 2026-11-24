@@ -3691,6 +3691,34 @@ def main():
     finally:
         rp_characters.model_text = _orig115
 
+
+    # 117. 「关闭思考」必须真的把字段发出去。省略不是关闭——省略只是用服务端默认，
+    # 而服务端默认通常开着。实测 ollama 的 OpenAI 层只认 reasoning_effort=none，
+    # 顶层 think=false 走 /v1 时不生效（四连发思考长度 302/174/199/286）。
+    import rp.llm as _llm117
+    _cap117 = {}
+    class _Resp117:
+        status_code = 200
+        text = '{}'
+        def json(self):
+            return {'choices': [{'message': {'content': 'x'}}]}
+    _orig117 = _llm117.requests.post
+    def _post117(url, json=None, **kw):
+        _cap117.update(json or {})
+        return _Resp117()
+    try:
+        _llm117.requests.post = _post117
+        _llm117._NO_REASONING.clear()
+        _llm117.model_call([{'role': 'user', 'content': 'x'}], reasoning='none')
+        check('关闭思考时字段真的发出去了',
+              _cap117.get('reasoning_effort') == 'none'
+              or _cap117.get('thinking') == {'type': 'disabled'}, str(_cap117))
+        _cap117.clear()
+        _llm117.model_call([{'role': 'user', 'content': 'x'}], reasoning='high')
+        check('高强档也照发', _cap117.get('reasoning_effort') == 'high', str(_cap117))
+    finally:
+        _llm117.requests.post = _orig117
+
     # 116. 角色卡里的介绍框和状态框要一样高：同字号、同行数。
     # 以前状态框单独缩成小字号，五行也比介绍框矮一截，两栏看着参差。
     _ui116 = (pathlib.Path(__file__).parent / 'static' / 'js' / 'ui.js').read_text(encoding='utf-8')

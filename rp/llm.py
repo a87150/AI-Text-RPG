@@ -31,10 +31,21 @@ def model_call(messages, temperature=0.8, stream=False, extra=None, reasoning=No
     }
     # 思考强度是 OpenAI 规范字段，云端和本地都该带上：
     # 以前只给 ollama 发，选了云端后这个设置就彻底失效了。
-    # none 不发：规范里没这个值，传过去会被拒。
+    # 「关闭」不能靠省略：省略只是用服务端默认，而服务端默认通常就是开着思考。
+    # OpenAI 规范里没有 none 这个值，想关得走各家自己的开关——目前知道的是
+    # DeepSeek 的 thinking.type。发过去不认的会回 400，下面有降级。
     level = (reasoning or reasoning_effort() or "").strip()
-    if level and level != "none" and provider not in _NO_REASONING:
-        payload["reasoning_effort"] = level
+    if level and provider not in _NO_REASONING:
+        if provider == "ollama":
+            # ollama 的 OpenAI 兼容层认 "none"：实测四连发思考长度全是 0，
+            # 而顶层 think=false 只在原生 /api/chat 有效，走 /v1 时不生效
+            payload["reasoning_effort"] = level
+        elif level == "none":
+            # 云端没法和 ollama 共用一套：DeepSeek 系关思考是 thinking.type，
+            # 它的 reasoning_effort 只认 low/high/max
+            payload["thinking"] = {"type": "disabled"}
+        else:
+            payload["reasoning_effort"] = level
     # 流式默认不报用量，要主动要。不认这个参数的端点会 400，
     # 所以下面还有一次去掉重发。
     if stream and provider not in _NO_STREAM_USAGE:
@@ -63,6 +74,12 @@ def model_call(messages, temperature=0.8, stream=False, extra=None, reasoning=No
         if "reasoning_effort" in payload and (
                 "reasoning" in low or "unrecognized" in low or "unknown" in low or "extra" in low):
             payload.pop("reasoning_effort", None)
+            _NO_REASONING.add(provider)
+            changed = True
+        if "thinking" in payload and (
+                "thinking" in low or "unrecognized" in low
+                or "unknown" in low or "extra" in low):
+            payload.pop("thinking", None)
             _NO_REASONING.add(provider)
             changed = True
         if "stream_options" in payload and (
