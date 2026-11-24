@@ -310,7 +310,6 @@ export function renderCharacterEditor(box, list, onChange) {
     stateField.rows = 5;
     stateField.placeholder = '当前状态：一行一项，写成「键：值」就行，比如' + String.fromCharCode(10)
       + '当前好感度：75/100' + String.fromCharCode(10)
-      + '当前性欲值：30/100' + String.fromCharCode(10)
       + '内心想法：……（AI 每轮会在此基础上更新）';
     stateField.value = c.state || '';
     stateField.oninput = () => { c.state = stateField.value; };

@@ -3667,6 +3667,10 @@ def main():
           == 'rooftop')
     check('状态提示词不再要求 JSON',
           'JSON' in rp_characters.STATE_SYSTEM and '"changes"' not in rp_characters.STATE_SYSTEM)
+    check('状态值不许复述台词',
+          '不要复述角色说过的话' in rp_characters.STATE_SYSTEM
+          and '不要复述角色说过的话' in rp_prompts.status_prompt(
+              {'characters': [{'name': '甲', 'state': '好感度：1/100'}]}))
 
     # 111. 格子是按人分的：一人一行，主角也有自己那一份。
     # 混成全场一行就没法说清「谁的好感度」，这条压住那个退化。
