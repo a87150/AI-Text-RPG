@@ -168,7 +168,7 @@ window.addEventListener('unhandledrejection', function (e) {
         <button type="button" class="field-ai" data-field="user_role" title="只重写这一项">✦ AI</button>
         <button type="button" class="field-undo hidden" data-undo-slot="user_role">↺ 撤销</button>
       </div>
-      <textarea id="f-user-role" placeholder="身份、年龄、性格、外貌、秘密、和对方的关系…"></textarea>
+      <textarea id="f-user-role" rows="5" placeholder="身份、年龄、性格、外貌、秘密、和对方的关系…"></textarea>
     </div>
 
     <div class="field">
@@ -373,7 +373,7 @@ window.addEventListener('unhandledrejection', function (e) {
                   <button type="button" data-tier="advanced">高级</button>
                 </div>
                 <div class="hint" id="tier-hint">
-                  初级给单行标记加两条示例，高级直接要结构化 JSON。换了大模型记得调上来。
+                  初级：场景单行标记 + 两条示例，每个角色最多记 8 格状态。标准：多给按人分开的状态行，14 格。高级：要结构化块，20 格。换了大模型记得调上来。
                 </div>
               </div>
               <div class="field">

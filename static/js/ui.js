@@ -281,6 +281,7 @@ export function renderCharacterEditor(box, list, onChange) {
 
     const role = document.createElement('textarea');
     role.className = 'cc-input cc-area';
+    role.rows = 5;
     role.placeholder = '身份、性格、外貌、和你的关系…';
     role.value = c.role || '';
 

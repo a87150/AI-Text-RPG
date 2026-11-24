@@ -3596,7 +3596,7 @@ def main():
     # 档位上限：这些格每轮都要重抄，小模型给多了就漏项或缩成一句话
     _caps110 = {k: v['cells'] for k, v in rp_config.TIER_LIMITS.items()}
     check('每档都有状态格上限',
-          _caps110 == {'basic': 12, 'standard': 18, 'advanced': 24}, str(_caps110))
+          _caps110 == {'basic': 8, 'standard': 14, 'advanced': 20}, str(_caps110))
     _many110 = {'characters': [{'name': '甲', 'state': chr(10).join(
         '第%d项：值' % i for i in range(30))}]}
     _got110 = rp_prompts.status_owner_fields(_many110)[0][1]
@@ -3690,6 +3690,17 @@ def main():
               '未开发' in _s115['characters'][0]['state'])
     finally:
         rp_characters.model_text = _orig115
+
+    # 116. 角色卡里的介绍框和状态框要一样高：同字号、同行数。
+    # 以前状态框单独缩成小字号，五行也比介绍框矮一截，两栏看着参差。
+    _ui116 = (pathlib.Path(__file__).parent / 'static' / 'js' / 'ui.js').read_text(encoding='utf-8')
+    check('角色介绍框和状态框都按五行',
+          _ui116.count('rows = 5') >= 2, str(_ui116.count('rows = 5')))
+    _start116 = _css112.index('.cc-state {')
+    _cc116 = _css112[_start116:_css112.index('}', _start116) + 1]
+    check('状态框不单独缩字号', 'font-size' not in _cc116, _cc116[:80])
+    _html116 = (pathlib.Path(__file__).parent / 'templates' / 'index.html').read_text(encoding='utf-8')
+    check('我的角色框也是五行', 'id="f-user-role" rows="5"' in _html116)
     check('状态提示词不再要求 JSON',
           'JSON' in rp_characters.STATE_SYSTEM and '"changes"' not in rp_characters.STATE_SYSTEM)
     check('每一格都要填满，不许留空',

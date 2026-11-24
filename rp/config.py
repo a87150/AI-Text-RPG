@@ -217,13 +217,13 @@ _writing = dict(WRITING_DEFAULTS)
 TIER_LIMITS = {
     "basic": {"context": 8000, "history_msgs": 16, "role_chars": 200,
               "facts": 6, "anchor_every": 8, "attempts": 3, "summary": 400,
-              "cells": 12},
+              "cells": 8},
     "standard": {"context": 16000, "history_msgs": 40, "role_chars": 400,
                  "facts": 12, "anchor_every": 15, "attempts": 3, "summary": 800,
-                 "cells": 18},
+                 "cells": 14},
     "advanced": {"context": 32000, "history_msgs": 0, "role_chars": 0,
                  "facts": 24, "anchor_every": 24, "attempts": 2, "summary": 1600,
-                 "cells": 24},
+                 "cells": 20},
 }
 TIER_CONTEXT = {k: v["context"] for k, v in TIER_LIMITS.items()}
 

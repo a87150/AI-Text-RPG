@@ -407,7 +407,7 @@ body.story-view #btn-search { display: none; }
   color: var(--text); outline: none; line-height: 1.6;
 }
 .cc-input:focus { border-color: var(--accent); }
-.cc-area { resize: vertical; min-height: 54px; }
+.cc-area { resize: vertical; min-height: 6.5em; }
 .cc-add {
   padding: 7px; border-radius: 8px; font-size: var(--fs-m);
   border: 1px dashed var(--border-strong); background: transparent;
@@ -416,7 +416,8 @@ body.story-view #btn-search { display: none; }
 .cc-add:hover { color: var(--text); border-color: var(--accent); }
 .cc-name { font-size: var(--fs-m); font-weight: 600; }
 .cc-role { font-size: var(--fs-m); color: var(--text-dim); margin-top: 3px; white-space: pre-wrap; }
-.cc-state { font-size: var(--fs-s); color: var(--text-mute); margin-top: 3px; }
+/* 和上面那个介绍框同字号同行数：给状态框单独缩字号，两栏高度就对不齐了 */
+.cc-state { color: var(--text); margin-top: 3px; }
 .char-empty { font-size: var(--fs-m); color: var(--text-mute); padding: 4px 2px; }
 
 /* ------------------------------ 主区 ------------------------------ */
