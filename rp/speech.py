@@ -141,7 +141,8 @@ def _ensure_server(conf):
             _proc = subprocess.Popen(
                 cmd, cwd=BASE_DIR,
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
+                # 崩了要看栈：丢进 devnull 的话，「合成进程已经不在了」永远查不出原因
+                stderr=open(os.path.join(BASE_DIR, "_vox_worker.err"), "a", encoding="utf-8"),
                 text=True, encoding="utf-8", bufsize=1,
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         except OSError as exc:
@@ -269,7 +270,7 @@ def speak(text, role=None, **overrides):
                 _inflight.pop(key, None)
 
 
-def _synth(conf, payload):
+def _synth(conf, payload, _retry=True):
     """一句话一次问询：写一行 json，读一行结果，音频落在临时文件里。"""
     _ensure_server(conf)
 
@@ -304,6 +305,14 @@ def _synth(conf, payload):
         raise SpeechError("vox 回了个看不懂的结果：%s" % line[:120])
     if not info.get("ok"):
         raise SpeechError("vox 合成失败：%s" % (info.get("error") or "没给原因"))
+    # 空转超时退出的进程，管道里还留着上一轮的回复行：它同样是 ok，
+    # 但 out 是上一轮那个临时文件，早被删掉了——照本轮路径去读就是「读不到音频」。
+    # 拿 out 对一遍才认得出，顺手把进程重启再发一次。
+    if info.get("out") != out:
+        reset()
+        if _retry:
+            return _synth(conf, payload, False)
+        raise SpeechError("vox 回的是上一轮的结果，重发也没拿到新的，再念一次。")
 
     try:
         with open(out, "rb") as fh:

@@ -3692,6 +3692,14 @@ def main():
         rp_characters.model_text = _orig115
 
 
+
+    # 118. vox 空转退出后，管道里残留着上一轮的回复行：ok 是 true，
+    # out 却是上一轮那个已经删掉的临时文件，于是报「读不到合成出来的音频」。
+    # 以前从不校验回包是不是自己这一轮的。
+    _tts118 = (pathlib.Path(__file__).parent / 'rp' / 'speech.py').read_text(encoding='utf-8')
+    check('vox 回包要核对是不是本轮的', 'info.get("out") != out' in _tts118)
+    check('陈旧回复会重发一次', '_synth(conf, payload, False)' in _tts118)
+
     # 117. 「关闭思考」必须真的把字段发出去。省略不是关闭——省略只是用服务端默认，
     # 而服务端默认通常开着。实测 ollama 的 OpenAI 层只认 reasoning_effort=none，
     # 顶层 think=false 走 /v1 时不生效（四连发思考长度 302/174/199/286）。

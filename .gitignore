@@ -37,6 +37,7 @@ _*.wav
 tts_probe.py
 _srv.log
 _srv.err
+_vox_worker.err
 models/
 check_msg.tmp
 _shot_*.png
